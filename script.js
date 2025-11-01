@@ -1049,7 +1049,7 @@ const ui = {
                     if (isForSampleSentence) e.stopPropagation();
                     clearTimeout(app.state.longPressTimer);
                     api.speak(part, 'word');
-                    this.copyToClipboard(part);
+                    // this.copyToClipboard(part);
                 };
                 span.oncontextmenu = (e) => {
                     e.preventDefault();
@@ -1092,7 +1092,7 @@ const ui = {
                         span.onclick = () => {
                             clearTimeout(app.state.longPressTimer);
                             api.speak(englishPhrase, 'word');
-                            this.copyToClipboard(englishPhrase);
+                            // this.copyToClipboard(englishPhrase);
                         };
                         span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
                         let touchMove = false;
@@ -2019,7 +2019,7 @@ const quizMode = {
         } else if (type === 'MULTIPLE_CHOICE_MEANING') {
             questionDisplay.classList.add('items-center', 'justify-center');
             questionDisplay.innerHTML = `<h1 id="quiz-word" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer">${question.word}</h1>`;
-            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); ui.copyToClipboard(question.word); };
+            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); }; // [!!] 'ui.copyToClipboard(question.word);'가 삭제되었습니다.
         } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
             questionDisplay.classList.add('items-start', 'text-left');
             questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
@@ -2358,7 +2358,7 @@ const learningMode = {
 
         this.elements.wordDisplay.addEventListener('click', () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) { api.speak(word, 'word'); ui.copyToClipboard(word); }
+            if (word) { api.speak(word, 'word'); } // [!!] 'ui.copyToClipboard(word);'가 삭제되었습니다.
         });
         this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
             e.preventDefault();
