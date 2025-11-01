@@ -2613,15 +2613,28 @@ const learningMode = {
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden') || document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
 
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (e.key === 'ArrowLeft') { // 왼쪽 방향키
             e.preventDefault();
-            this.navigate(-1);
-        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            this.navigate(-1); // 이전
+        } else if (e.key === 'ArrowRight') { // 오른쪽 방향키
              e.preventDefault();
-            this.navigate(1);
-        } else if (e.key === 'Enter' || e.key === ' ') {
+            this.navigate(1); // 다음
+        } else if (e.key === 'ArrowUp') { // 1. 위쪽 방향키 (수정)
+            e.preventDefault();
+            this.navigate(1); // 다음 어휘로
+        } else if (e.key === 'ArrowDown') { // 2. 아래쪽 방향키 (수정)
+            e.preventDefault();
+            this.navigate(-1); // 이전 어휘로
+        } else if (e.key === 'Enter') { // Enter 키 (기존 유지)
              e.preventDefault();
             this.handleFlip();
+        } else if (e.key === ' ') { // 3. 스페이스바 (수정)
+            e.preventDefault();
+            // 현재 어휘를 발음하도록 변경
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) {
+                api.speak(word, 'word');
+            }
         }
     },
     handleTouchStart(e) {
