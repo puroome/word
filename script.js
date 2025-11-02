@@ -2782,6 +2782,6 @@ document.addEventListener('firebaseSDKLoaded', () => {
         getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
         getFirestore, doc, getDoc, setDoc, updateDoc, writeBatch
     } = window.firebaseSDK);
-    window.firebaseSDK.writeBatch = writeBatch;
+    writeBatch = window.firebaseSDK.writeBatch;
     app.init();
 });
