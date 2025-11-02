@@ -5,7 +5,7 @@ let getFirestore, doc, getDoc, setDoc, updateDoc, writeBatch;
 
 const app = {
     config: {
-        TTS_API_KEY: "AIzaSyAX-cFBU45qFZTAtLYPTolSzqqLTfEvjP0",
+        TTS_API_KEY: "AIzaSyAJmQBGY4H9DVMlhMtvAAVMi_4N7__DfKA",
         DEFINITION_API_KEY: "02d1892d-8fb1-4e2d-bc43-4ddd4a47eab3",
         SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzyBM33LzFsAe-mES_0Qw5B8w0ZPyYTDm4K_nLif5y2bXMpiQbD1LX5TTIDA4qX_Rnp/exec",
         ALLOWED_USER_EMAIL: "puroome@gmail.com",
@@ -337,9 +337,6 @@ const app = {
     },
     async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
-        learningMode.unbindModeEvents();
-        quizMode.unbindQuizPlayEvents();
-
         this.elements.selectionScreen.classList.add('hidden');
         this.elements.quizModeContainer.classList.add('hidden');
         this.elements.learningModeContainer.classList.add('hidden');
@@ -372,7 +369,6 @@ const app = {
             showCommonButtons();
             this.elements.quizModeContainer.classList.remove('hidden');
             this.elements.practiceModeControl.classList.remove('hidden');
-            quizMode.bindQuizPlayEvents();
             quizMode.reset(false);
             if (!app.state.isWordListReady) {
                 await api.loadWordList();
@@ -1053,7 +1049,7 @@ const ui = {
                     if (isForSampleSentence) e.stopPropagation();
                     clearTimeout(app.state.longPressTimer);
                     api.speak(part, 'word');
-                    
+                    // this.copyToClipboard(part);
                 };
                 span.oncontextmenu = (e) => {
                     e.preventDefault();
@@ -1096,7 +1092,7 @@ const ui = {
                         span.onclick = () => {
                             clearTimeout(app.state.longPressTimer);
                             api.speak(englishPhrase, 'word');
-                            
+                            // this.copyToClipboard(englishPhrase);
                         };
                         span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
                         let touchMove = false;
@@ -1695,33 +1691,28 @@ const quizMode = {
 
         this.elements.modalContinueBtn.addEventListener('click', () => this.continueAfterResult());
         this.elements.modalMistakesBtn.addEventListener('click', () => this.reviewSessionMistakes());
-    },
-    quizKeydownHandler(e) {
-        const isQuizModeActive = !quizMode.elements.contentContainer.classList.contains('hidden') && !quizMode.elements.choices.classList.contains('disabled');
-        if (!isQuizModeActive) return;
 
-        const choiceCount = Array.from(quizMode.elements.choices.children).filter(el => !el.textContent.includes('PASS')).length;
+        document.addEventListener('keydown', (e) => {
+            const isQuizModeActive = !this.elements.contentContainer.classList.contains('hidden') && !this.elements.choices.classList.contains('disabled');
+            if (!isQuizModeActive) return;
 
-        if (e.key.toLowerCase() === 'p' || e.key === '0') {
-             e.preventDefault();
-             const passButton = Array.from(quizMode.elements.choices.children).find(el => el.textContent.includes('PASS'));
-             if(passButton) passButton.click();
-        } else {
-            const choiceIndex = parseInt(e.key);
-            if (choiceIndex >= 1 && choiceIndex <= choiceCount) {
-                e.preventDefault();
-                const targetLi = quizMode.elements.choices.children[choiceIndex - 1];
-                targetLi.classList.add('bg-gray-200');
-                setTimeout(() => targetLi.classList.remove('bg-gray-200'), 150);
-                targetLi.click();
+            const choiceCount = Array.from(this.elements.choices.children).filter(el => !el.textContent.includes('PASS')).length;
+
+            if (e.key.toLowerCase() === 'p' || e.key === '0') {
+                 e.preventDefault();
+                 const passButton = Array.from(this.elements.choices.children).find(el => el.textContent.includes('PASS'));
+                 if(passButton) passButton.click();
+            } else {
+                const choiceIndex = parseInt(e.key);
+                if (choiceIndex >= 1 && choiceIndex <= choiceCount) {
+                    e.preventDefault();
+                    const targetLi = this.elements.choices.children[choiceIndex - 1];
+                    targetLi.classList.add('bg-gray-200');
+                    setTimeout(() => targetLi.classList.remove('bg-gray-200'), 150);
+                    targetLi.click();
+                }
             }
-        }
-    },
-    bindQuizPlayEvents() {
-        document.addEventListener('keydown', this.quizKeydownHandler);
-    },
-    unbindQuizPlayEvents() {
-        document.removeEventListener('keydown', this.quizKeydownHandler);
+        });
     },
     async start(quizType) {
         this.state.currentQuizType = quizType;
@@ -2028,7 +2019,7 @@ const quizMode = {
         } else if (type === 'MULTIPLE_CHOICE_MEANING') {
             questionDisplay.classList.add('items-center', 'justify-center');
             questionDisplay.innerHTML = `<h1 id="quiz-word" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer">${question.word}</h1>`;
-            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); }; 
+            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); }; // [!!] 'ui.copyToClipboard(question.word);'가 삭제되었습니다.
         } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
             questionDisplay.classList.add('items-start', 'text-left');
             questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
@@ -2115,7 +2106,6 @@ const quizMode = {
         this.elements.modal.classList.add('hidden');
         if (this.elements.modalContinueBtn.textContent === "퀴즈 유형으로") {
              app.syncOfflineData();
-             this.unbindQuizPlayEvents();
             app.navigateTo('quiz');
             return;
         }
@@ -2131,7 +2121,6 @@ const quizMode = {
         this.state.sessionCorrectInSet = 0;
         this.state.sessionMistakes = [];
          app.syncOfflineData();
-         this.unbindQuizPlayEvents();
         app.navigateTo('mistakeReview', { mistakeWords: mistakes });
     },
     async preloadAllQuizTypesBasedOnSavedRange() {
@@ -2362,100 +2351,30 @@ const learningMode = {
             });
         });
         this.elements.backToStartBtn.addEventListener('click', () => this.resetStartScreen());
+        this.elements.nextBtn.addEventListener('click', () => this.navigate(1));
+        this.elements.prevBtn.addEventListener('click', () => this.navigate(-1));
+        this.elements.sampleBtn.addEventListener('click', () => this.handleFlip());
         this.elements.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
 
+        this.elements.wordDisplay.addEventListener('click', () => {
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) { api.speak(word, 'word'); } // [!!] 'ui.copyToClipboard(word);'가 삭제되었습니다.
+        });
         this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             const wordData = this.state.currentWordList[this.state.currentIndex];
             if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true });
         });
-    },
-    handleKeyDown(e) {
-        if (learningMode.elements.appContainer.classList.contains('hidden') || document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
 
-        if (e.key === 'ArrowLeft') { 
-            e.preventDefault();
-            learningMode.navigate(-1); 
-        } else if (e.key === 'ArrowRight') { 
-             e.preventDefault();
-            learningMode.navigate(1); 
-        } else if (e.key === 'ArrowUp') { 
-            e.preventDefault();
-            learningMode.navigate(1); 
-        } else if (e.key === 'ArrowDown') { 
-            e.preventDefault();
-            learningMode.navigate(-1); 
-        } else if (e.key === 'Enter') { 
-             e.preventDefault();
-            learningMode.handleFlip();
-        } else if (e.key === ' ') { 
-            e.preventDefault();
-            const word = learningMode.state.currentWordList[learningMode.state.currentIndex]?.word;
-            if (word) {
-                api.speak(word, 'word');
-            }
-        }
-    },
-    handleTouchStart(e) {
-         if (learningMode.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
-        learningMode.state.touchStartX = e.touches[0].clientX;
-        learningMode.state.touchStartY = e.touches[0].clientY;
-    },
-    handleTouchEnd(e) {
-        if (learningMode.elements.appContainer.classList.contains('hidden') || learningMode.state.touchStartX === 0 || e.target.closest('button, a, input, [onclick], #progress-bar-track')) {
-             learningMode.state.touchStartX = learningMode.state.touchStartY = 0;
-            return;
-        }
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const deltaX = touchEndX - learningMode.state.touchStartX;
-        const deltaY = touchEndY - learningMode.state.touchStartY;
-        const swipeThreshold = 50;
-
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
-            learningMode.navigate(deltaX > 0 ? -1 : 1);
-        }
-        else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
-            learningMode.handleFlip();
-        }
-
-        learningMode.state.touchStartX = learningMode.state.touchStartY = 0;
-    },
-    bindModeEvents() {
-        this.elements.nextBtn.addEventListener('click', this.navigate.bind(this, 1));
-        this.elements.prevBtn.addEventListener('click', this.navigate.bind(this, -1));
-        this.elements.sampleBtn.addEventListener('click', this.handleFlip.bind(this));
-        this.elements.wordDisplay.addEventListener('click', this.wordDisplaySpeak.bind(this));
-
-        document.addEventListener('keydown', this.handleKeyDown);
-        document.addEventListener('touchstart', this.handleTouchStart, { passive: true });
-        document.addEventListener('touchend', this.handleTouchEnd);
-        this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction);
-        document.addEventListener('mousemove', this.handleProgressBarInteraction);
-        document.addEventListener('mouseup', this.handleProgressBarInteraction);
-        this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction, { passive: false });
-        document.addEventListener('touchmove', this.handleProgressBarInteraction);
-        document.addEventListener('touchend', this.handleProgressBarInteraction);
-    },
-    unbindModeEvents() {
-        this.elements.nextBtn.removeEventListener('click', this.navigate.bind(this, 1));
-        this.elements.prevBtn.removeEventListener('click', this.navigate.bind(this, -1));
-        this.elements.sampleBtn.removeEventListener('click', this.handleFlip.bind(this));
-        this.elements.wordDisplay.removeEventListener('click', this.wordDisplaySpeak.bind(this));
-
-        document.removeEventListener('keydown', this.handleKeyDown);
-        document.removeEventListener('touchstart', this.handleTouchStart);
-        document.removeEventListener('touchend', this.handleTouchEnd);
-        this.elements.progressBarTrack.removeEventListener('mousedown', this.handleProgressBarInteraction);
-        document.removeEventListener('mousemove', this.handleProgressBarInteraction);
-        document.removeEventListener('mouseup', this.handleProgressBarInteraction);
-        this.elements.progressBarTrack.removeEventListener('touchstart', this.handleProgressBarInteraction);
-        document.removeEventListener('touchmove', this.handleProgressBarInteraction);
-        document.removeEventListener('touchend', this.handleProgressBarInteraction);
-    },
-    wordDisplaySpeak() {
-        const word = this.state.currentWordList[this.state.currentIndex]?.word;
-        if (word) { api.speak(word, 'word'); }
+        document.addEventListener('keydown', this.handleKeyDown.bind(this));
+        document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+        document.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction.bind(this));
+        document.addEventListener('mousemove', this.handleProgressBarInteraction.bind(this));
+        document.addEventListener('mouseup', this.handleProgressBarInteraction.bind(this));
+        this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
+        document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
+        document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
     },
     async start() {
         this.state.isMistakeMode = false;
@@ -2526,11 +2445,9 @@ const learningMode = {
         this.elements.appContainer.classList.remove('hidden');
         this.elements.fixedButtons.classList.remove('hidden');
         app.elements.progressBarContainer.classList.remove('hidden');
-        this.bindModeEvents();
         this.displayWord(this.state.currentIndex);
     },
     reset() {
-        this.unbindModeEvents();
         this.elements.startScreen.classList.add('hidden');
         this.elements.appContainer.classList.add('hidden');
         this.elements.loader.classList.add('hidden');
@@ -2595,8 +2512,8 @@ const learningMode = {
         this.elements.explanationContainer.classList.toggle('hidden', !wordData.explanation?.trim());
 
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
-        const sampleImgUrl = 'https://i.imgur.com/gI2Qd6k.png'; 
-        const noSampleImgUrl = 'https://i.imgur.com/yvU0gQn.png'; 
+        const sampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/14-delivery-cat_icon-icons.com_76690.png';
+        const noSampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/19-add-cat_icon-icons.com_76695.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
@@ -2638,9 +2555,9 @@ const learningMode = {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
 
-        const backImgUrl = 'https://i.imgur.com/kM8Gf6o.png'; 
-        const sampleImgUrl = 'https://i.imgur.com/gI2Qd6k.png'; 
-        const noSampleImgUrl = 'https://i.imgur.com/yvU0gQn.png'; 
+        const backImgUrl = 'https://images.icon-icons.com/1055/PNG/128/5-remove-cat_icon-icons.com_76681.png';
+        const sampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/14-delivery-cat_icon-icons.com_76690.png';
+        const noSampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/19-add-cat_icon-icons.com_76695.png';
 
         if (!isBackVisible) {
             if (!wordData.sample || !wordData.sample.trim()) {
@@ -2693,6 +2610,58 @@ const learningMode = {
         this.state.currentIndex = 0;
         this.launchApp();
     },
+    handleKeyDown(e) {
+        if (this.elements.appContainer.classList.contains('hidden') || document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
+
+        if (e.key === 'ArrowLeft') { // 왼쪽 방향키
+            e.preventDefault();
+            this.navigate(-1); // 이전
+        } else if (e.key === 'ArrowRight') { // 오른쪽 방향키
+             e.preventDefault();
+            this.navigate(1); // 다음
+        } else if (e.key === 'ArrowUp') { // 1. 위쪽 방향키 (수정)
+            e.preventDefault();
+            this.navigate(1); // 다음 어휘로
+        } else if (e.key === 'ArrowDown') { // 2. 아래쪽 방향키 (수정)
+            e.preventDefault();
+            this.navigate(-1); // 이전 어휘로
+        } else if (e.key === 'Enter') { // Enter 키 (기존 유지)
+             e.preventDefault();
+            this.handleFlip();
+        } else if (e.key === ' ') { // 3. 스페이스바 (수정)
+            e.preventDefault();
+            // 현재 어휘를 발음하도록 변경
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) {
+                api.speak(word, 'word');
+            }
+        }
+    },
+    handleTouchStart(e) {
+         if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
+        this.state.touchStartX = e.touches[0].clientX;
+        this.state.touchStartY = e.touches[0].clientY;
+    },
+    handleTouchEnd(e) {
+        if (this.elements.appContainer.classList.contains('hidden') || this.state.touchStartX === 0 || e.target.closest('button, a, input, [onclick], #progress-bar-track')) {
+             this.state.touchStartX = this.state.touchStartY = 0;
+            return;
+        }
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaX = touchEndX - this.state.touchStartX;
+        const deltaY = touchEndY - this.state.touchStartY;
+        const swipeThreshold = 50;
+
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
+            this.navigate(deltaX > 0 ? -1 : 1);
+        }
+        else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
+            this.handleFlip();
+        }
+
+        this.state.touchStartX = this.state.touchStartY = 0;
+    },
     updateProgressBar(index) {
         const total = this.state.currentWordList.length;
         if (total <= 1) {
@@ -2715,8 +2684,8 @@ const learningMode = {
     handleProgressBarInteraction(e) {
         if (learningMode.elements.appContainer.classList.contains('hidden')) return;
 
-        const track = learningMode.elements.progressBarTrack;
-        const totalWords = learningMode.state.currentWordList.length;
+        const track = this.elements.progressBarTrack;
+        const totalWords = this.state.currentWordList.length;
         if (totalWords <= 1) return;
 
         const handleInteraction = (clientX) => {
@@ -2724,9 +2693,9 @@ const learningMode = {
             const x = clientX - rect.left;
             const percentage = Math.max(0, Math.min(1, x / rect.width));
             const newIndex = Math.round(percentage * (totalWords - 1));
-            if (newIndex !== learningMode.state.currentIndex) {
-                learningMode.state.currentIndex = newIndex;
-                learningMode.displayWord(newIndex);
+            if (newIndex !== this.state.currentIndex) {
+                this.state.currentIndex = newIndex;
+                this.displayWord(newIndex);
             }
         };
 
@@ -2734,19 +2703,19 @@ const learningMode = {
             case 'mousedown':
             case 'touchstart':
                 e.preventDefault();
-                learningMode.state.isDragging = true;
+                this.state.isDragging = true;
                 handleInteraction(e.type === 'touchstart' ? e.touches[0].clientX : e.clientX);
                 break;
             case 'mousemove':
             case 'touchmove':
-                if (learningMode.state.isDragging) {
+                if (this.state.isDragging) {
                     handleInteraction(e.type === 'touchmove' ? e.touches[0].clientX : e.clientX);
                 }
                 break;
             case 'mouseup':
             case 'mouseleave':
             case 'touchend':
-                learningMode.state.isDragging = false;
+                this.state.isDragging = false;
                 break;
         }
     },
@@ -2780,8 +2749,8 @@ document.addEventListener('firebaseSDKLoaded', () => {
     ({
         initializeApp, getDatabase, ref, get, update, set,
         getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
-        getFirestore, doc, getDoc, setDoc, updateDoc
+        getFirestore, doc, getDoc, setDoc, updateDoc, writeBatch
     } = window.firebaseSDK);
-    writeBatch = window.firebaseSDK.writeBatch;
+    window.firebaseSDK.writeBatch = writeBatch;
     app.init();
 });
