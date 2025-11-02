@@ -9,16 +9,17 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-gray-100 flex justify-center items-center min-h-screen">
+<body class="bg-gray-100 flex justify-center min-h-screen p-4 pb-24">
 
-    <div id="login-screen" class="text-center">
-    <h1 class="text-4xl font-bold text-gray-800 mb-4">어휘 학습 앱</h1>
-    <button id="google-login-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-semibold py-3 px-6 border border-gray-300 rounded-lg shadow-md flex items-center justify-center mx-auto transition-colors">
-        <img src="google.png" alt="Google 로고" class="w-6 h-6 mr-3">
-        Google 계정으로 로그인
-    </button>
-    <p id="login-error" class="text-red-600 font-semibold mt-4 text-sm h-4"></p>
-</div>
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 z-[400] flex items-center justify-center p-4">
+        <div class="bg-white/80 backdrop-blur-sm w-full max-w-sm p-8 rounded-2xl shadow-lg text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">어휘 학습 앱</h1>
+            <button id="google-login-btn" class="w-full bg-white hover:bg-gray-100 text-gray-700 font-semibold py-3 px-4 rounded-lg text-lg transition-colors shadow-md flex items-center justify-center">
+                Google 계정으로 로그인
+            </button>
+            <p id="login-error" class="text-red-600 font-semibold mt-4 text-sm h-4"></p>
+        </div>
+    </div>
 
     <div id="app-wrapper" class="hidden w-full">
         <div id="ime-warning" class="hidden fixed top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-red-600/50 text-white py-2 px-5 rounded-lg shadow-xl z-[200] text-lg font-semibold">영어키로 전환하세요.</div>
