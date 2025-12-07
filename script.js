@@ -1230,13 +1230,6 @@ const ui = {
 
         const encodedWord = encodeURIComponent(word);
 
-        app.elements.searchAppContextBtn.onclick = () => app.searchWordInLearningMode(word);
-        app.elements.searchDaumContextBtn.onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
-        app.elements.searchNaverContextBtn.onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
-        app.elements.searchEtymContextBtn.onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
-        app.elements.searchLongmanContextBtn.onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
-    },
-
 app.elements.searchAppContextBtn.onclick = () => app.searchWordInLearningMode(word);
         
         app.elements.searchDaumContextBtn.onclick = () => { 
