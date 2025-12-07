@@ -1,8 +1,9 @@
 {
   "name": "단어장",
   "short_name": "word",
-  "start_url": "https://puroome.github.io/word/index.html",
+  "start_url": "https://puroome.github.io/word/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#000000",
   "scope": "https://puroome.github.io/word/",
@@ -20,5 +21,6 @@
   ]
 
 }
+
 
 
