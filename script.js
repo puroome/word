@@ -1236,6 +1236,33 @@ const ui = {
         app.elements.searchEtymContextBtn.onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
         app.elements.searchLongmanContextBtn.onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, '_blank'); this.hideWordContextMenu(); };
     },
+
+app.elements.searchAppContextBtn.onclick = () => app.searchWordInLearningMode(word);
+        
+        app.elements.searchDaumContextBtn.onclick = () => { 
+            // 'dict_daum'이라는 이름의 창을 사용
+            window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); 
+            this.hideWordContextMenu(); 
+        };
+        
+        app.elements.searchNaverContextBtn.onclick = () => { 
+            // 'dict_naver'라는 이름의 창을 사용
+            window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); 
+            this.hideWordContextMenu(); 
+        };
+        
+        app.elements.searchEtymContextBtn.onclick = () => { 
+            // 'dict_etym'이라는 이름의 창을 사용
+            window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); 
+            this.hideWordContextMenu(); 
+        };
+        
+        app.elements.searchLongmanContextBtn.onclick = () => { 
+            // 'dict_longman'이라는 이름의 창을 사용
+            window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); 
+            this.hideWordContextMenu(); 
+        };
+    },
     hideWordContextMenu() {
         if (app.elements.wordContextMenu) {
              app.elements.wordContextMenu.classList.add('hidden');
