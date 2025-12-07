@@ -1,8 +1,13 @@
 // sw.js
 const CACHE_NAME = 'my-app-cache-v1';
 const urlsToCache = [
-  '/',
-  '/index.html'
+  './',
+  './index.html',
+  './style.css',
+  './script.js',
+  './manifest.json',
+  './icon_192.png',
+  './icon_512.png'
 ];
 
 self.addEventListener('install', event => {
