@@ -2575,9 +2575,9 @@ const learningMode = {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
 
-        const backImgUrl = 'https://images.icon-icons.com/1055/PNG/128/5-remove-cat_icon-icons.com_76681.png';
-        const sampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/14-delivery-cat_icon-icons.com_76690.png';
-        const noSampleImgUrl = 'https://images.icon-icons.com/1055/PNG/128/19-add-cat_icon-icons.com_76695.png';
+        const backImgUrl = 'images/cat-remove.png';
+        const sampleImgUrl = 'images/cat-delivery.png';
+        const noSampleImgUrl = 'images/cat-add.png';
 
         if (!isBackVisible) {
             if (!wordData.sample || !wordData.sample.trim()) {
