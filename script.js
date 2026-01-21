@@ -1161,8 +1161,18 @@ const ui = {
             const p = document.createElement('p');
             p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer';
 
+            // [수정 포인트 1] 번역 표시 로직 강화
             const showTranslation = async (event) => {
+                // (1) 번역 시작 전: "현재 이 문장이 주인공이다"라고 기록
+                app.state.activeTranslationTarget = p;
+
                 const translatedText = await api.translate(p.textContent);
+
+                // (2) 번역 완료 후: "아직도 주인공이 나(p)인가?" 확인
+                // 사용자가 마우스를 떼거나 다른 카드로 갔다면 activeTranslationTarget이 null이거나 다른 문장일 것임.
+                // 그렇다면 툴팁을 띄우지 않고 여기서 종료.
+                if (app.state.activeTranslationTarget !== p) return;
+
                 this.showTranslationTooltip(translatedText, event);
             };
 
@@ -1175,14 +1185,29 @@ const ui = {
             p.addEventListener('mouseenter', (e) => {
                  if (e.target === p) {
                     clearTimeout(app.state.translationTimer);
+                    
+                    // 마우스가 들어왔을 때도 "내가 주인공"이라고 표시
+                    app.state.activeTranslationTarget = p;
+
                     app.state.translationTimer = setTimeout(() => {
-                        showTranslation(e);
+                        // 타이머가 끝났을 때도 여전히 내가 주인공인지 확인
+                        if (app.state.activeTranslationTarget === p) {
+                            showTranslation(e);
+                        }
                     }, 1000);
                  }
             });
 
+            // [수정 포인트 2] 마우스 떠날 때 로직 강화
             p.addEventListener('mouseleave', () => {
                 clearTimeout(app.state.translationTimer);
+                
+                // (3) 마우스가 떠나면: "난 이제 주인공 아니야"라고 기록 삭제 (null)
+                // 이렇게 하면 아까 요청 보낸 번역이 늦게 도착해도 (2)번 검사에서 탈락해서 툴팁이 안 뜸.
+                if (app.state.activeTranslationTarget === p) {
+                    app.state.activeTranslationTarget = null;
+                }
+                
                 this.hideTranslationTooltip();
             });
 
@@ -1190,8 +1215,13 @@ const ui = {
             sentenceContent.className = 'sentence-content-area';
             sentenceContent.style.cursor = 'text';
 
+            // [추가 수정] 텍스트 영역에 마우스가 올라가도 툴팁 끄기 (선택 방해 방지)
             sentenceContent.addEventListener('mouseenter', () => {
                 clearTimeout(app.state.translationTimer);
+                // 텍스트 선택하려고 안쪽으로 들어오면 툴팁 타겟 해제
+                if (app.state.activeTranslationTarget === p) {
+                    app.state.activeTranslationTarget = null;
+                }
                 this.hideTranslationTooltip();
             });
 
