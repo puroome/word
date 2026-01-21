@@ -2549,6 +2549,11 @@ const learningMode = {
 
         this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
+        // ▼▼▼ [여기 코드 추가] 단어가 화면에 뜨면 바로 읽어줍니다 ▼▼▼
+        if (wordData.word) {
+            api.speak(wordData.word, 'word');
+        }
+        // ▲▲▲ [여기까지 추가] ▲▲▲
         this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.toggle('hidden', !wordData.explanation?.trim());
