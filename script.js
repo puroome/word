@@ -216,6 +216,31 @@ const app = {
         }
     },
     bindGlobalEvents() {
+        // [수정 포인트] 화면을 터치하거나 클릭하면 무조건 오디오 장치를 미리 깨우는 '강력한' 코드
+        const unlockAudioContext = async () => {
+            if (!app.state.audioContext) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                app.state.audioContext = new AudioContext();
+            }
+            if (app.state.audioContext.state === 'suspended') {
+                try {
+                    await app.state.audioContext.resume();
+                } catch (e) {
+                    console.error("Audio unlock failed", e);
+                }
+            }
+            // 한 번 깨웠으면 이 이벤트는 삭제 (중복 실행 방지)
+            ['click', 'touchstart', 'keydown'].forEach(event => 
+                document.body.removeEventListener(event, unlockAudioContext, { capture: true })
+            );
+        };
+
+        // 사용자가 화면 어디든 누르면 unlockAudioContext가 실행되도록 설정
+        ['click', 'touchstart', 'keydown'].forEach(event => 
+            document.body.addEventListener(event, unlockAudioContext, { capture: true, once: true })
+        );
+
+        // --- 기존 버튼 이벤트들 ---
         this.elements.selectQuizBtn.addEventListener('click', () => this.navigateTo('quiz'));
         this.elements.selectLearningBtn.addEventListener('click', () => this.navigateTo('learning'));
         this.elements.selectDashboardBtn.addEventListener('click', () => this.navigateTo('dashboard'));
@@ -237,6 +262,7 @@ const app = {
         this.elements.homeBtn.addEventListener('click', () => this.navigateTo('selection'));
         this.elements.refreshBtn.addEventListener('click', () => this.forceReload());
         this.elements.ttsToggleBtn.addEventListener('click', this.toggleVoiceSet.bind(this));
+        
         this.elements.practiceModeCheckbox.addEventListener('change', (e) => {
             quizMode.state.isPracticeMode = e.target.checked;
             try {
@@ -249,20 +275,6 @@ const app = {
                  quizMode.displayNextQuiz();
             }
         });
-
-        const initAudioForBeep = () => {
-            if (!this.state.audioContext) {
-                 try {
-                     this.state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                 } catch (e) {
-                     console.error("Web Audio API is not supported in this browser", e);
-                 }
-            }
-            document.body.removeEventListener('click', initAudioForBeep, { capture: true });
-            document.body.removeEventListener('touchstart', initAudioForBeep, { capture: true, passive: true });
-        };
-        document.body.addEventListener('click', initAudioForBeep, { capture: true, once: true });
-        document.body.addEventListener('touchstart', initAudioForBeep, { capture: true, passive: true, once: true });
 
         document.addEventListener('click', (e) => {
             if (this.elements.wordContextMenu && !this.elements.wordContextMenu.contains(e.target)) {
