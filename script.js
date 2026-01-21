@@ -854,7 +854,6 @@ async speak(text, contentType = 'word') {
         app.state.isSpeaking = false;
         // 에러 발생 시에도 컨텍스트 닫지 않음
     }
-}
     },
     async translate(text) {
         try {
