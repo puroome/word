@@ -2592,6 +2592,42 @@ const learningMode = {
             navigateAction();
         }
     },
+
+// [새로 추가되는 함수] 예문(뒷면) 모드 전용 이동 함수
+    async navigateBackToBack(direction) {
+        const len = this.state.currentWordList.length;
+        if (len === 0) return;
+
+        // 1. 인덱스 이동
+        this.state.currentIndex = (this.state.currentIndex + direction + len) % len;
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+
+        // 2. [중요] 기본 정보 업데이트 (앞면 데이터도 맞춰놔야 나중에 내렸을 때 정상임)
+        // displayWord를 호출하지만, 뒷면이 열려있으면 앞면은 가려져서 안 보임
+        // 단, displayWord 내부의 'updateProgressBar' 덕분에 진행바도 자연스럽게 이동됨
+        this.displayWord(this.state.currentIndex);
+
+        // 3. [핵심 로직] 현재 앞면 상태인가?
+        // 앞면 상태라면 -> 클래스를 추가해서 '스르륵 올라오는 효과(플립)' 실행
+        // 뒷면 상태라면 -> 이미 클래스가 있으므로 아무 효과 없이 통과 (내용만 바뀜)
+        if (!this.elements.cardBack.classList.contains('is-slid-up')) {
+            this.elements.cardBack.classList.add('is-slid-up');
+        }
+
+        // 4. 뒷면 내용(타이틀, 예문) 즉시 교체
+        this.elements.backTitle.textContent = wordData.word;
+        
+        if (wordData.sample && wordData.sample.trim()) {
+            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+        } else {
+            this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">등록된 예문이 없습니다.</div>';
+        }
+
+        // 5. 버튼 이미지 상태 동기화 (닫기 버튼 모양)
+        const backImgUrl = 'images/cat-remove.png';
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+    },
+    
     async handleFlip() {
         const isBackVisible = this.elements.cardBack.classList.contains('is-slid-up');
         const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -2670,13 +2706,18 @@ const learningMode = {
         } else if (e.key === 'Enter') { // Enter 키 (기존 유지)
              e.preventDefault();
             this.handleFlip();
-        } else if (e.key === ' ') { // 3. 스페이스바 (수정)
+        } else if (e.key === ' ') { // 3. 스페이스바
             e.preventDefault();
-            // 현재 어휘를 발음하도록 변경
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
             if (word) {
                 api.speak(word, 'word');
             }
+        } else if (e.key.toLowerCase() === 'z') { // [추가됨] z키: 이전 예문
+            e.preventDefault();
+            this.navigateBackToBack(-1);
+        } else if (e.key.toLowerCase() === 'x') { // [추가됨] x키: 다음 예문
+            e.preventDefault();
+            this.navigateBackToBack(1);
         }
     },
     handleTouchStart(e) {
