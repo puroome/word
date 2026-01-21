@@ -770,80 +770,91 @@ async loadWordList(force = false) {
             throw error;
         }
     },
-    async speak(text, contentType = 'word') {
-        const voiceSets = {
-            'UK': { 'word': { languageCode: 'en-GB', name: 'en-GB-Wavenet-D', ssmlGender: 'MALE' }, 'sample': { languageCode: 'en-GB', name: 'en-GB-Journey-D', ssmlGender: 'MALE' } },
-            'US': { 'word': { languageCode: 'en-US', name: 'en-US-Wavenet-F', ssmlGender: 'FEMALE' }, 'sample': { languageCode: 'en-US', name: 'en-US-Journey-F', ssmlGender: 'FEMALE' } }
-        };
+    // script.js 내부 api 객체의 speak 함수 수정
 
-        if (!text || !text.trim() || app.state.isSpeaking) return;
+async speak(text, contentType = 'word') {
+    const voiceSets = {
+        'UK': { 'word': { languageCode: 'en-GB', name: 'en-GB-Wavenet-D', ssmlGender: 'MALE' }, 'sample': { languageCode: 'en-GB', name: 'en-GB-Journey-D', ssmlGender: 'MALE' } },
+        'US': { 'word': { languageCode: 'en-US', name: 'en-US-Wavenet-F', ssmlGender: 'FEMALE' }, 'sample': { languageCode: 'en-US', name: 'en-US-Journey-F', ssmlGender: 'FEMALE' } }
+    };
 
-        let ttsAudioContext;
+    if (!text || !text.trim() || app.state.isSpeaking) return;
+
+    // [수정 1] 전역 오디오 컨텍스트 사용/생성
+    if (!app.state.audioContext) {
         try {
-            ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (ttsAudioContext.state === 'suspended') {
-                await ttsAudioContext.resume();
-            }
-        } catch(e) {
-             console.error("Failed to create/resume TTS AudioContext", e);
-             return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            app.state.audioContext = new AudioContext();
+        } catch (e) {
+            console.error("Web Audio API is not supported", e);
+            return;
+        }
+    }
+
+    // [수정 2] suspended 상태라면 풀어주기 (사용자 클릭 직후에 호출되므로 가능)
+    if (app.state.audioContext.state === 'suspended') {
+        try {
+            await app.state.audioContext.resume();
+        } catch (e) {
+            console.error("Failed to resume AudioContext", e);
+        }
+    }
+
+    app.state.isSpeaking = true;
+    const textWithoutEmoji = text.replace(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)\s*/u, '');
+    const processedText = textWithoutEmoji.replace(/\bsb\b/g, 'somebody').replace(/\bsth\b/g, 'something');
+    const voiceConfig = voiceSets[app.state.currentVoiceSet][contentType];
+
+    const cacheKey = `${processedText}|${voiceConfig.languageCode}|${voiceConfig.name}`;
+
+    const playAudio = async (audioArrayBuffer) => {
+        try {
+            // [수정 3] 전역 컨텍스트(app.state.audioContext) 사용
+            const audioBuffer = await app.state.audioContext.decodeAudioData(audioArrayBuffer);
+            const source = app.state.audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(app.state.audioContext.destination);
+            source.start(0);
+            source.onended = () => {
+                app.state.isSpeaking = false;
+                // 컨텍스트를 닫지 않음 (재사용 위해)
+            };
+        } catch (decodeError) {
+             console.error("Error decoding audio data:", decodeError);
+             app.state.isSpeaking = false;
+             // 디코딩 에러 시에도 컨텍스트 닫지 않음
+        }
+    };
+
+    try {
+        const cachedAudio = await audioCache.getAudio(cacheKey);
+        if (cachedAudio) {
+            await playAudio(cachedAudio.slice(0));
+            return;
         }
 
-        app.state.isSpeaking = true;
-        const textWithoutEmoji = text.replace(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)\s*/u, '');
-        const processedText = textWithoutEmoji.replace(/\bsb\b/g, 'somebody').replace(/\bsth\b/g, 'something');
-        const voiceConfig = voiceSets[app.state.currentVoiceSet][contentType];
+        const TTS_URL = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${app.config.TTS_API_KEY}`;
+        const response = await fetch(TTS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: { text: processedText }, voice: voiceConfig, audioConfig: { audioEncoding: 'MP3' } })
+        });
+        if (!response.ok) throw new Error(`TTS API Error: ${(await response.json()).error.message}`);
 
-        const cacheKey = `${processedText}|${voiceConfig.languageCode}|${voiceConfig.name}`;
+        const data = await response.json();
+        const byteCharacters = atob(data.audioContent);
+        const byteArray = new Uint8Array(byteCharacters.length).map((_, i) => byteCharacters.charCodeAt(i));
+        const audioArrayBuffer = byteArray.buffer;
 
-        const playAudio = async (audioArrayBuffer) => {
-            try {
-                const audioBuffer = await ttsAudioContext.decodeAudioData(audioArrayBuffer);
-                const source = ttsAudioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(ttsAudioContext.destination);
-                source.start(0);
-                source.onended = () => {
-                    app.state.isSpeaking = false;
-                    ttsAudioContext.close().catch(e => console.warn("Error closing TTS AudioContext:", e));
-                };
-            } catch (decodeError) {
-                 console.error("Error decoding audio data:", decodeError);
-                 app.state.isSpeaking = false;
-                 ttsAudioContext.close().catch(e => console.warn("Error closing TTS AudioContext:", e));
-            }
-        };
+        audioCache.saveAudio(cacheKey, audioArrayBuffer.slice(0));
+        await playAudio(audioArrayBuffer);
 
-        try {
-            const cachedAudio = await audioCache.getAudio(cacheKey);
-            if (cachedAudio) {
-                await playAudio(cachedAudio.slice(0));
-                return;
-            }
-
-            const TTS_URL = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${app.config.TTS_API_KEY}`;
-            const response = await fetch(TTS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ input: { text: processedText }, voice: voiceConfig, audioConfig: { audioEncoding: 'MP3' } })
-            });
-            if (!response.ok) throw new Error(`TTS API Error: ${(await response.json()).error.message}`);
-
-            const data = await response.json();
-            const byteCharacters = atob(data.audioContent);
-            const byteArray = new Uint8Array(byteCharacters.length).map((_, i) => byteCharacters.charCodeAt(i));
-            const audioArrayBuffer = byteArray.buffer;
-
-            audioCache.saveAudio(cacheKey, audioArrayBuffer.slice(0));
-            await playAudio(audioArrayBuffer);
-
-        } catch (error) {
-            console.error('TTS 재생 또는 캐싱에 실패했습니다:', error);
-            app.state.isSpeaking = false;
-            if (ttsAudioContext && ttsAudioContext.state !== 'closed') {
-                ttsAudioContext.close().catch(e => console.warn("Error closing TTS AudioContext:", e));
-            }
-        }
+    } catch (error) {
+        console.error('TTS 재생 또는 캐싱에 실패했습니다:', error);
+        app.state.isSpeaking = false;
+        // 에러 발생 시에도 컨텍스트 닫지 않음
+    }
+}
     },
     async translate(text) {
         try {
