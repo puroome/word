@@ -84,9 +84,12 @@ const app = {
         practiceModeControl: document.getElementById('practice-mode-control'),
         practiceModeCheckbox: document.getElementById('practice-mode-checkbox'),
     },
+    /* js/main.js 파일의 app 객체 내부 init() 함수 */
+
     init() {
-        document.addEventListener('firebaseSDKLoaded', () => {
-            const { initializeApp, getDatabase, getAuth, getFirestore, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, writeBatch } = window.firebaseSDK;
+        // 1. 실행할 로직을 별도 함수로 만듭니다.
+        const startFirebaseApp = () => {
+            const { initializeApp, getDatabase, getAuth, getFirestore, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } = window.firebaseSDK;
             
             const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
             const database = getDatabase(firebaseApp);
@@ -117,7 +120,14 @@ const app = {
             });
 
             this.bindGlobalEvents(auth, signInWithPopup, GoogleAuthProvider, signOut);
-        });
+        };
+
+        // 2. [핵심 수정] 이미 로드되어 있다면 즉시 실행, 아니라면 대기
+        if (window.firebaseSDK) {
+            startFirebaseApp();
+        } else {
+            document.addEventListener('firebaseSDKLoaded', startFirebaseApp);
+        }
     },
 
     async startApp() {
