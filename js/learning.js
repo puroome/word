@@ -517,7 +517,7 @@ export const learningMode = {
     renderInitialGenButton(container, wordData) {
         const btn = document.createElement('button');
         btn.className = 'text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-full transition-colors font-semibold flex items-center justify-center mx-auto gap-2 shadow-sm';
-        btn.innerHTML = `<span>🤖 AI 예문 생성 (2개)</span>`;
+        btn.innerHTML = `<span>🤖 AI 예문 생성</span>`;
         
         btn.onclick = async () => {
             btn.disabled = true;
