@@ -544,22 +544,21 @@ export const learningMode = {
         container.appendChild(btn);
     },
 
-// [디자인 수정] 기존 예문과 스타일을 동일하게 맞춘 렌더링 함수
+// [최종 수정] 이모지와 텍스트의 수평 중심선을 맞춘 렌더링 함수
 renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-    // 1. 전체를 감싸는 줄 생성 (기존 예문 레이아웃 모방)
     const wrapper = document.createElement('div');
-    // 여백을 줄이고 배경색을 연하게 하거나 제거하여 기존 텍스트와 높이를 맞춤
-    wrapper.className = "flex items-start gap-2 py-1 mb-1"; 
+    // items-center를 추가하여 자식 요소들의 세로 중앙을 맞춥니다.
+    wrapper.className = "flex items-center gap-2 py-1 mb-1 w-full"; 
 
-    // 2. 로봇 아이콘 버튼 (크기를 기존 이모지와 비슷하게 조정)
+    // 1. 로봇 아이콘 버튼
     const botIcon = document.createElement('button');
-    botIcon.className = "text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 leading-none";
+    // flex와 items-center를 주어 이모지 자체가 버튼 정중앙에 오도록 합니다.
+    botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6";
     botIcon.innerHTML = "🤖";
     botIcon.title = "이 예문만 다시 만들기";
     
     botIcon.onclick = async () => {
-        botIcon.innerHTML = "⏳";
-        botIcon.classList.add('animate-spin');
+        botIcon.innerHTML = `<span class="animate-spin text-xs">⏳</span>`;
         botIcon.disabled = true;
 
         try {
@@ -574,19 +573,17 @@ renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         } catch (err) {
             console.error(err);
             botIcon.innerHTML = "⚠️";
-            botIcon.classList.remove('animate-spin');
             botIcon.disabled = false;
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
         }
     };
     wrapper.appendChild(botIcon);
 
-    // 3. 예문 텍스트 (기존 ui.displaySentences를 활용해 동일한 폰트/간격 유지)
+    // 2. 예문 텍스트 영역
     const textDiv = document.createElement('div');
-    // 기존 예문 폰트 크기 및 색상과 일치하도록 설정
-    textDiv.className = "flex-1 text-left text-gray-700 leading-snug pt-0.5"; 
+    // leading-normal로 줄 높이를 표준화하여 정렬이 어긋나지 않게 합니다.
+    textDiv.className = "flex-1 text-left text-gray-700 leading-normal"; 
     
-    // ui.displaySentences가 내부적으로 단어 클릭 TTS 등을 처리하므로 그대로 사용
     ui.displaySentences([sentenceText], textDiv);
     
     wrapper.appendChild(textDiv);
