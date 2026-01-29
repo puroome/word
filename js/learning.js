@@ -622,40 +622,101 @@ export const learningMode = {
         container.appendChild(btn);
     },
 
-    renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-        const wrapper = document.createElement('div');
-        wrapper.className = "flex items-start gap-2 py-1 mb-1 w-full"; 
+renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
+        // 기존 예문(ui.displaySentences)과 동일한 구조인 <p> 태그 사용
+        const p = document.createElement('p');
+        p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; // group 클래스 추가
 
-        const botIcon = document.createElement('button');
-        botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6 mt-[2.5px]";
-        botIcon.innerHTML = "🤖";
-        botIcon.title = "이 예문만 다시 만들기";
+        // 1. 봇 아이콘 (버튼 기능 포함, 기존 이모지 위치와 동일하게 배치)
+        const botBtn = document.createElement('button');
+        // float-left와 margin을 사용하여 텍스트와 자연스럽게 어울리게 함 (기존 이모지처럼)
+        botBtn.className = "float-left mr-2 text-base focus:outline-none transition-transform hover:scale-110"; 
+        botBtn.innerHTML = "🤖";
+        botBtn.title = "이 예문만 다시 만들기";
         
-        botIcon.onclick = async () => {
-            botIcon.innerHTML = `<span class="animate-spin text-xs">⏳</span>`;
-            botIcon.disabled = true;
+        // 클릭 이벤트 (재생성 로직)
+        botBtn.onclick = async (e) => {
+            e.stopPropagation(); // 부모 p태그의 클릭(TTS/번역) 방지
+            botBtn.innerHTML = `<span class="animate-spin text-xs inline-block">⏳</span>`;
+            botBtn.disabled = true;
 
             try {
                 const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
                 allSentences[index] = newSentence;
                 const fullText = allSentences.join('\n');
                 wordData.AISample = { en: fullText, ko: "" };
-                api.saveAISamplesToSheet(wordData, fullText);
-                this.appendAIGenButton(container.parentNode, wordData);
+                await api.saveAISamplesToSheet(wordData, fullText); // await 추가 권장
+                
+                // 컨테이너 다시 그리기 (새 내용 반영)
+                const section = container.parentNode; // .ai-gen-section
+                this.appendAIGenButton(section.parentNode, wordData); 
             } catch (err) {
                 console.error(err);
-                botIcon.innerHTML = "⚠️";
-                botIcon.disabled = false;
+                botBtn.innerHTML = "⚠️";
+                botBtn.disabled = false;
                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
             }
         };
-        wrapper.appendChild(botIcon);
 
-        const textDiv = document.createElement('div');
-        textDiv.className = "flex-1 text-left text-gray-700 leading-relaxed"; 
-        ui.displaySentences([sentenceText], textDiv);
+        p.appendChild(botBtn);
+
+        // 2. 문장 텍스트 처리 (ui.displaySentences 로직 일부 차용하여 직접 구성)
+        const showTranslation = async (event) => {
+            state.activeTranslationTarget = p;
+            const translatedText = await api.translate(sentenceText); // 전체 문장 번역
+            if (state.activeTranslationTarget !== p) return;
+            ui.showTranslationTooltip(translatedText, event);
+        };
+
+        // p 태그 클릭 시 TTS 및 번역 (기존 예문과 동일 동작)
+        p.onclick = (e) => {
+            // 버튼이나 인터랙티브 단어 클릭 시 무시
+            if (e.target === botBtn || e.target.closest('button')) return; 
+            if (e.target.closest('.interactive-word')) return;
+            
+            api.speak(sentenceText, 'sample');
+            showTranslation(e);
+        };
+
+        // 호버 이벤트 (번역 툴팁)
+        p.addEventListener('mouseenter', (e) => {
+             if (e.target === p) {
+                clearTimeout(state.translationTimer);
+                state.activeTranslationTarget = p;
+                state.translationTimer = setTimeout(() => {
+                    if (state.activeTranslationTarget === p) {
+                        showTranslation(e);
+                    }
+                }, 1000);
+             }
+        });
+
+        p.addEventListener('mouseleave', () => {
+            clearTimeout(state.translationTimer);
+            if (state.activeTranslationTarget === p) {
+                state.activeTranslationTarget = null;
+            }
+            ui.hideTranslationTooltip();
+        });
+
+        // 3. 텍스트 내용 추가 (인터랙티브 단어 처리 포함)
+        const sentenceContent = document.createElement('span');
+        sentenceContent.className = 'sentence-content-area'; // ui.js와 스타일 통일
+        // 텍스트 줄바꿈 시 들여쓰기 방지: float된 요소 옆으로 텍스트가 흐르게 둠
         
-        wrapper.appendChild(textDiv);
-        container.appendChild(wrapper);
+        // 문장 파싱 (굵게 표시된 부분 등 처리)
+        const sentenceParts = sentenceText.split(/(\*.*?\*)/g);
+        sentenceParts.forEach(part => {
+            if (part.startsWith('*') && part.endsWith('*')) {
+                const strong = document.createElement('strong');
+                strong.appendChild(ui.createInteractiveFragment(part.slice(1, -1), true));
+                sentenceContent.appendChild(strong);
+            } else if (part) {
+                sentenceContent.appendChild(ui.createInteractiveFragment(part, true));
+            }
+        });
+
+        p.appendChild(sentenceContent);
+        container.appendChild(p);
     }
 };
