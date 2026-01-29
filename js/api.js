@@ -424,7 +424,9 @@ export const api = {
         }
     },
 
-    async createWord(wordData) {
+    // [수정됨] 새 단어 생성 (중간 삽입 + Index 처리)
+    async createWord(wordData, afterWord) {
+        // 1. GAS에 요청 (after_word 파라미터 추가)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
@@ -432,19 +434,35 @@ export const api = {
             scriptUrl.searchParams.append('pos', wordData.pos || "");
             scriptUrl.searchParams.append('meaning', wordData.meaning || "");
             scriptUrl.searchParams.append('explanation', wordData.explanation || "");
+            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord); // 이 단어 뒤에
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
                 .then(d => {
                     if(!d.success) console.warn("시트 생성 실패:", d.message);
-                    else console.log("✅ 시트 생성 성공");
+                    else console.log("✅ 시트 생성 성공 (삽입)");
                 })
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        const lastIndex = state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index)) : 0;
+        // 2. 로컬 데이터에 중간 삽입
+        let insertIndex = state.wordList.length; // 기본값: 맨 뒤
+        let prevIndexVal = 0;
+
+        if (afterWord) {
+            const idx = state.wordList.findIndex(w => w.word === afterWord);
+            if (idx !== -1) {
+                insertIndex = idx + 1;
+                prevIndexVal = state.wordList[idx].index;
+            } else if (state.wordList.length > 0) {
+                prevIndexVal = Math.max(...state.wordList.map(w => w.index));
+            }
+        } else if (state.wordList.length > 0) {
+            prevIndexVal = Math.max(...state.wordList.map(w => w.index));
+        }
+
         const newWordObj = {
-            index: lastIndex + 1,
+            index: prevIndexVal + 1, // 로컬 정렬용 (임시)
             word: wordData.word,
             pos: wordData.pos || "",
             meaning: wordData.meaning || "",
@@ -454,17 +472,35 @@ export const api = {
             AISample: null
         };
         
-        state.wordList.push(newWordObj);
+        // 중간 삽입
+        state.wordList.splice(insertIndex, 0, newWordObj);
         
+        // 뒤쪽 요소들 Index 밀기 (로컬 정렬 유지용)
+        for (let i = insertIndex + 1; i < state.wordList.length; i++) {
+             state.wordList[i].index += 1;
+        }
+
+        // 3. 로컬 캐시 업데이트
          try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
-                parsedCache.words.push(newWordObj);
+                // 캐시 데이터도 동일하게 삽입
+                let cacheInsertIdx = parsedCache.words.length;
+                if (afterWord) {
+                    const cIdx = parsedCache.words.findIndex(w => w.word === afterWord);
+                    if (cIdx !== -1) cacheInsertIdx = cIdx + 1;
+                }
+                parsedCache.words.splice(cacheInsertIdx, 0, newWordObj);
+                // 뒤쪽 인덱스 보정
+                for(let i = cacheInsertIdx + 1; i < parsedCache.words.length; i++) {
+                    parsedCache.words[i].index += 1;
+                }
                 localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
             }
         } catch (e) {}
 
+        // 4. Firebase (단순 생성, 순서는 시트 동기화 시 정렬됨)
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
