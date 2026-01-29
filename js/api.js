@@ -288,7 +288,8 @@ export const api = {
     async generateAIExamples(word, currentMeaning) {
         // config.js의 TTS_API_KEY를 재사용 (Gemini API가 활성화되어 있어야 함)
         const apiKey = config.TTS_API_KEY; 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // 안정적인 gemini-pro 모델 사용
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
 
         // 프롬프트: 2문장 생성 + 다른 뜻/품사 활용 요청
         const prompt = `
