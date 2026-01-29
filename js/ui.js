@@ -179,6 +179,23 @@ export const ui = {
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
 
+        // [신규] 편집 모드 진입용 메뉴 항목 동적 추가
+        let editBtn = document.getElementById('edit-word-context-btn');
+        if (!editBtn && options.isEditModeTrigger) {
+            editBtn = document.createElement('button');
+            editBtn.id = 'edit-word-context-btn';
+            editBtn.className = 'text-left w-full px-4 py-2 text-sm text-blue-600 font-bold hover:bg-gray-100 whitespace-nowrap border-b';
+            editBtn.textContent = '📝 편집하기';
+            menu.prepend(editBtn);
+        }
+        if (editBtn) {
+            editBtn.style.display = options.isEditModeTrigger ? 'block' : 'none';
+            editBtn.onclick = () => {
+                window.dispatchEvent(new CustomEvent('startEditMode'));
+                this.hideWordContextMenu();
+            };
+        }
+
         document.getElementById('search-app-context-btn').style.display = options.hideAppSearch ? 'none' : 'block';
 
         const touch = event.touches ? event.touches[0] : null;
