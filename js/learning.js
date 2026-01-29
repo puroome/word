@@ -497,7 +497,7 @@ export const learningMode = {
         this.elements.favoriteIcon.classList.toggle('fill-current', isFavorite);
     },
 
-    // ▼▼▼ [완전 변경] AI 예문 생성 및 표시 함수 ▼▼▼
+    // ▼▼▼ [완전 변경] AI 예문 생성 및 목록 표시 함수 ▼▼▼
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
         if (!section) {
@@ -507,86 +507,102 @@ export const learningMode = {
         }
         section.innerHTML = '';
 
-        // 저장된 영어 문장이 있는지 확인 (객체 내의 en 속성)
+        // 저장된 영어 문장이 있는지 확인
         if (wordData.AISample && wordData.AISample.en) {
-            this.renderAIContent(section, wordData, wordData.AISample.en);
+            // 문장이 여러 줄일 수 있으므로 줄바꿈 기준으로 쪼갬
+            const sentences = wordData.AISample.en.split('\n').filter(s => s.trim() !== '');
+            
+            // 각 문장마다 행 생성
+            sentences.forEach((sent, index) => {
+                this.renderAIContentRow(section, wordData, sent, index, sentences);
+            });
         } else {
-            this.renderGenButton(section, wordData);
+            // 문장이 하나도 없으면 '생성(2개)' 버튼 표시
+            this.renderInitialGenButton(section, wordData);
         }
     },
 
-    // [상태 1] 생성 버튼 보여주기
-    renderGenButton(container, wordData) {
-        container.innerHTML = '';
+    // [상태 1] 초기 생성 버튼 (2개 만들기)
+    renderInitialGenButton(container, wordData) {
         const btn = document.createElement('button');
         btn.className = 'text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-full transition-colors font-semibold flex items-center justify-center mx-auto gap-2 shadow-sm';
-        btn.innerHTML = `<span>🤖 AI 예문 생성</span>`;
+        btn.innerHTML = `<span>🤖 AI 예문 생성 (2개)</span>`;
         
-        btn.onclick = () => this.handleGenerate(container, wordData, btn);
+        btn.onclick = async () => {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="animate-spin">⏳</span> 생성 중...`;
+            
+            try {
+                // 1. 2개 생성 요청
+                const newSentences = await api.generateAIExamples(wordData, wordData.meaning, 2);
+                
+                // 2. 합치기 (\n으로 연결)
+                const fullText = newSentences.join('\n');
+                
+                // 3. 데이터 및 시트 업데이트
+                wordData.AISample = { en: fullText, ko: "" };
+                api.saveAISamplesToSheet(wordData.word, fullText);
+
+                // 4. 화면 다시 그리기
+                this.appendAIGenButton(container.parentNode, wordData);
+
+            } catch (err) {
+                console.error(err);
+                btn.innerHTML = `⚠️ 실패 (다시 시도)`;
+                btn.disabled = false;
+            }
+        };
         container.appendChild(btn);
     },
 
-    // [상태 2] 결과 화면 (로봇 아이콘 + ui.displaySentences 사용)
-    renderAIContent(container, wordData, sentenceText) {
-        container.innerHTML = '';
-        
+    // [상태 2] 각 문장 행 렌더링 (개별 재생성 로봇 포함)
+    renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const wrapper = document.createElement('div');
-        wrapper.className = "flex items-start gap-3 bg-indigo-50/50 p-3 rounded-xl";
+        wrapper.className = "flex items-start gap-3 bg-indigo-50/50 p-3 rounded-xl mb-2 last:mb-0";
 
-        // 로봇 아이콘 (클릭 시 재생성)
+        // 1. 로봇 아이콘 (개별 재생성)
         const botIcon = document.createElement('button');
         botIcon.className = "text-xl hover:scale-110 transition-transform cursor-pointer flex-shrink-0 mt-0.5";
         botIcon.innerHTML = "🤖";
-        botIcon.title = "클릭하면 새로운 예문을 만듭니다";
+        botIcon.title = "이 예문만 다시 만들기";
         
-        // ★ 로봇 클릭 -> 바로 재생성
-        botIcon.onclick = () => {
+        botIcon.onclick = async () => {
             botIcon.innerHTML = "⏳";
             botIcon.classList.add('animate-spin');
             botIcon.disabled = true;
-            this.handleGenerate(container, wordData, null); 
+
+            try {
+                // 1. 새 문장 1개 요청
+                const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
+                
+                // 2. 배열에서 해당 인덱스 문장 교체
+                allSentences[index] = newSentence;
+                const fullText = allSentences.join('\n');
+
+                // 3. 저장 및 업데이트
+                wordData.AISample = { en: fullText, ko: "" };
+                api.saveAISamplesToSheet(wordData.word, fullText);
+
+                // 4. 화면 갱신 (전체 목록 다시 그리기)
+                this.appendAIGenButton(container.parentNode, wordData);
+
+            } catch (err) {
+                console.error(err);
+                botIcon.innerHTML = "⚠️";
+                botIcon.classList.remove('animate-spin');
+                botIcon.disabled = false;
+                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
+            }
         };
         wrapper.appendChild(botIcon);
 
-        // 예문 텍스트 영역
+        // 2. 예문 텍스트 (TTS, 클릭 등 기존 기능)
         const textDiv = document.createElement('div');
         textDiv.className = "flex-1 text-left text-gray-800 leading-relaxed";
-        
-        // ★ ui.displaySentences 사용 (기존 예문과 동일 기능)
         ui.displaySentences([sentenceText], textDiv);
         
         wrapper.appendChild(textDiv);
         container.appendChild(wrapper);
-    },
-
-    // [공통] API 호출 로직
-    async handleGenerate(container, wordData, loadingBtn) {
-        if (loadingBtn) {
-            loadingBtn.disabled = true;
-            loadingBtn.innerHTML = `<span class="animate-spin">⏳</span> 생성 중...`;
-        }
-
-        try {
-            // API 호출
-            const newExample = await api.generateAIExamples(wordData, wordData.meaning);
-            
-            // 데이터 업데이트
-            wordData.AISample = newExample; 
-
-            // 화면 그리기
-            this.renderAIContent(container, wordData, newExample.en);
-
-        } catch (err) {
-            console.error(err);
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "생성 실패: " + err.message, isError: true } }));
-            
-            if (loadingBtn) {
-                loadingBtn.disabled = false;
-                loadingBtn.innerHTML = `⚠️ 다시 시도`;
-            } else {
-                this.renderAIContent(container, wordData, wordData.AISample?.en || "Error");
-            }
-        }
     }
     // ▲▲▲ [수정 완료] ▲▲▲
 };
