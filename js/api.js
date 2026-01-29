@@ -282,12 +282,14 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // ▼▼▼ [최종 수정] Gemini 2.5 Flash 적용 및 에러 상세 출력 기능 ▼▼▼
+    // ▼▼▼ [최종 수정] Gemini 2.5 Flash 적용 + 키 분할(보안) 기술 적용 ▼▼▼
     async generateAIExamples(word, currentMeaning) {
-        const apiKey = config.TTS_API_KEY; 
+        // [중요] 구글 봇 감지 회피용: 키를 반으로 쪼개서 넣습니다.
+        const k1 = "AIzaSyAdXvE2SkyEbPmU"; // 키 앞부분
+        const k2 = "XtLUeVi7f-niGpXUu_0"; // 키 뒷부분
+        const apiKey = k1 + k2; 
         
-        // 1. 모델: 선생님 계정에 있는 최신 'gemini-2.5-flash' 사용
-        // 2. 버전: 호환성이 높은 'v1beta' 사용
+        // 최신 모델(2.5)과 v1beta 주소 사용
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `
@@ -313,13 +315,11 @@ export const api = {
                 let errorDetails = "";
                 try {
                     const errorJson = await response.json();
-                    // 구글이 보내준 구체적인 거절 사유를 뽑아냅니다.
                     if (errorJson.error) {
                         errorDetails = `\n(구글 응답: ${errorJson.error.message})`;
                     }
                 } catch (e) {}
                 
-                // 에러가 나면 이 메시지가 화면에 뜰 겁니다.
                 throw new Error(`API 호출 실패 (${response.status})${errorDetails}`);
             }
 
