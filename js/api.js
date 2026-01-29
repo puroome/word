@@ -161,51 +161,6 @@ export const api = {
         }
     },
 
-    // [신규] 단어 데이터(뜻, 설명) 수정 기능
-    async updateWordData(wordData, newMeaning, newExplanation) {
-        if (!config.SCRIPT_URL) return;
-
-        const url = new URL(config.SCRIPT_URL);
-        url.searchParams.append('action', 'update_word');
-        url.searchParams.append('word', wordData.word);
-        url.searchParams.append('meaning', newMeaning);
-        url.searchParams.append('explanation', newExplanation);
-
-        try {
-            // 1. 구글 시트 업데이트
-            fetch(url.toString(), { mode: 'no-cors' });
-
-            // 2. Firebase 업데이트
-            if (database) {
-                const { ref, update } = window.firebaseSDK;
-                const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
-                const updates = {};
-                updates[`/vocabulary/${safeKey}/meaning`] = newMeaning;
-                updates[`/vocabulary/${safeKey}/explanation`] = newExplanation;
-                await update(ref(database), updates);
-            }
-
-            // 3. 현재 메모리 및 로컬 캐시 업데이트
-            wordData.meaning = newMeaning;
-            wordData.explanation = newExplanation;
-            
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsed = JSON.parse(cachedData);
-                const idx = parsed.words.findIndex(w => w.word === wordData.word);
-                if (idx !== -1) {
-                    parsed.words[idx].meaning = newMeaning;
-                    parsed.words[idx].explanation = newExplanation;
-                    localStorage.setItem('wordListCache', JSON.stringify(parsed));
-                }
-            }
-            return true;
-        } catch (error) {
-            console.error("Update failed:", error);
-            throw error;
-        }
-    },
-
      async updateWordStatus(word, quizType, result) {
          if (!state.userId || !word || !quizType) return;
          if (!state.currentProgress[word]) state.currentProgress[word] = {};
@@ -373,7 +328,13 @@ export const api = {
             scriptUrl.searchParams.append('word', wordData.word);
             scriptUrl.searchParams.append('ai_text', fullEnText); 
             
-            fetch(scriptUrl.toString());
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 저장 실패:", d.message);
+                    else console.log("✅ 시트 저장 성공");
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
         }
 
         const aiSampleObj = { en: fullEnText, ko: "" };
@@ -383,7 +344,10 @@ export const api = {
             const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
             updates[`/vocabulary/${safeKey}/AISample`] = aiSampleObj;
-            update(ref(database), updates);
+            
+            update(ref(database), updates).then(() => {
+                console.log("✅ Firebase 저장 완료");
+            }).catch(e => console.warn("Firebase 저장 실패:", e));
         }
 
         try {
@@ -394,8 +358,70 @@ export const api = {
                 if (targetIndex !== -1) {
                     parsedCache.words[targetIndex].AISample = aiSampleObj;
                     localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                    console.log("✅ 로컬 캐시 업데이트 완료");
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("로컬 캐시 업데이트 실패:", e);
+        }
+    },
+
+    // [추가됨] 단어 뜻/설명 수정 및 동기화 (시트 + Firebase + 로컬캐시)
+    async updateWordDetails(wordData, newMeaning, newExplanation) {
+        // 1. Google Sheets 저장 (백그라운드)
+        if (config.SCRIPT_URL) {
+            const scriptUrl = new URL(config.SCRIPT_URL);
+            scriptUrl.searchParams.append('action', 'update_word_data');
+            scriptUrl.searchParams.append('word', wordData.word);
+            if (newMeaning !== undefined) scriptUrl.searchParams.append('meaning', newMeaning);
+            if (newExplanation !== undefined) scriptUrl.searchParams.append('explanation', newExplanation);
+
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 수정 실패:", d.message);
+                    else console.log("✅ 시트 수정 성공");
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
+        }
+
+        const updates = {};
+        if (newMeaning !== undefined) updates.meaning = newMeaning;
+        if (newExplanation !== undefined) updates.explanation = newExplanation;
+
+        // 2. Firebase 저장
+        if (database) {
+            const { ref, update } = window.firebaseSDK;
+            const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
+            const firebaseUpdates = {};
+            // Firebase 경로에 맞게 매핑
+            if (newMeaning !== undefined) firebaseUpdates[`/vocabulary/${safeKey}/meaning`] = newMeaning;
+            if (newExplanation !== undefined) firebaseUpdates[`/vocabulary/${safeKey}/explanation`] = newExplanation;
+
+            update(ref(database), firebaseUpdates).then(() => {
+                console.log("✅ Firebase 수정 완료");
+            }).catch(e => console.warn("Firebase 수정 실패:", e));
+        }
+
+        // 3. 로컬 캐시 및 메모리 업데이트
+        try {
+            // 메모리 상태 즉시 반영
+            if (newMeaning !== undefined) wordData.meaning = newMeaning;
+            if (newExplanation !== undefined) wordData.explanation = newExplanation;
+
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                const targetIndex = parsedCache.words.findIndex(w => w.word === wordData.word);
+                if (targetIndex !== -1) {
+                    if (newMeaning !== undefined) parsedCache.words[targetIndex].meaning = newMeaning;
+                    if (newExplanation !== undefined) parsedCache.words[targetIndex].explanation = newExplanation;
+                    localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                    console.log("✅ 로컬 캐시 수정 완료");
+                }
+            }
+        } catch (e) {
+            console.error("로컬 캐시 수정 실패:", e);
+        }
     }
 };
