@@ -289,7 +289,7 @@ export const api = {
         // config.js의 TTS_API_KEY를 재사용 (Gemini API가 활성화되어 있어야 함)
         const apiKey = config.TTS_API_KEY; 
         // 안정적인 gemini-pro 모델 사용
-const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
         // 프롬프트: 2문장 생성 + 다른 뜻/품사 활용 요청
         const prompt = `
