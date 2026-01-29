@@ -282,16 +282,14 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // ▼▼▼ [수정 1] AI 생성 함수 (개수 지정 가능, 저장 로직 분리) ▼▼▼
+    // AI 생성 함수 (개수 지정 가능)
     async generateAIExamples(wordData, currentMeaning, count = 1) {
-        // 보안용 키 분할
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 프롬프트: 영어 문장만 배열로 요청
         const prompt = `
             Target word: "${wordData.word}"
             Current definition: "${currentMeaning}"
@@ -316,7 +314,6 @@ export const api = {
             const textResponse = data.candidates[0].content.parts[0].text;
             const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
 
-            // 항상 배열로 반환
             return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
 
         } catch (error) {
@@ -325,31 +322,48 @@ export const api = {
         }
     },
 
-    // ▼▼▼ [수정 2] 시트 저장 함수 (별도 분리) ▼▼▼
-    async saveAISamplesToSheet(word, fullEnText) {
-        if (!config.SCRIPT_URL) {
-            console.warn("Script URL 없음");
-            return;
+    // ▼▼▼ [완전 수정] 3중 저장 (시트 + Firebase + 로컬캐시) ▼▼▼
+    async saveAISamplesToSheet(wordData, fullEnText) {
+        // 1. 구글 시트로 전송 (백업)
+        if (config.SCRIPT_URL) {
+            const payload = JSON.stringify({ en: fullEnText });
+            const scriptUrl = new URL(config.SCRIPT_URL);
+            scriptUrl.searchParams.append('action', 'save_ai_sample');
+            scriptUrl.searchParams.append('word', wordData.word);
+            scriptUrl.searchParams.append('json_data', payload);
+            
+            fetch(scriptUrl.toString()).catch(e => console.error("Sheet save error:", e));
         }
 
-        // 앱이 시트에 저장할 때는 { en: "문장1\n문장2" } 형태로 포장해서 보냅니다.
-        // Code.gs가 여기서 .en을 꺼내서 저장합니다.
-        const payload = JSON.stringify({ en: fullEnText });
+        const aiSampleObj = { en: fullEnText, ko: "" };
 
-        const scriptUrl = new URL(config.SCRIPT_URL);
-        scriptUrl.searchParams.append('action', 'save_ai_sample');
-        scriptUrl.searchParams.append('word', word);
-        scriptUrl.searchParams.append('json_data', payload);
+        // 2. Firebase 업데이트 (앱 재실행 시 불러올 데이터)
+        if (database) {
+            const { ref, update } = window.firebaseSDK;
+            const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
+            const updates = {};
+            // Firebase의 해당 단어 아래에 AISample 저장
+            updates[`/vocabulary/${safeKey}/AISample`] = aiSampleObj;
+            
+            update(ref(database), updates).then(() => {
+                console.log("✅ Firebase 저장 완료");
+            }).catch(e => console.warn("Firebase 저장 실패:", e));
+        }
 
+        // 3. 내 휴대폰 캐시 업데이트 (새로고침 시 바로 반영되도록)
         try {
-            fetch(scriptUrl.toString())
-                .then(res => res.json())
-                .then(resData => {
-                    if(resData.success) console.log("✅ 시트 저장 성공");
-                    else console.warn("⚠️ 시트 저장 실패:", resData.message);
-                });
-        } catch (err) {
-            console.error("통신 에러:", err);
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                const targetIndex = parsedCache.words.findIndex(w => w.word === wordData.word);
+                if (targetIndex !== -1) {
+                    parsedCache.words[targetIndex].AISample = aiSampleObj;
+                    localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                    console.log("✅ 로컬 캐시 업데이트 완료");
+                }
+            }
+        } catch (e) {
+            console.error("로컬 캐시 업데이트 실패:", e);
         }
     }
 };
