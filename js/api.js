@@ -32,7 +32,6 @@ export const api = {
 
         if (state.isWordListReady && !force) return;
 
-        // Firebase Imports from global SDK (handled in main.js)
         const { ref, get } = window.firebaseSDK;
         try {
             const dbRef = ref(database, '/vocabulary');
@@ -50,7 +49,6 @@ export const api = {
             localStorage.setItem('wordListCache', JSON.stringify(cachePayload));
             state.lastCacheTimestamp = newTimestamp;
         } catch (error) {
-            // Error handling delegated to caller or main
             throw error;
         }
     },
@@ -284,25 +282,24 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // ▼▼▼ [새로 추가] AI 예문 생성 (다른 뜻/품사 우선) ▼▼▼
+    // ▼▼▼ [최종 수정] Gemini 2.5 Flash 적용 및 에러 상세 출력 기능 ▼▼▼
     async generateAIExamples(word, currentMeaning) {
-        // config.js의 TTS_API_KEY를 재사용 (Gemini API가 활성화되어 있어야 함)
         const apiKey = config.TTS_API_KEY; 
-        // 안정적인 gemini-pro 모델 사용
+        
+        // 1. 모델: 선생님 계정에 있는 최신 'gemini-2.5-flash' 사용
+        // 2. 버전: 호환성이 높은 'v1beta' 사용
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 프롬프트: 2문장 생성 + 다른 뜻/품사 활용 요청
         const prompt = `
             Target word: "${word}"
             Current definition: "${currentMeaning}"
 
             Task:
             1. Create 2 example sentences using "${word}".
-            2. IMPORTANT: Try to use a DIFFERENT part of speech or a DIFFERENT meaning from the "Current definition" provided above. (e.g. if it's a noun, use it as a verb).
-            3. If the word has only one meaning, use a diverse context suitable for a high school student.
-            4. Provide Korean translations.
-            5. Output strictly as a JSON array: [{"en": "English sentence 1", "ko": "Korean translation 1"}, {"en": "English sentence 2", "ko": "Korean translation 2"}]
-            6. Do not include any markdown formatting like \`\`\`json.
+            2. IMPORTANT: Try to use a DIFFERENT part of speech or a DIFFERENT meaning from the "Current definition" provided above.
+            3. Provide Korean translations.
+            4. Output strictly as a JSON array: [{"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}]
+            5. Do not include any markdown formatting like \`\`\`json.
         `;
 
         try {
@@ -313,23 +310,32 @@ export const api = {
             });
 
             if (!response.ok) {
-                if (response.status === 403) {
-                     throw new Error("Gemini API 권한 오류. Google Cloud Console에서 API 설정을 확인하세요.");
-                }
-                throw new Error(`Gemini API Error: ${response.status}`);
+                let errorDetails = "";
+                try {
+                    const errorJson = await response.json();
+                    // 구글이 보내준 구체적인 거절 사유를 뽑아냅니다.
+                    if (errorJson.error) {
+                        errorDetails = `\n(구글 응답: ${errorJson.error.message})`;
+                    }
+                } catch (e) {}
+                
+                // 에러가 나면 이 메시지가 화면에 뜰 겁니다.
+                throw new Error(`API 호출 실패 (${response.status})${errorDetails}`);
             }
 
             const data = await response.json();
-            const textResponse = data.candidates[0].content.parts[0].text;
             
-            // JSON 파싱 (마크다운 기호 제거 후)
+            if (!data.candidates || data.candidates.length === 0) {
+                throw new Error("AI가 응답을 생성하지 못했습니다.");
+            }
+
+            const textResponse = data.candidates[0].content.parts[0].text;
             const cleanJsonText = textResponse.replace(/```json|```/g, '').trim();
-            return JSON.parse(cleanJsonText); // 배열 반환 [{en:.., ko:..}, {en:.., ko:..}]
+            return JSON.parse(cleanJsonText); 
 
         } catch (error) {
             console.error("AI 예문 생성 실패:", error);
             throw error;
         }
     }
-    // ▲▲▲ [여기까지 추가됨] ▲▲▲
 };
