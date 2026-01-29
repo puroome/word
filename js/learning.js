@@ -12,7 +12,7 @@ export const learningMode = {
         isDragging: false,
         touchStartX: 0,
         touchStartY: 0,
-        isEditing: false, // [추가됨] 편집 모드 상태
+        isEditing: false, 
     },
     elements: {},
     init() {
@@ -33,7 +33,7 @@ export const learningMode = {
             wordDisplay: document.getElementById('word-display'),
             meaningDisplay: document.getElementById('meaning-display'),
             explanationDisplay: document.getElementById('explanation-display'),
-            meaningContainer: document.getElementById('meaning-container'), // [추가됨]
+            meaningContainer: document.getElementById('meaning-container'),
             explanationContainer: document.getElementById('explanation-container'),
             fixedButtons: document.getElementById('learning-fixed-buttons'),
             nextBtn: document.getElementById('next-btn'),
@@ -48,7 +48,7 @@ export const learningMode = {
             progressBarNumber: document.getElementById('progress-bar-number'),
             favoriteBtn: document.getElementById('favorite-btn'),
             favoriteIcon: document.getElementById('favorite-icon'),
-            editContextBtn: document.getElementById('edit-context-btn'), // [추가됨]
+            editContextBtn: document.getElementById('edit-context-btn'),
         };
         this.bindEvents();
     },
@@ -83,11 +83,9 @@ export const learningMode = {
             if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true });
         });
 
-        // [추가됨] 편집 컨텍스트 메뉴 이벤트
         this.elements.meaningContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'meaning'));
         this.elements.explanationContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'explanation'));
         
-        // [추가됨] 편집 버튼 클릭 시
         this.elements.editContextBtn.addEventListener('click', () => {
             this.enterEditMode();
             ui.hideEditContextMenu();
@@ -110,32 +108,30 @@ export const learningMode = {
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
     },
 
-    // [추가됨] 컨텍스트 메뉴 핸들러
     handleEditContextMenu(e, type) {
-        if (this.state.isEditing) return; // 이미 편집 중이면 무시
+        if (this.state.isEditing) return; 
+        
+        // [수정됨] 클릭한 요소가 기존 단어 팝업 대상(interactive-word)이면 편집 메뉴 띄우지 않음
+        if (e.target.classList.contains('interactive-word')) return;
+
         e.preventDefault();
         ui.showEditContextMenu(e);
     },
 
-    // [추가됨] 편집 모드 진입
     async enterEditMode() {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
-        // 1. Meaning 영역을 Textarea로 교체
         const currentMeaning = wordData.meaning || "";
         this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${currentMeaning}</textarea>`;
 
-        // 2. Explanation 영역을 Textarea로 교체
         const currentExplanation = wordData.explanation || "";
         this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${currentExplanation}</textarea>`;
 
-        // 3. 고양이 버튼 변경 (편집 저장 버튼으로)
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    // [추가됨] 저장 및 편집 모드 종료
     async saveAndExitEditMode() {
         const meaningInput = document.getElementById('edit-meaning-input');
         const explanationInput = document.getElementById('edit-explanation-input');
@@ -145,18 +141,16 @@ export const learningMode = {
             const newExplanation = explanationInput.value;
             const wordData = this.state.currentWordList[this.state.currentIndex];
 
-            // 데이터 업데이트 요청
             await api.updateWordDetails(wordData, newMeaning, newExplanation);
             
-            // UI에 즉시 반영 (로컬 데이터는 api에서 업데이트됨)
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "저장되었습니다!" } }));
+            // [수정됨] 저장 메시지 출력 코드 제거
+            // window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "저장되었습니다!" } }));
         }
 
         this.state.isEditing = false;
-        this.displayWord(this.state.currentIndex); // 원래 뷰로 복귀
+        this.displayWord(this.state.currentIndex); 
     },
 
-    // ... 기존 start, showError, launchApp, reset, resetStartScreen, displaySuggestions 함수들 유지 ...
     async start() {
         this.state.isMistakeMode = false;
         this.state.isFavoriteMode = false;
@@ -271,7 +265,6 @@ export const learningMode = {
     },
 
     async displayWord(index) {
-        // [추가됨] 편집 모드 초기화
         this.state.isEditing = false;
         
         this.updateProgressBar(index);
@@ -307,7 +300,6 @@ export const learningMode = {
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
     
-    // ... adjustWordFontSize, navigate, navigateBackToBack 함수 유지 ...
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -324,7 +316,7 @@ export const learningMode = {
         }
     },
     navigate(direction) {
-        if (this.state.isEditing) return; // 편집 중 이동 방지
+        if (this.state.isEditing) return;
 
         const len = this.state.currentWordList.length;
         if (len === 0) return;
@@ -372,7 +364,6 @@ export const learningMode = {
     },
 
     async handleFlip() {
-        // [수정됨] 편집 모드일 때는 저장 동작 수행
         if (this.state.isEditing) {
             await this.saveAndExitEditMode();
             return;
@@ -405,7 +396,6 @@ export const learningMode = {
         }
     },
     
-    // ... 나머지 함수들 (startMistakeReview, startFavoriteMode, handleKeyDown 등) 유지 ...
     async startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
         this.state.isFavoriteMode = false;
@@ -445,7 +435,6 @@ export const learningMode = {
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         
-        // 편집 모드(textarea 입력 중)일 때는 키 이벤트 무시 (화살표 이동 등)
         if (this.state.isEditing) return;
 
         if (document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
@@ -481,7 +470,7 @@ export const learningMode = {
     },
     handleTouchStart(e) {
          if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
-         if (this.state.isEditing) return; // 편집 중 스와이프 방지
+         if (this.state.isEditing) return; 
         this.state.touchStartX = e.touches[0].clientX;
         this.state.touchStartY = e.touches[0].clientY;
     },
@@ -635,11 +624,9 @@ export const learningMode = {
 
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const wrapper = document.createElement('div');
-        // 로봇 얼굴 중심과 텍스트 첫 줄 수평 정렬 보정
         wrapper.className = "flex items-start gap-2 py-1 mb-1 w-full"; 
 
         const botIcon = document.createElement('button');
-        // mt-[2.5px]를 통해 텍스트 첫 줄 수평 중앙 정렬
         botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6 mt-[2.5px]";
         botIcon.innerHTML = "🤖";
         botIcon.title = "이 예문만 다시 만들기";
@@ -665,7 +652,6 @@ export const learningMode = {
         wrapper.appendChild(botIcon);
 
         const textDiv = document.createElement('div');
-        // 기존 예문과 동일한 폰트/간격 유지
         textDiv.className = "flex-1 text-left text-gray-700 leading-relaxed"; 
         ui.displaySentences([sentenceText], textDiv);
         
