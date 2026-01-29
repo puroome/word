@@ -110,8 +110,6 @@ export const learningMode = {
 
     handleEditContextMenu(e, type) {
         if (this.state.isEditing) return; 
-        
-        // [수정됨] 클릭한 요소가 기존 단어 팝업 대상(interactive-word)이면 편집 메뉴 띄우지 않음
         if (e.target.classList.contains('interactive-word')) return;
 
         e.preventDefault();
@@ -142,9 +140,6 @@ export const learningMode = {
             const wordData = this.state.currentWordList[this.state.currentIndex];
 
             await api.updateWordDetails(wordData, newMeaning, newExplanation);
-            
-            // [수정됨] 저장 메시지 출력 코드 제거
-            // window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "저장되었습니다!" } }));
         }
 
         this.state.isEditing = false;
@@ -264,7 +259,8 @@ export const learningMode = {
         this.elements.suggestionsContainer.classList.remove('hidden');
     },
 
-    async displayWord(index) {
+    // [수정됨] silent 파라미터 추가 (기본값 false)
+    async displayWord(index, silent = false) {
         this.state.isEditing = false;
         
         this.updateProgressBar(index);
@@ -284,7 +280,8 @@ export const learningMode = {
         this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
         
-        if (wordData.word) {
+        // [수정됨] silent가 false일 때만 음성 재생
+        if (wordData.word && !silent) {
             api.speak(wordData.word, 'word');
         }
         
@@ -523,14 +520,16 @@ export const learningMode = {
         const totalWords = this.state.currentWordList.length;
         if (totalWords <= 1) return;
 
-        const handleInteraction = (clientX) => {
+        // [수정됨] 드래그 중인지 판단하는 플래그(isDraggingMove) 추가
+        const handleInteraction = (clientX, isDraggingMove = false) => {
             const rect = track.getBoundingClientRect();
             const x = clientX - rect.left;
             const percentage = Math.max(0, Math.min(1, x / rect.width));
             const newIndex = Math.round(percentage * (totalWords - 1));
             if (newIndex !== this.state.currentIndex) {
                 this.state.currentIndex = newIndex;
-                this.displayWord(newIndex);
+                // [수정됨] displayWord 호출 시, 드래그 중이면 true(소리 끔) 전달
+                this.displayWord(newIndex, isDraggingMove);
             }
         };
 
@@ -539,12 +538,14 @@ export const learningMode = {
             case 'touchstart':
                 e.preventDefault();
                 this.state.isDragging = true;
-                handleInteraction(e.type === 'touchstart' ? e.touches[0].clientX : e.clientX);
+                // [수정됨] 클릭 시에는 소리 나도록 false 전달
+                handleInteraction(e.type === 'touchstart' ? e.touches[0].clientX : e.clientX, false);
                 break;
             case 'mousemove':
             case 'touchmove':
                 if (this.state.isDragging) {
-                    handleInteraction(e.type === 'touchmove' ? e.touches[0].clientX : e.clientX);
+                    // [수정됨] 드래그 이동 시에는 소리 안 나도록 true 전달
+                    handleInteraction(e.type === 'touchmove' ? e.touches[0].clientX : e.clientX, true);
                 }
                 break;
             case 'mouseup':
