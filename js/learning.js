@@ -12,6 +12,7 @@ export const learningMode = {
         isDragging: false,
         touchStartX: 0,
         touchStartY: 0,
+        isEditMode: false, // [신규] 편집 모드 상태
     },
     elements: {},
     init() {
@@ -67,7 +68,16 @@ export const learningMode = {
         this.elements.backToStartBtn.addEventListener('click', () => this.resetStartScreen());
         this.elements.nextBtn.addEventListener('click', () => this.navigate(1));
         this.elements.prevBtn.addEventListener('click', () => this.navigate(-1));
-        this.elements.sampleBtn.addEventListener('click', () => this.handleFlip());
+        
+        // [수정] 버튼 하나로 '예문보기'와 '저장'을 동시에 관리
+        this.elements.sampleBtn.addEventListener('click', () => {
+            if (this.state.isEditMode) {
+                this.saveChanges();
+            } else {
+                this.handleFlip();
+            }
+        });
+
         this.elements.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
 
         this.elements.wordDisplay.addEventListener('click', () => {
@@ -80,16 +90,75 @@ export const learningMode = {
             if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true });
         });
 
+        // [신규] 학습 화면 빈 공간 우클릭 시 편집 메뉴 표시
+        this.elements.appContainer.addEventListener('contextmenu', (e) => {
+            if (e.target.closest('#favorite-btn, #sample-btn, #prev-btn, #next-btn')) return;
+            e.preventDefault();
+            const wordData = this.state.currentWordList[this.state.currentIndex];
+            if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true, isEditModeTrigger: true });
+        });
+
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
         document.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        
+        // Progress bar events...
         this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('mousemove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('mouseup', this.handleProgressBarInteraction.bind(this));
         this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
         document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
+
+        // [신규] UI 이벤트 리스너
+        window.addEventListener('startEditMode', () => this.enterEditMode());
     },
+
+    // [신규] 편집 모드 진입
+    async enterEditMode() {
+        if (this.state.isEditMode) return;
+        this.state.isEditMode = true;
+
+        // 텍스트 영역을 편집 가능하게 변경
+        this.elements.meaningDisplay.contentEditable = "true";
+        this.elements.explanationDisplay.contentEditable = "true";
+        
+        this.elements.meaningDisplay.classList.add('bg-blue-50', 'ring-2', 'ring-blue-300', 'p-2', 'rounded');
+        this.elements.explanationDisplay.classList.add('bg-blue-50', 'ring-2', 'ring-blue-300', 'p-2', 'rounded');
+
+        // 버튼 이미지 변경
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage('images/cat-edit.png');
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "편집 모드: 수정 후 고양이를 눌러 저장하세요." } }));
+    },
+
+    // [신규] 수정사항 저장
+    async saveChanges() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        const newMeaning = this.elements.meaningDisplay.innerText;
+        const newExplanation = this.elements.explanationDisplay.innerText;
+
+        try {
+            await api.updateWordData(wordData, newMeaning, newExplanation);
+            this.exitEditMode();
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "성공적으로 저장되었습니다!" } }));
+            this.displayWord(this.state.currentIndex); // 화면 갱신 (인터랙티브 기능 복구)
+        } catch (e) {
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "저장 실패", isError: true } }));
+        }
+    },
+
+    // [신규] 편집 모드 탈출
+    async exitEditMode() {
+        this.state.isEditMode = false;
+        this.elements.meaningDisplay.contentEditable = "false";
+        this.elements.explanationDisplay.contentEditable = "false";
+        this.elements.meaningDisplay.classList.remove('bg-blue-50', 'ring-2', 'ring-blue-300', 'p-2');
+        this.elements.explanationDisplay.classList.remove('bg-blue-50', 'ring-2', 'ring-blue-300', 'p-2');
+        
+        const hasSample = this.state.currentWordList[this.state.currentIndex]?.sample;
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? 'images/cat-delivery.png' : 'images/cat-add.png');
+    },
+
     async start() {
         this.state.isMistakeMode = false;
         this.state.isFavoriteMode = false;
@@ -115,7 +184,6 @@ export const learningMode = {
                 const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
                  this.state.currentIndex = (savedIndex >= 0 && savedIndex < this.state.currentWordList.length) ? savedIndex : 0;
             } catch (e) {
-                console.warn("Error reading last index:", e);
                 this.state.currentIndex = 0;
             }
             this.launchApp();
@@ -203,35 +271,30 @@ export const learningMode = {
         this.elements.suggestionsContainer.classList.remove('hidden');
     },
     async displayWord(index) {
+        if (this.state.isEditMode) await this.exitEditMode(); // 다른 단어로 넘어가면 편집모드 강제종료
+
         this.updateProgressBar(index);
         this.elements.cardBack.classList.remove('is-slid-up');
         const wordData = this.state.currentWordList[index];
-        if (!wordData) {
-             console.error(`Word data not found for index: ${index}`);
-             return;
-        }
+        if (!wordData) return;
 
          if (!this.state.isMistakeMode && !this.state.isFavoriteMode) {
             try {
                 localStorage.setItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX, index);
-            } catch (e) { console.error(e); }
+            } catch (e) {}
         }
 
         this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
         
-        if (wordData.word) {
-            api.speak(wordData.word, 'word');
-        }
+        if (wordData.word) { api.speak(wordData.word, 'word'); }
         
         this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.toggle('hidden', !wordData.explanation?.trim());
 
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
-        const sampleImgUrl = 'images/cat-delivery.png';
-        const noSampleImgUrl = 'images/cat-add.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? 'images/cat-delivery.png' : 'images/cat-add.png');
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
@@ -261,7 +324,7 @@ export const learningMode = {
         };
 
         if (isBackVisible) {
-            this.handleFlip();
+            this.elements.cardBack.classList.remove('is-slid-up');
             setTimeout(navigateAction, 300);
         } else {
             navigateAction();
@@ -289,18 +352,12 @@ export const learningMode = {
         }
 
         this.appendAIGenButton(this.elements.backContent, wordData);
-
-        const backImgUrl = 'images/cat-remove.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage('images/cat-remove.png');
     },
     async handleFlip() {
         const isBackVisible = this.elements.cardBack.classList.contains('is-slid-up');
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
-
-        const backImgUrl = 'images/cat-remove.png';
-        const sampleImgUrl = 'images/cat-delivery.png';
-        const noSampleImgUrl = 'images/cat-add.png';
 
         if (!isBackVisible) {
             if (!wordData.sample || !wordData.sample.trim()) {
@@ -309,15 +366,13 @@ export const learningMode = {
             }
             this.elements.backTitle.textContent = wordData.word;
             ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
-
             this.appendAIGenButton(this.elements.backContent, wordData);
-
             this.elements.cardBack.classList.add('is-slid-up');
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+            this.elements.sampleBtnImg.src = await imageDBCache.loadImage('images/cat-remove.png');
         } else {
             this.elements.cardBack.classList.remove('is-slid-up');
             const hasSample = wordData.sample && wordData.sample.trim() !== '';
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
+            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? 'images/cat-delivery.png' : 'images/cat-add.png');
         }
     },
     async startMistakeReview(mistakeWords) {
@@ -357,7 +412,7 @@ export const learningMode = {
         this.launchApp();
     },
     handleKeyDown(e) {
-        if (this.elements.appContainer.classList.contains('hidden') || document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
+        if (this.elements.appContainer.classList.contains('hidden') || document.activeElement.tagName.match(/INPUT|TEXTAREA/) || this.state.isEditMode) return;
 
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -377,24 +432,16 @@ export const learningMode = {
         } else if (e.key === ' ') {
             e.preventDefault();
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) {
-                api.speak(word, 'word');
-            }
-        } else if (e.key.toLowerCase() === 'z') {
-            e.preventDefault();
-            this.navigateBackToBack(-1);
-        } else if (e.key.toLowerCase() === 'x') {
-            e.preventDefault();
-            this.navigateBackToBack(1);
+            if (word) { api.speak(word, 'word'); }
         }
     },
     handleTouchStart(e) {
-         if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
+         if (this.elements.appContainer.classList.contains('hidden') || this.state.isEditMode || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
         this.state.touchStartX = e.touches[0].clientX;
         this.state.touchStartY = e.touches[0].clientY;
     },
     handleTouchEnd(e) {
-        if (this.elements.appContainer.classList.contains('hidden') || this.state.touchStartX === 0 || e.target.closest('button, a, input, [onclick], #progress-bar-track')) {
+        if (this.elements.appContainer.classList.contains('hidden') || this.state.isEditMode || this.state.touchStartX === 0 || e.target.closest('button, a, input, [onclick], #progress-bar-track')) {
              this.state.touchStartX = this.state.touchStartY = 0;
             return;
         }
@@ -530,7 +577,6 @@ export const learningMode = {
                 api.saveAISamplesToSheet(wordData, fullText);
                 this.appendAIGenButton(container.parentNode, wordData);
             } catch (err) {
-                console.error(err);
                 btn.innerHTML = `⚠️ 실패 (다시 시도)`;
                 btn.disabled = false;
             }
@@ -540,14 +586,11 @@ export const learningMode = {
 
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const wrapper = document.createElement('div');
-        // 로봇 얼굴 중심과 텍스트 첫 줄 수평 정렬 보정
         wrapper.className = "flex items-start gap-2 py-1 mb-1 w-full"; 
 
         const botIcon = document.createElement('button');
-        // mt-[2.5px]를 통해 텍스트 첫 줄 수평 중앙 정렬
         botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6 mt-[2.5px]";
         botIcon.innerHTML = "🤖";
-        botIcon.title = "이 예문만 다시 만들기";
         
         botIcon.onclick = async () => {
             botIcon.innerHTML = `<span class="animate-spin text-xs">⏳</span>`;
@@ -561,16 +604,13 @@ export const learningMode = {
                 api.saveAISamplesToSheet(wordData, fullText);
                 this.appendAIGenButton(container.parentNode, wordData);
             } catch (err) {
-                console.error(err);
                 botIcon.innerHTML = "⚠️";
                 botIcon.disabled = false;
-                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
             }
         };
         wrapper.appendChild(botIcon);
 
         const textDiv = document.createElement('div');
-        // 기존 예문과 동일한 폰트/간격 유지
         textDiv.className = "flex-1 text-left text-gray-700 leading-relaxed"; 
         ui.displaySentences([sentenceText], textDiv);
         
