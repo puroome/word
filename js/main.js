@@ -84,10 +84,8 @@ const app = {
         practiceModeControl: document.getElementById('practice-mode-control'),
         practiceModeCheckbox: document.getElementById('practice-mode-checkbox'),
     },
-    /* js/main.js 파일의 app 객체 내부 init() 함수 */
 
     init() {
-        // 1. 실행할 로직을 별도 함수로 만듭니다.
         const startFirebaseApp = () => {
             const { initializeApp, getDatabase, getAuth, getFirestore, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } = window.firebaseSDK;
             
@@ -122,7 +120,6 @@ const app = {
             this.bindGlobalEvents(auth, signInWithPopup, GoogleAuthProvider, signOut);
         };
 
-        // 2. [핵심 수정] 이미 로드되어 있다면 즉시 실행, 아니라면 대기
         if (window.firebaseSDK) {
             startFirebaseApp();
         } else {
@@ -240,14 +237,19 @@ const app = {
             const target = e.target;
             const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
             const isCustomContextMenu = target.closest('#word-context-menu');
-            if (!isInteractiveTrigger && !isCustomContextMenu) e.preventDefault();
+            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
+            const isEditContextMenu = target.closest('#edit-context-menu');
+            const isEditTrigger = target.closest('#meaning-container, #explanation-container');
+            
+            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
+                e.preventDefault();
+            }
         });
 
         window.addEventListener('beforeunload', () => {
              studyTracker.stopAndSave();
         });
 
-        // Custom Events from modules
         window.addEventListener('navigate', (e) => this.navigateTo(e.detail.mode, e.detail.options));
         window.addEventListener('showToast', (e) => this.showToast(e.detail.message, e.detail.isError));
         window.addEventListener('showNoSampleMessage', () => this.showNoSampleMessage());
@@ -301,6 +303,10 @@ const app = {
 
     async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
+        
+        // [수정됨] 화면 전환 시 일단 새로고침 버튼 숨김 (기본 초기화)
+        if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
+
         this.elements.selectionScreen.classList.add('hidden');
         this.elements.quizModeContainer.classList.add('hidden');
         this.elements.learningModeContainer.classList.add('hidden');
@@ -317,6 +323,7 @@ const app = {
         const showCommonButtons = () => {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.ttsToggleBtn.classList.remove('hidden');
+            // 학습 모드 등에서는 새로고침 버튼 안 보임 (TTS 버튼이 대신 함)
         };
 
         if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode)) {
@@ -361,16 +368,32 @@ const app = {
             this.elements.dashboardContainer.classList.remove('hidden');
             dashboard.render();
         } else {
+            // [수정됨] 첫 화면(selection)에서만 새로고침 버튼 표시
             this.elements.selectionScreen.classList.remove('hidden');
             this.elements.logoutBtn.classList.remove('hidden');
+            
+            if (this.elements.refreshBtn) {
+                this.elements.refreshBtn.classList.remove('hidden');
+            }
+
             quizMode.reset();
             learningMode.reset();
         }
     },
     async forceReload() {
         this.elements.globalLoader.classList.remove('hidden');
-        const elementsToDisable = [this.elements.refreshBtn, this.elements.selectDashboardBtn, this.elements.selectMistakesBtn, this.elements.selectLearningBtn, this.elements.selectQuizBtn];
-        elementsToDisable.forEach(el => el.classList.add('pointer-events-none', 'opacity-50'));
+        // refreshBtn도 비활성화 대상에 포함
+        const elementsToDisable = [
+            this.elements.refreshBtn, 
+            this.elements.selectDashboardBtn, 
+            this.elements.selectMistakesBtn, 
+            this.elements.selectLearningBtn, 
+            this.elements.selectQuizBtn
+        ];
+        elementsToDisable.forEach(el => {
+            if(el) el.classList.add('pointer-events-none', 'opacity-50');
+        });
+
         try {
             await api.loadWordList(true);
             await api.loadUserProgress();
@@ -379,7 +402,9 @@ const app = {
         } catch(e) {
             this.showToast('데이터 새로고침에 실패했습니다: ' + e.message, true);
         } finally {
-            elementsToDisable.forEach(el => el.classList.remove('pointer-events-none', 'opacity-50'));
+            elementsToDisable.forEach(el => {
+                if(el) el.classList.remove('pointer-events-none', 'opacity-50');
+            });
             this.elements.globalLoader.classList.add('hidden');
         }
     },
