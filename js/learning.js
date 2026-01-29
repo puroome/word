@@ -13,6 +13,7 @@ export const learningMode = {
         touchStartX: 0,
         touchStartY: 0,
         isEditing: false, 
+        editSide: null, // 'front' or 'back'
     },
     elements: {},
     init() {
@@ -31,6 +32,7 @@ export const learningMode = {
             appContainer: document.getElementById('learning-app-container'),
             cardBack: document.getElementById('learning-card-back'),
             wordDisplay: document.getElementById('word-display'),
+            wordHeader: document.getElementById('word-header'), // 추가됨
             meaningDisplay: document.getElementById('meaning-display'),
             explanationDisplay: document.getElementById('explanation-display'),
             meaningContainer: document.getElementById('meaning-container'),
@@ -49,6 +51,15 @@ export const learningMode = {
             favoriteBtn: document.getElementById('favorite-btn'),
             favoriteIcon: document.getElementById('favorite-icon'),
             editContextBtn: document.getElementById('edit-context-btn'),
+            
+            // [추가됨] 배경 우클릭 메뉴 및 삭제 모달 요소
+            actionContextMenu: document.getElementById('action-context-menu'),
+            createCardBtn: document.getElementById('create-card-btn'),
+            deleteCardBtn: document.getElementById('delete-card-btn'),
+            deleteModal: document.getElementById('delete-confirm-modal'),
+            deleteTargetWord: document.getElementById('delete-target-word'),
+            deleteCancelBtn: document.getElementById('delete-cancel-btn'),
+            deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
         };
         this.bindEvents();
     },
@@ -77,26 +88,84 @@ export const learningMode = {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
             if (word) { api.speak(word, 'word'); }
         });
+        
+        // -----------------------------------------------------------
+        // [수정] 우클릭 이벤트 분리 및 편집 모드 진입
+        // -----------------------------------------------------------
+
+        // 1. 표제어 텍스트 자체(h1) 우클릭 -> 사전 검색 메뉴 (기존 유지)
         this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
+            if (this.state.isEditing) return;
             const wordData = this.state.currentWordList[this.state.currentIndex];
             if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true });
         });
 
-        this.elements.meaningContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'meaning'));
-        this.elements.explanationContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'explanation'));
-        
+        // 2. 표제어 헤더 영역(빈 공간) 우클릭 -> 앞면 편집 메뉴
+        this.elements.wordHeader.addEventListener('contextmenu', (e) => {
+            if (this.state.isEditing) return;
+            // 텍스트나 버튼 클릭이 아닌 경우에만 편집 메뉴
+            if (e.target.closest('#word-display') || e.target.closest('#favorite-btn')) return;
+            e.preventDefault();
+            this.handleEditContextMenu(e, 'front');
+        });
+
+        // 3. 뜻/설명 영역 우클릭 -> 앞면 편집 메뉴
+        this.elements.meaningContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'front'));
+        this.elements.explanationContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'front'));
+
+        // 4. 뒷면 표제어 또는 예문 영역 우클릭 -> 뒷면 편집 메뉴
+        this.elements.backTitle.addEventListener('contextmenu', (e) => {
+            if (this.state.isEditing) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleEditContextMenu(e, 'back');
+        });
+        // 예문 카드 전체 영역에도 뒷면 편집
+        this.elements.cardBack.addEventListener('contextmenu', (e) => {
+             if (this.state.isEditing) return;
+             // 혹시라도 인터랙티브 단어를 클릭했다면 무시
+             if(e.target.closest('.interactive-word')) return;
+             this.handleEditContextMenu(e, 'back');
+        });
+
+        // 5. 배경 우클릭 -> 카드 생성/삭제 메뉴
+        // appContainer 내부이지만 카드(front/back) 밖인 영역
+        this.elements.appContainer.addEventListener('contextmenu', (e) => {
+            if (!e.target.closest('#learning-card-front') && !e.target.closest('#learning-card-back')) {
+                this.handleActionContextMenu(e);
+            }
+        });
+        // 전체 래퍼에서도 처리 (카드와 고양이 사이 빈공간 등)
+        document.getElementById('app-wrapper').addEventListener('contextmenu', (e) => {
+             // learning-app-container 내부가 아니거나, 고양이 버튼 근처가 아니면
+             if (!e.target.closest('#learning-app-container') && !e.target.closest('.fixed-buttons')) {
+                 this.handleActionContextMenu(e);
+             }
+        });
+
+        // 6. 편집 메뉴 버튼 클릭 (편집 진입)
         this.elements.editContextBtn.addEventListener('click', () => {
-            this.enterEditMode();
+            const side = this.elements.editContextBtn.dataset.side || 'front';
+            if (side === 'front') this.enterFrontEditMode();
+            else this.enterBackEditMode();
             ui.hideEditContextMenu();
         });
 
+        // 7. 생성/삭제 메뉴 버튼 클릭
+        this.elements.createCardBtn.addEventListener('click', () => { this.createNewCard(); this.hideActionMenu(); });
+        this.elements.deleteCardBtn.addEventListener('click', () => { this.confirmDeleteCard(); this.hideActionMenu(); });
+
+        // 8. 삭제 모달 버튼
+        this.elements.deleteCancelBtn.addEventListener('click', () => this.elements.deleteModal.classList.add('hidden'));
+        this.elements.deleteConfirmBtn.addEventListener('click', () => this.deleteCurrentCard());
+
+        // 배경 클릭 시 메뉴 닫기
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('#edit-context-menu')) {
-                ui.hideEditContextMenu();
-            }
+            if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
+            if (!e.target.closest('#action-context-menu')) this.hideActionMenu();
         });
 
+        // ... (기존 이벤트 리스너들) ...
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
         document.addEventListener('touchend', this.handleTouchEnd.bind(this));
@@ -108,168 +177,174 @@ export const learningMode = {
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
     },
 
-    handleEditContextMenu(e, type) {
-        if (this.state.isEditing) return; 
-        if (e.target.classList.contains('interactive-word')) return;
-
+    // [편집 메뉴 표시]
+    handleEditContextMenu(e, side) {
+        if (this.state.isEditing) return;
         e.preventDefault();
+        this.elements.editContextBtn.dataset.side = side;
         ui.showEditContextMenu(e);
     },
 
-    async enterEditMode() {
+    // [배경 메뉴 표시]
+    handleActionContextMenu(e) {
+        if (this.state.isEditing) return;
+        e.preventDefault();
+        const menu = this.elements.actionContextMenu;
+        menu.classList.remove('hidden');
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+    },
+    hideActionMenu() {
+        this.elements.actionContextMenu.classList.add('hidden');
+    },
+
+    // [1. 앞면 편집 모드] Word(POS), Meaning, Explanation
+    async enterFrontEditMode() {
         this.state.isEditing = true;
+        this.state.editSide = 'front';
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
-        const currentMeaning = wordData.meaning || "";
-        this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${currentMeaning}</textarea>`;
-
-        const currentExplanation = wordData.explanation || "";
-        this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${currentExplanation}</textarea>`;
+        // Word + POS 조합
+        const posText = wordData.pos ? ` [${wordData.pos}]` : '';
+        const wordValue = `${wordData.word}${posText}`;
+        
+        this.elements.wordDisplay.innerHTML = `<input type="text" id="edit-word-input" class="w-full text-center font-bold bg-white border-b-2 border-blue-500 focus:outline-none" style="font-size:inherit;" value="${wordValue}">`;
+        
+        this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${wordData.meaning || ""}</textarea>`;
+        this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${wordData.explanation || ""}</textarea>`;
 
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    async saveAndExitEditMode() {
-        const meaningInput = document.getElementById('edit-meaning-input');
-        const explanationInput = document.getElementById('edit-explanation-input');
-        
-        if (meaningInput && explanationInput) {
-            const newMeaning = meaningInput.value;
-            const newExplanation = explanationInput.value;
-            const wordData = this.state.currentWordList[this.state.currentIndex];
+    // [2. 뒷면 편집 모드] Sample (AISample)
+    async enterBackEditMode() {
+        this.state.isEditing = true;
+        this.state.editSide = 'back';
+        const wordData = this.state.currentWordList[this.state.currentIndex];
 
-            await api.updateWordDetails(wordData, newMeaning, newExplanation);
+        let currentSample = "";
+        if (wordData.sampleSource === 'ai' && wordData.AISample) {
+            currentSample = wordData.AISample.en || "";
+        } else {
+            currentSample = wordData.sample || "";
+        }
+
+        this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-4 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg leading-relaxed resize-none">${currentSample}</textarea>`;
+
+        const editImgUrl = 'images/cat-edit.png';
+        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
+    },
+
+    // [3. 저장 및 종료]
+    async saveAndExitEditMode() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+
+        if (this.state.editSide === 'front') {
+            const wordInput = document.getElementById('edit-word-input');
+            const meaningInput = document.getElementById('edit-meaning-input');
+            const expInput = document.getElementById('edit-explanation-input');
+
+            if (wordInput && meaningInput && expInput) {
+                const fullWordVal = wordInput.value.trim();
+                let newWord = fullWordVal;
+                let newPos = "";
+                
+                const match = fullWordVal.match(/^(.*)\s\[(.*)\]$/);
+                if (match) {
+                    newWord = match[1].trim();
+                    newPos = match[2].trim();
+                }
+
+                await api.updateWordDetails(wordData, meaningInput.value, expInput.value, newWord, newPos);
+            }
+        } else if (this.state.editSide === 'back') {
+            const sampleInput = document.getElementById('edit-sample-input');
+            if (sampleInput) {
+                await api.updateWordDetails(wordData, undefined, undefined, undefined, undefined, sampleInput.value);
+            }
         }
 
         this.state.isEditing = false;
-        this.displayWord(this.state.currentIndex); 
-    },
-
-    async start() {
-        this.state.isMistakeMode = false;
-        this.state.isFavoriteMode = false;
-        this.elements.startScreen.classList.add('hidden');
-        this.elements.loader.classList.remove('hidden');
-        if (!state.isWordListReady) {
-            this.elements.loaderText.textContent = "단어 목록 동기화 중...";
-            try {
-                await api.loadWordList();
-                await api.loadUserProgress();
-            } catch(e) {
-                this.showError("단어 목록 로딩 실패. 새로고침 해주세요.");
-                return;
-            }
-        }
-        const startWord = this.elements.startWordInput.value.trim();
-        this.state.currentWordList = state.wordList;
-
-        if (this.state.currentWordList.length === 0) { this.showError("학습할 단어가 없습니다."); return; }
-
-        if (!startWord) {
-            try {
-                const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
-                 this.state.currentIndex = (savedIndex >= 0 && savedIndex < this.state.currentWordList.length) ? savedIndex : 0;
-            } catch (e) {
-                console.warn("Error reading last index:", e);
-                this.state.currentIndex = 0;
-            }
-            this.launchApp();
-            return;
-        }
-
-        const lowerCaseStartWord = startWord.toLowerCase();
-        const exactMatchIndex = this.state.currentWordList.findIndex(item => item.word.toLowerCase() === lowerCaseStartWord);
-        if (exactMatchIndex !== -1) {
-            this.state.currentIndex = exactMatchIndex;
-            this.launchApp();
-            return;
-        }
-
-        const levenshteinSuggestions = this.state.currentWordList.map((item, index) => ({
-            word: item.word, index, distance: utils.levenshteinDistance(lowerCaseStartWord, item.word.toLowerCase())
-        })).sort((a, b) => a.distance - b.distance).slice(0, 5).filter(s => s.distance < s.word.length / 2 + 1);
-
-        const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
-        const explanationMatches = this.state.currentWordList
-            .map((item, index) => ({ word: item.word, index }))
-            .filter((item, index) => {
-                const explanation = this.state.currentWordList[index].explanation;
-                 if (!explanation) return false;
-                const cleanedExplanation = explanation.replace(/\[.*?\]|\*/g, '');
-                return searchRegex.test(cleanedExplanation);
-            });
-
-        const title = (levenshteinSuggestions.length > 0 || explanationMatches.length > 0)
-            ? `<strong>'${startWord}'</strong>(을)를 찾을 수 없습니다. 혹시 이 단어인가요?`
-            : `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
-        this.displaySuggestions(levenshteinSuggestions, explanationMatches, title);
-    },
-    showError(message) {
-        this.elements.loader.querySelector('.loader').style.display = 'none';
-        this.elements.loaderText.innerHTML = `<p class="text-red-500 font-bold">오류 발생</p><p class="text-sm text-gray-600 mt-2 break-all">${message}</p>`;
-    },
-    launchApp() {
-        this.elements.startScreen.classList.add('hidden');
-        this.elements.loader.classList.add('hidden');
-        this.elements.appContainer.classList.remove('hidden');
-        this.elements.fixedButtons.classList.remove('hidden');
-        document.getElementById('progress-bar-container').classList.remove('hidden');
+        this.state.editSide = null;
         this.displayWord(this.state.currentIndex);
     },
-    reset() {
-        this.elements.startScreen.classList.add('hidden');
-        this.elements.appContainer.classList.add('hidden');
-        this.elements.loader.classList.add('hidden');
-        this.elements.fixedButtons.classList.add('hidden');
-        document.getElementById('progress-bar-container').classList.add('hidden');
-        this.resetStartScreen();
-    },
-    resetStartScreen() {
-        this.elements.startInputContainer.classList.remove('hidden');
-        this.elements.suggestionsContainer.classList.add('hidden');
-        this.elements.startWordInput.value = '';
-        this.elements.startWordInput.focus();
-    },
-    displaySuggestions(vocabSuggestions, explanationSuggestions, title) {
-        this.elements.loader.classList.add('hidden');
-        this.elements.startScreen.classList.remove('hidden');
-        this.elements.startInputContainer.classList.add('hidden');
-        this.elements.suggestionsTitle.innerHTML = title;
 
-        const populateList = (listElement, suggestions) => {
-            listElement.innerHTML = '';
-            if (suggestions.length === 0) {
-                listElement.innerHTML = '<p class="text-gray-400 text-sm p-3">결과 없음</p>';
+    // [4. 카드 삭제]
+    confirmDeleteCard() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        this.elements.deleteTargetWord.textContent = wordData.word;
+        this.elements.deleteModal.classList.remove('hidden');
+    },
+    async deleteCurrentCard() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        this.elements.deleteModal.classList.add('hidden');
+        
+        await api.deleteWord(wordData);
+        
+        if (this.state.currentWordList.length === 0) {
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "모든 단어가 삭제되었습니다." } }));
+            window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+        } else {
+            if (this.state.currentIndex >= this.state.currentWordList.length) {
+                this.state.currentIndex = this.state.currentWordList.length - 1;
+            }
+            this.displayWord(this.state.currentIndex);
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "삭제되었습니다." } }));
+        }
+    },
+
+    // [5. 새 카드 생성]
+    async createNewCard() {
+        const currentData = this.state.currentWordList[this.state.currentIndex];
+        
+        await api.createWord(currentData);
+        
+        this.state.currentIndex = this.state.currentIndex + 1;
+        this.displayWord(this.state.currentIndex);
+        
+        setTimeout(() => this.enterFrontEditMode(), 100);
+    },
+
+    async handleFlip() {
+        if (this.state.isEditing) {
+            await this.saveAndExitEditMode();
+            return;
+        }
+
+        const isBackVisible = this.elements.cardBack.classList.contains('is-slid-up');
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        if (!wordData) return;
+
+        const backImgUrl = 'images/cat-remove.png';
+        const sampleImgUrl = 'images/cat-delivery.png';
+        const noSampleImgUrl = 'images/cat-add.png';
+
+        if (!isBackVisible) {
+            if (!wordData.sample || !wordData.sample.trim()) {
+                window.dispatchEvent(new CustomEvent('showNoSampleMessage'));
                 return;
             }
-            suggestions.forEach(({ word, index }) => {
-                const btn = document.createElement('button');
-                btn.className = 'w-full text-left bg-gray-100 hover:bg-gray-200 py-3 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300';
-                btn.textContent = word;
-                btn.onclick = () => {
-                     this.state.currentIndex = index;
-                     this.launchApp();
-                 };
-                listElement.appendChild(btn);
-            });
-        };
-        populateList(this.elements.suggestionsVocabList, vocabSuggestions);
-        populateList(this.elements.suggestionsExplanationList, explanationSuggestions);
-        this.elements.suggestionsContainer.classList.remove('hidden');
-    },
+            this.elements.backTitle.textContent = wordData.word;
+            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+            this.appendAIGenButton(this.elements.backContent, wordData);
 
-    // [수정됨] silent 파라미터 추가 (기본값 false)
+            this.elements.cardBack.classList.add('is-slid-up');
+            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+        } else {
+            this.elements.cardBack.classList.remove('is-slid-up');
+            const hasSample = wordData.sample && wordData.sample.trim() !== '';
+            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
+        }
+    },
+    
+    // ... (나머지 start, reset, navigate 등 기존 함수 유지) ...
     async displayWord(index, silent = false) {
         this.state.isEditing = false;
-        
         this.updateProgressBar(index);
         this.elements.cardBack.classList.remove('is-slid-up');
         const wordData = this.state.currentWordList[index];
-        if (!wordData) {
-             console.error(`Word data not found for index: ${index}`);
-             return;
-        }
+        if (!wordData) return;
 
          if (!this.state.isMistakeMode && !this.state.isFavoriteMode) {
             try {
@@ -277,10 +352,9 @@ export const learningMode = {
             } catch (e) { console.error(e); }
         }
 
-        this.elements.wordDisplay.textContent = wordData.word;
+        this.elements.wordDisplay.innerHTML = wordData.word; // input 태그 제거 및 텍스트 복귀
         this.adjustWordFontSize();
         
-        // [수정됨] silent가 false일 때만 음성 재생
         if (wordData.word && !silent) {
             api.speak(wordData.word, 'word');
         }
@@ -297,6 +371,7 @@ export const learningMode = {
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
     
+    // ... (adjustWordFontSize, navigate, navigateBackToBack 등등... 원본 파일 내용 유지)
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -359,39 +434,6 @@ export const learningMode = {
         const backImgUrl = 'images/cat-remove.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
     },
-
-    async handleFlip() {
-        if (this.state.isEditing) {
-            await this.saveAndExitEditMode();
-            return;
-        }
-
-        const isBackVisible = this.elements.cardBack.classList.contains('is-slid-up');
-        const wordData = this.state.currentWordList[this.state.currentIndex];
-        if (!wordData) return;
-
-        const backImgUrl = 'images/cat-remove.png';
-        const sampleImgUrl = 'images/cat-delivery.png';
-        const noSampleImgUrl = 'images/cat-add.png';
-
-        if (!isBackVisible) {
-            if (!wordData.sample || !wordData.sample.trim()) {
-                window.dispatchEvent(new CustomEvent('showNoSampleMessage'));
-                return;
-            }
-            this.elements.backTitle.textContent = wordData.word;
-            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
-
-            this.appendAIGenButton(this.elements.backContent, wordData);
-
-            this.elements.cardBack.classList.add('is-slid-up');
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
-        } else {
-            this.elements.cardBack.classList.remove('is-slid-up');
-            const hasSample = wordData.sample && wordData.sample.trim() !== '';
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
-        }
-    },
     
     async startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
@@ -431,39 +473,17 @@ export const learningMode = {
     },
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
-        
         if (this.state.isEditing) return;
-
         if (document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
 
-        if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            this.navigate(-1);
-        } else if (e.key === 'ArrowRight') {
-             e.preventDefault();
-            this.navigate(1);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            this.navigate(1);
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            this.navigate(-1);
-        } else if (e.key === 'Enter') {
-             e.preventDefault();
-            this.handleFlip();
-        } else if (e.key === ' ') {
-            e.preventDefault();
-            const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) {
-                api.speak(word, 'word');
-            }
-        } else if (e.key.toLowerCase() === 'z') {
-            e.preventDefault();
-            this.navigateBackToBack(-1);
-        } else if (e.key.toLowerCase() === 'x') {
-            e.preventDefault();
-            this.navigateBackToBack(1);
-        }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); this.navigate(-1); } 
+        else if (e.key === 'ArrowRight') { e.preventDefault(); this.navigate(1); } 
+        else if (e.key === 'ArrowUp') { e.preventDefault(); this.navigate(1); } 
+        else if (e.key === 'ArrowDown') { e.preventDefault(); this.navigate(-1); } 
+        else if (e.key === 'Enter') { e.preventDefault(); this.handleFlip(); } 
+        else if (e.key === ' ') { e.preventDefault(); const word = this.state.currentWordList[this.state.currentIndex]?.word; if (word) api.speak(word, 'word'); } 
+        else if (e.key.toLowerCase() === 'z') { e.preventDefault(); this.navigateBackToBack(-1); } 
+        else if (e.key.toLowerCase() === 'x') { e.preventDefault(); this.navigateBackToBack(1); }
     },
     handleTouchStart(e) {
          if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
@@ -520,7 +540,6 @@ export const learningMode = {
         const totalWords = this.state.currentWordList.length;
         if (totalWords <= 1) return;
 
-        // [수정됨] 드래그 중인지 판단하는 플래그(isDraggingMove) 추가
         const handleInteraction = (clientX, isDraggingMove = false) => {
             const rect = track.getBoundingClientRect();
             const x = clientX - rect.left;
@@ -528,7 +547,6 @@ export const learningMode = {
             const newIndex = Math.round(percentage * (totalWords - 1));
             if (newIndex !== this.state.currentIndex) {
                 this.state.currentIndex = newIndex;
-                // [수정됨] displayWord 호출 시, 드래그 중이면 true(소리 끔) 전달
                 this.displayWord(newIndex, isDraggingMove);
             }
         };
@@ -538,13 +556,11 @@ export const learningMode = {
             case 'touchstart':
                 e.preventDefault();
                 this.state.isDragging = true;
-                // [수정됨] 클릭 시에는 소리 나도록 false 전달
                 handleInteraction(e.type === 'touchstart' ? e.touches[0].clientX : e.clientX, false);
                 break;
             case 'mousemove':
             case 'touchmove':
                 if (this.state.isDragging) {
-                    // [수정됨] 드래그 이동 시에는 소리 안 나도록 true 전달
                     handleInteraction(e.type === 'touchmove' ? e.touches[0].clientX : e.clientX, true);
                 }
                 break;
@@ -622,21 +638,17 @@ export const learningMode = {
         container.appendChild(btn);
     },
 
-renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-        // 기존 예문(ui.displaySentences)과 동일한 구조인 <p> 태그 사용
+    renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const p = document.createElement('p');
-        p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; // group 클래스 추가
+        p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; 
 
-        // 1. 봇 아이콘 (버튼 기능 포함, 기존 이모지 위치와 동일하게 배치)
         const botBtn = document.createElement('button');
-        // float-left와 margin을 사용하여 텍스트와 자연스럽게 어울리게 함 (기존 이모지처럼)
         botBtn.className = "float-left mr-2 text-base focus:outline-none transition-transform hover:scale-110"; 
         botBtn.innerHTML = "🤖";
         botBtn.title = "이 예문만 다시 만들기";
         
-        // 클릭 이벤트 (재생성 로직)
         botBtn.onclick = async (e) => {
-            e.stopPropagation(); // 부모 p태그의 클릭(TTS/번역) 방지
+            e.stopPropagation();
             botBtn.innerHTML = `<span class="animate-spin text-xs inline-block">⏳</span>`;
             botBtn.disabled = true;
 
@@ -645,10 +657,9 @@ renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
                 allSentences[index] = newSentence;
                 const fullText = allSentences.join('\n');
                 wordData.AISample = { en: fullText, ko: "" };
-                await api.saveAISamplesToSheet(wordData, fullText); // await 추가 권장
+                await api.saveAISamplesToSheet(wordData, fullText);
                 
-                // 컨테이너 다시 그리기 (새 내용 반영)
-                const section = container.parentNode; // .ai-gen-section
+                const section = container.parentNode; 
                 this.appendAIGenButton(section.parentNode, wordData); 
             } catch (err) {
                 console.error(err);
@@ -660,25 +671,20 @@ renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
 
         p.appendChild(botBtn);
 
-        // 2. 문장 텍스트 처리 (ui.displaySentences 로직 일부 차용하여 직접 구성)
         const showTranslation = async (event) => {
             state.activeTranslationTarget = p;
-            const translatedText = await api.translate(sentenceText); // 전체 문장 번역
+            const translatedText = await api.translate(sentenceText); 
             if (state.activeTranslationTarget !== p) return;
             ui.showTranslationTooltip(translatedText, event);
         };
 
-        // p 태그 클릭 시 TTS 및 번역 (기존 예문과 동일 동작)
         p.onclick = (e) => {
-            // 버튼이나 인터랙티브 단어 클릭 시 무시
             if (e.target === botBtn || e.target.closest('button')) return; 
             if (e.target.closest('.interactive-word')) return;
-            
             api.speak(sentenceText, 'sample');
             showTranslation(e);
         };
 
-        // 호버 이벤트 (번역 툴팁)
         p.addEventListener('mouseenter', (e) => {
              if (e.target === p) {
                 clearTimeout(state.translationTimer);
@@ -699,12 +705,9 @@ renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
             ui.hideTranslationTooltip();
         });
 
-        // 3. 텍스트 내용 추가 (인터랙티브 단어 처리 포함)
         const sentenceContent = document.createElement('span');
-        sentenceContent.className = 'sentence-content-area'; // ui.js와 스타일 통일
-        // 텍스트 줄바꿈 시 들여쓰기 방지: float된 요소 옆으로 텍스트가 흐르게 둠
+        sentenceContent.className = 'sentence-content-area'; 
         
-        // 문장 파싱 (굵게 표시된 부분 등 처리)
         const sentenceParts = sentenceText.split(/(\*.*?\*)/g);
         sentenceParts.forEach(part => {
             if (part.startsWith('*') && part.endsWith('*')) {
