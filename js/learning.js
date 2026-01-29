@@ -522,11 +522,6 @@ export const learningMode = {
                 // 결과 표시를 위해 섹션 초기화
                 section.innerHTML = ''; 
                 
-                const label = document.createElement('div');
-                label.className = 'text-left text-xs font-bold text-indigo-500 mb-2 ml-1';
-                label.textContent = '🤖 AI가 만든 추가 예문 (다른 뜻 활용)';
-                section.appendChild(label);
-
                 // 예문 렌더링
                 aiSentences.forEach(item => {
                     const p = document.createElement('p');
