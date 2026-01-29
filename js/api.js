@@ -282,60 +282,71 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // ▼▼▼ [최종 수정] Gemini 2.5 Flash 적용 + 키 분할(보안) 기술 적용 ▼▼▼
-    async generateAIExamples(word, currentMeaning) {
-        // [중요] 구글 봇 감지 회피용: 키를 반으로 쪼개서 넣습니다.
-        const k1 = "AIzaSyAdXvE2SkyEbPmU"; // 키 앞부분
-        const k2 = "XtLUeVi7f-niGpXUu_0"; // 키 뒷부분
+// ▼▼▼ [수정] 구글 시트로 저장하도록 변경된 코드 ▼▼▼
+    async generateAIExamples(wordData, currentMeaning) {
+        const word = wordData.word;
+        
+        // 1. 키 분할 (보안)
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
-        // 최신 모델(2.5)과 v1beta 주소 사용
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+        // 2. 프롬프트 (1문장 생성)
         const prompt = `
             Target word: "${word}"
             Current definition: "${currentMeaning}"
 
             Task:
-            1. Create 2 example sentences using "${word}".
-            2. IMPORTANT: Try to use a DIFFERENT part of speech or a DIFFERENT meaning from the "Current definition" provided above.
-            3. Provide Korean translations.
-            4. Output strictly as a JSON array: [{"en": "...", "ko": "..."}, {"en": "...", "ko": "..."}]
-            5. Do not include any markdown formatting like \`\`\`json.
+            1. Create exactly 1 example sentence using "${word}".
+            2. Try to use a DIFFERENT part of speech or meaning if possible.
+            3. Provide Korean translation.
+            4. Output strictly as a JSON object: {"en": "...", "ko": "..."}
+            5. No markdown.
         `;
 
         try {
+            // --- (1) AI에게 예문 요청 ---
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
 
-            if (!response.ok) {
-                let errorDetails = "";
-                try {
-                    const errorJson = await response.json();
-                    if (errorJson.error) {
-                        errorDetails = `\n(구글 응답: ${errorJson.error.message})`;
-                    }
-                } catch (e) {}
-                
-                throw new Error(`API 호출 실패 (${response.status})${errorDetails}`);
-            }
+            if (!response.ok) throw new Error(`API Error (${response.status})`);
 
             const data = await response.json();
-            
-            if (!data.candidates || data.candidates.length === 0) {
-                throw new Error("AI가 응답을 생성하지 못했습니다.");
+            const textResponse = data.candidates[0].content.parts[0].text;
+            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
+
+            // --- (2) 구글 시트에 저장 요청 (변경됨!) ---
+            if (config.SCRIPT_URL) {
+                // 저장할 데이터를 문자열로 변환
+                const jsonString = JSON.stringify(cleanJson);
+                
+                // 구글 스크립트 주소로 전송
+                const scriptUrl = new URL(config.SCRIPT_URL);
+                scriptUrl.searchParams.append('action', 'save_ai_sample');
+                scriptUrl.searchParams.append('word', word);
+                scriptUrl.searchParams.append('json_data', jsonString);
+
+                // 비동기로 저장 (기다리지 않고 바로 화면에 보여줌)
+                fetch(scriptUrl.toString())
+                    .then(res => res.json())
+                    .then(resData => {
+                        if(resData.success) console.log("✅ 구글 시트 저장 성공!");
+                        else console.warn("⚠️ 시트 저장 실패:", resData.message);
+                    })
+                    .catch(err => console.error("통신 에러:", err));
+            } else {
+                console.warn("config.SCRIPT_URL이 설정되지 않아 시트에 저장하지 못했습니다.");
             }
 
-            const textResponse = data.candidates[0].content.parts[0].text;
-            const cleanJsonText = textResponse.replace(/```json|```/g, '').trim();
-            return JSON.parse(cleanJsonText); 
+            return cleanJson;
 
         } catch (error) {
-            console.error("AI 예문 생성 실패:", error);
+            console.error("AI 생성 실패:", error);
             throw error;
         }
     }
-};
