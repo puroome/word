@@ -544,46 +544,52 @@ export const learningMode = {
         container.appendChild(btn);
     },
 
-    renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-        const wrapper = document.createElement('div');
-        wrapper.className = "flex items-start gap-3 bg-indigo-50/50 p-3 rounded-xl mb-2 last:mb-0";
+// [디자인 수정] 기존 예문과 스타일을 동일하게 맞춘 렌더링 함수
+renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
+    // 1. 전체를 감싸는 줄 생성 (기존 예문 레이아웃 모방)
+    const wrapper = document.createElement('div');
+    // 여백을 줄이고 배경색을 연하게 하거나 제거하여 기존 텍스트와 높이를 맞춤
+    wrapper.className = "flex items-start gap-2 py-1 mb-1"; 
 
-        const botIcon = document.createElement('button');
-        botIcon.className = "text-xl hover:scale-110 transition-transform cursor-pointer flex-shrink-0 mt-0.5";
-        botIcon.innerHTML = "🤖";
-        botIcon.title = "이 예문만 다시 만들기";
-        
-        botIcon.onclick = async () => {
-            botIcon.innerHTML = "⏳";
-            botIcon.classList.add('animate-spin');
-            botIcon.disabled = true;
+    // 2. 로봇 아이콘 버튼 (크기를 기존 이모지와 비슷하게 조정)
+    const botIcon = document.createElement('button');
+    botIcon.className = "text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 leading-none";
+    botIcon.innerHTML = "🤖";
+    botIcon.title = "이 예문만 다시 만들기";
+    
+    botIcon.onclick = async () => {
+        botIcon.innerHTML = "⏳";
+        botIcon.classList.add('animate-spin');
+        botIcon.disabled = true;
 
-            try {
-                const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
-                allSentences[index] = newSentence;
-                const fullText = allSentences.join('\n');
-                wordData.AISample = { en: fullText, ko: "" };
-                
-                // ▼▼▼ 단어 객체 전체를 넘겨서 저장 ▼▼▼
-                api.saveAISamplesToSheet(wordData, fullText);
+        try {
+            const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
+            allSentences[index] = newSentence;
+            const fullText = allSentences.join('\n');
+            wordData.AISample = { en: fullText, ko: "" };
+            
+            api.saveAISamplesToSheet(wordData, fullText);
+            this.appendAIGenButton(container.parentNode, wordData);
 
-                this.appendAIGenButton(container.parentNode, wordData);
+        } catch (err) {
+            console.error(err);
+            botIcon.innerHTML = "⚠️";
+            botIcon.classList.remove('animate-spin');
+            botIcon.disabled = false;
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
+        }
+    };
+    wrapper.appendChild(botIcon);
 
-            } catch (err) {
-                console.error(err);
-                botIcon.innerHTML = "⚠️";
-                botIcon.classList.remove('animate-spin');
-                botIcon.disabled = false;
-                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
-            }
-        };
-        wrapper.appendChild(botIcon);
-
-        const textDiv = document.createElement('div');
-        textDiv.className = "flex-1 text-left text-gray-800 leading-relaxed";
-        ui.displaySentences([sentenceText], textDiv);
-        
-        wrapper.appendChild(textDiv);
-        container.appendChild(wrapper);
-    }
+    // 3. 예문 텍스트 (기존 ui.displaySentences를 활용해 동일한 폰트/간격 유지)
+    const textDiv = document.createElement('div');
+    // 기존 예문 폰트 크기 및 색상과 일치하도록 설정
+    textDiv.className = "flex-1 text-left text-gray-700 leading-snug pt-0.5"; 
+    
+    // ui.displaySentences가 내부적으로 단어 클릭 TTS 등을 처리하므로 그대로 사용
+    ui.displaySentences([sentenceText], textDiv);
+    
+    wrapper.appendChild(textDiv);
+    container.appendChild(wrapper);
+}
 };
