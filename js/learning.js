@@ -13,7 +13,7 @@ export const learningMode = {
         touchStartX: 0,
         touchStartY: 0,
         isEditing: false, 
-        editSide: null, // 'front' or 'back'
+        editingSide: null, // 'front' or 'back'
     },
     elements: {},
     init() {
@@ -29,10 +29,12 @@ export const learningMode = {
             backToStartBtn: document.getElementById('learning-back-to-start-btn'),
             loader: document.getElementById('learning-loader'),
             loaderText: document.getElementById('learning-loader-text'),
+            learningModeContainer: document.getElementById('learning-mode-container'), // Container ref added
             appContainer: document.getElementById('learning-app-container'),
+            cardFront: document.getElementById('learning-card-front'), // Front ref
             cardBack: document.getElementById('learning-card-back'),
+            wordHeader: document.getElementById('word-header'), // Word header ref
             wordDisplay: document.getElementById('word-display'),
-            wordHeader: document.getElementById('word-header'), // 추가됨 (헤더 영역)
             meaningDisplay: document.getElementById('meaning-display'),
             explanationDisplay: document.getElementById('explanation-display'),
             meaningContainer: document.getElementById('meaning-container'),
@@ -51,26 +53,18 @@ export const learningMode = {
             favoriteBtn: document.getElementById('favorite-btn'),
             favoriteIcon: document.getElementById('favorite-icon'),
             editContextBtn: document.getElementById('edit-context-btn'),
-            
-            // [추가] 배경 우클릭 메뉴 및 삭제 모달 요소
-            actionContextMenu: document.getElementById('action-context-menu'),
-            createCardBtn: document.getElementById('create-card-btn'),
-            deleteCardBtn: document.getElementById('delete-card-btn'),
-            deleteModal: document.getElementById('delete-confirm-modal'),
-            deleteTargetWord: document.getElementById('delete-target-word'),
-            deleteCancelBtn: document.getElementById('delete-cancel-btn'),
-            deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
+            createCardBtn: document.getElementById('create-card-btn'), // New
+            deleteCardBtn: document.getElementById('delete-card-btn'), // New
+            deleteConfirmModal: document.getElementById('delete-confirm-modal'), // New
+            deleteConfirmBtn: document.getElementById('delete-confirm-btn'), // New
+            deleteCancelBtn: document.getElementById('delete-cancel-btn'), // New
         };
         this.bindEvents();
     },
     bindEvents() {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.startWordInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.start();
-            }
+            if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this.start(); }
         });
         this.elements.startWordInput.addEventListener('input', (e) => {
             e.target.value = e.target.value.replace(/[^a-zA-Z\s'-]/g, (match) => {
@@ -86,79 +80,55 @@ export const learningMode = {
 
         this.elements.wordDisplay.addEventListener('click', () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) { api.speak(word, 'word'); }
+            if (word && !this.state.isEditing) { api.speak(word, 'word'); }
         });
         
-        // -----------------------------------------------------------
-        // [수정] 우클릭 이벤트 분리 및 편집 모드 진입
-        // -----------------------------------------------------------
-
-        // 1. 표제어 텍스트 자체(h1) 우클릭 -> 사전 검색 메뉴 (기존 유지)
-        this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
-            if (this.state.isEditing) return;
-            const wordData = this.state.currentWordList[this.state.currentIndex];
-            if (wordData) ui.showWordContextMenu(e, wordData.word, { hideAppSearch: true });
-        });
-
-        // 2. 표제어 헤더 영역(빈 공간) 우클릭 -> 앞면 편집 메뉴
-        this.elements.wordHeader.addEventListener('contextmenu', (e) => {
-            if (this.state.isEditing) return;
-            // 텍스트나 버튼 클릭이 아닌 경우에만 편집 메뉴
-            if (e.target.closest('#word-display') || e.target.closest('#favorite-btn')) return;
-            e.preventDefault();
-            this.handleEditContextMenu(e, 'front');
-        });
-
-        // 3. 뜻/설명 영역 우클릭 -> 앞면 편집 메뉴
+        // Context Menus
+        // 1. Word Header Context Menu (Edit Word)
+        this.elements.wordHeader.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'front'));
         this.elements.meaningContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'front'));
         this.elements.explanationContainer.addEventListener('contextmenu', (e) => this.handleEditContextMenu(e, 'front'));
 
-        // 4. 뒷면 표제어 영역 우클릭 -> 뒷면 편집 메뉴
-        this.elements.backTitle.addEventListener('contextmenu', (e) => {
-            if (this.state.isEditing) return;
-            e.preventDefault();
-            e.stopPropagation();
+        // 2. Sample Card Context Menu (Edit Sample)
+        this.elements.cardBack.addEventListener('contextmenu', (e) => {
+            // Prevent if clicking on AI gen button or similar
+            if(e.target.closest('button')) return; 
             this.handleEditContextMenu(e, 'back');
         });
 
-        // 5. 배경 우클릭 -> 카드 생성/삭제 메뉴
-        // appContainer(카드 영역) 밖, 혹은 appContainer 내부의 빈 공간(패딩 등)
-        this.elements.appContainer.addEventListener('contextmenu', (e) => {
-            // 클릭된 요소가 카드 내부 콘텐츠가 아니면 배경으로 간주
-            if (!e.target.closest('#learning-card-front') && !e.target.closest('#learning-card-back')) {
-                this.handleActionContextMenu(e);
-            }
-        });
-        // 카드와 고양이 사이 빈공간 등 커버를 위해 상위 래퍼에도
-        document.getElementById('app-wrapper').addEventListener('contextmenu', (e) => {
-             if (!e.target.closest('#learning-app-container') && !e.target.closest('.fixed-buttons')) {
-                 this.handleActionContextMenu(e);
-             }
-        });
+        // 3. Gap Context Menu (Create/Delete Card)
+        this.elements.learningModeContainer.addEventListener('contextmenu', (e) => this.handleCardContextMenu(e));
 
-        // 6. 편집 메뉴 버튼 클릭 (편집 진입)
+        // Edit Button Click
         this.elements.editContextBtn.addEventListener('click', () => {
-            const side = this.elements.editContextBtn.dataset.side || 'front';
-            if (side === 'front') this.enterFrontEditMode();
-            else this.enterBackEditMode();
+            this.enterEditMode(this.state.editingSide); // Pass side
             ui.hideEditContextMenu();
         });
 
-        // 7. 생성/삭제 메뉴 버튼 클릭
-        this.elements.createCardBtn.addEventListener('click', () => { this.createNewCard(); this.hideActionMenu(); });
-        this.elements.deleteCardBtn.addEventListener('click', () => { this.confirmDeleteCard(); this.hideActionMenu(); });
-
-        // 8. 삭제 모달 버튼
-        this.elements.deleteCancelBtn.addEventListener('click', () => this.elements.deleteModal.classList.add('hidden'));
-        this.elements.deleteConfirmBtn.addEventListener('click', () => this.deleteCurrentCard());
-
-        // 배경 클릭 시 메뉴 닫기
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
-            if (!e.target.closest('#action-context-menu')) this.hideActionMenu();
+        // Create/Delete Button Clicks
+        this.elements.createCardBtn.addEventListener('click', () => {
+             this.createNewCard();
+             ui.hideCardContextMenu();
+        });
+        this.elements.deleteCardBtn.addEventListener('click', () => {
+             ui.showDeleteConfirmModal();
+             ui.hideCardContextMenu();
         });
 
-        // ... (기존 키보드, 터치, 프로그레스바 이벤트 유지) ...
+        // Delete Confirm Modal
+        this.elements.deleteConfirmBtn.addEventListener('click', () => {
+            this.deleteCurrentCard();
+            ui.hideDeleteConfirmModal();
+        });
+        this.elements.deleteCancelBtn.addEventListener('click', () => {
+            ui.hideDeleteConfirmModal();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
+            if (!e.target.closest('#card-context-menu')) ui.hideCardContextMenu();
+        });
+
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
         document.addEventListener('touchend', this.handleTouchEnd.bind(this));
@@ -170,143 +140,196 @@ export const learningMode = {
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
     },
 
-    // [편집 메뉴 표시]
     handleEditContextMenu(e, side) {
-        if (this.state.isEditing) return;
+        if (this.state.isEditing) return; 
+        if (e.target.classList.contains('interactive-word')) return;
+        // Stop propagation to prevent card flip or gap menu
         e.preventDefault();
-        this.elements.editContextBtn.dataset.side = side;
+        e.stopPropagation(); 
+        
+        this.state.editingSide = side; // Store which side requested edit
         ui.showEditContextMenu(e);
     },
 
-    // [배경 메뉴 표시]
-    handleActionContextMenu(e) {
+    handleCardContextMenu(e) {
         if (this.state.isEditing) return;
+        // Check if click is NOT on the card front or back
+        if (e.target.closest('#learning-card-front') || e.target.closest('#learning-card-back') || e.target.closest('#learning-fixed-buttons')) {
+            return;
+        }
         e.preventDefault();
-        const menu = this.elements.actionContextMenu;
-        menu.classList.remove('hidden');
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
-    },
-    hideActionMenu() {
-        this.elements.actionContextMenu.classList.add('hidden');
+        ui.showCardContextMenu(e);
     },
 
-    // [1. 앞면 편집 모드] Word(POS), Meaning, Explanation
-    async enterFrontEditMode() {
+    async enterEditMode(side) {
         this.state.isEditing = true;
-        this.state.editSide = 'front';
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
-        // Word + POS 조합
-        const posText = wordData.pos ? ` [${wordData.pos}]` : '';
-        const wordValue = `${wordData.word}${posText}`;
-        
-        this.elements.wordDisplay.innerHTML = `<input type="text" id="edit-word-input" class="w-full text-center font-bold bg-white border-b-2 border-blue-500 focus:outline-none" style="font-size:inherit;" value="${wordValue}">`;
-        
-        this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${wordData.meaning || ""}</textarea>`;
-        this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${wordData.explanation || ""}</textarea>`;
+        if (side === 'front') {
+            // Edit Word (Headword + POS), Meaning, Explanation
+            const currentPos = wordData.pos || "";
+            const currentWord = wordData.word;
+            // Display Format: Word [POS]
+            const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
+            
+            this.elements.wordDisplay.innerHTML = `<input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}">`;
 
-        const editImgUrl = 'images/cat-edit.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
-    },
+            const currentMeaning = wordData.meaning || "";
+            this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${currentMeaning}</textarea>`;
 
-    // [2. 뒷면 편집 모드] Sample (AISample)
-    async enterBackEditMode() {
-        this.state.isEditing = true;
-        this.state.editSide = 'back';
-        const wordData = this.state.currentWordList[this.state.currentIndex];
+            const currentExplanation = wordData.explanation || "";
+            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${currentExplanation}</textarea>`;
 
-        let currentSample = "";
-        if (wordData.sampleSource === 'ai' && wordData.AISample) {
-            currentSample = wordData.AISample.en || "";
         } else {
-            currentSample = wordData.sample || "";
+            // Edit Sample
+            // Determine source: 'manual' or 'ai'. If none, default empty.
+            let currentSample = "";
+            if (wordData.sampleSource === 'manual') currentSample = wordData.sample;
+            else if (wordData.sampleSource === 'ai' && wordData.AISample) currentSample = wordData.AISample.en;
+            else if (wordData.sample) currentSample = wordData.sample; // fallback
+
+            // We only edit the text content here. 
+            // Note: If user edits AI sample, it becomes 'ai' source update or 'manual'? 
+            // Requirement says update respective column. 
+            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10">${currentSample || ""}</textarea>`;
+            // Remove AI buttons temporarily
+             const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
+             if(aiSection) aiSection.style.display = 'none';
         }
 
-        this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-4 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg leading-relaxed resize-none">${currentSample}</textarea>`;
-
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    // [3. 저장 및 종료]
     async saveAndExitEditMode() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
+        const side = this.state.editingSide;
 
-        if (this.state.editSide === 'front') {
+        if (side === 'front') {
             const wordInput = document.getElementById('edit-word-input');
             const meaningInput = document.getElementById('edit-meaning-input');
-            const expInput = document.getElementById('edit-explanation-input');
+            const explanationInput = document.getElementById('edit-explanation-input');
+            
+            if (wordInput && meaningInput && explanationInput) {
+                const rawWordValue = wordInput.value.trim();
+                const newMeaning = meaningInput.value;
+                const newExplanation = explanationInput.value;
 
-            if (wordInput && meaningInput && expInput) {
-                const fullWordVal = wordInput.value.trim();
-                let newWord = fullWordVal;
-                let newPos = "";
-                
-                const match = fullWordVal.match(/^(.*)\s\[(.*)\]$/);
+                // Parse Word [POS]
+                // Regex: Start, Capture Word, Optional (Space [POS]), End
+                const match = rawWordValue.match(/^(.*?)\s*\[(.*?)\]$/);
+                let newWord = rawWordValue;
+                let newPos = undefined; // Undefined means "don't update if not provided" - BUT requirements say handle differently
+
                 if (match) {
                     newWord = match[1].trim();
                     newPos = match[2].trim();
+                } else {
+                    // No brackets provided. 
+                    // If creating new word (wordData is placeholder), POS stays empty.
+                    // If editing, POS is preserved (passed as undefined to backend, but logic below needs care)
+                    // Requirement: "표제어만 수정할경우 만약 []을 안쓰면 기존의 POS열값은 수정하지말고"
+                    newPos = undefined; 
                 }
 
-                await api.updateWordDetails(wordData, meaningInput.value, expInput.value, newWord, newPos);
+                // Check Duplicates (if word changed)
+                if (newWord !== wordData.word) {
+                    const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWord.toLowerCase() && w !== wordData);
+                    if (isDuplicate) {
+                        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "이미 존재하는 단어입니다.", isError: true } }));
+                        // Cancel save? Or just revert word?
+                        // Reverting word for now
+                        newWord = wordData.word; 
+                    }
+                }
+
+                await api.updateWordDetails(wordData.word, {
+                    word: newWord,
+                    pos: newPos,
+                    meaning: newMeaning,
+                    explanation: newExplanation
+                });
             }
-        } else if (this.state.editSide === 'back') {
+        } else { // side === 'back'
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
-                await api.updateWordDetails(wordData, undefined, undefined, undefined, undefined, sampleInput.value);
+                const newSampleText = sampleInput.value;
+                // Update based on source
+                if (wordData.sampleSource === 'ai') {
+                    await api.updateWordDetails(wordData.word, { aiSample: newSampleText });
+                } else {
+                    await api.updateWordDetails(wordData.word, { sample: newSampleText });
+                }
             }
+            // Restore AI section
+             const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
+             if(aiSection) aiSection.style.display = 'block';
         }
 
         this.state.isEditing = false;
-        this.state.editSide = null;
-        this.displayWord(this.state.currentIndex);
+        this.state.editingSide = null;
+        
+        // Refresh display (handles updated data because updateWordDetails updates local state)
+        if (side === 'front') this.displayWord(this.state.currentIndex, true);
+        else this.navigateBackToBack(0); // Refresh back
     },
-
-    // [4. 카드 삭제]
-    confirmDeleteCard() {
-        const wordData = this.state.currentWordList[this.state.currentIndex];
-        this.elements.deleteTargetWord.textContent = wordData.word;
-        this.elements.deleteModal.classList.remove('hidden');
+    
+    async createNewCard() {
+        // Create an empty placeholder card
+        const newCard = {
+            word: "New Word",
+            pos: "",
+            meaning: "",
+            explanation: "",
+            sample: "",
+            sampleSource: "manual"
+        };
+        
+        // Add to list via API (create empty row)
+        await api.createWord(newCard);
+        
+        // Move to the new card (last one)
+        this.state.currentIndex = state.wordList.length - 1;
+        this.displayWord(this.state.currentIndex, true);
+        
+        // Immediately enter edit mode
+        setTimeout(() => {
+            this.state.editingSide = 'front';
+            this.enterEditMode('front');
+        }, 300);
     },
+    
     async deleteCurrentCard() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
-        this.elements.deleteModal.classList.add('hidden');
+        if (!wordData) return;
         
-        await api.deleteWord(wordData);
+        await api.deleteWord(wordData.word);
+        
+        // Update UI
+        // Index handling
+        if (this.state.currentIndex >= this.state.currentWordList.length) {
+            this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
+        }
         
         if (this.state.currentWordList.length === 0) {
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "모든 단어가 삭제되었습니다." } }));
-            window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+            this.reset();
+            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "모든 카드가 삭제되었습니다." } }));
         } else {
-            if (this.state.currentIndex >= this.state.currentWordList.length) {
-                this.state.currentIndex = this.state.currentWordList.length - 1;
-            }
-            this.displayWord(this.state.currentIndex);
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "삭제되었습니다." } }));
+             this.displayWord(this.state.currentIndex, true);
+             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "카드가 삭제되었습니다." } }));
         }
     },
 
-    // [5. 새 카드 생성]
-    async createNewCard() {
-        const currentData = this.state.currentWordList[this.state.currentIndex];
-        
-        await api.createWord(currentData);
-        
-        this.state.currentIndex = this.state.currentIndex + 1;
-        this.displayWord(this.state.currentIndex);
-        
-        setTimeout(() => this.enterFrontEditMode(), 100);
-    },
-
-    // ... (기존 displayWord, handleFlip 등은 유지하되, handleFlip에서 저장 로직 호출 유지) ...
+    // ... (rest of functions: start, showError, launchApp, reset, resetStartScreen, displaySuggestions, displayWord, adjustWordFontSize, navigate, navigateBackToBack, handleFlip, startMistakeReview, startFavoriteMode, handleKeyDown, handleTouchStart, handleTouchEnd, updateProgressBar, handleProgressBarInteraction, toggleFavorite, updateFavoriteIcon, appendAIGenButton, renderInitialGenButton, renderAIContentRow - KEEP ALL AS IS) ...
+    // Note: handleFlip needs modification to save edit mode
+    
+    // [Modified handleFlip from original to support save]
     async handleFlip() {
         if (this.state.isEditing) {
             await this.saveAndExitEditMode();
             return;
         }
-        
-        // ... (기존 flip 로직)
+
         const isBackVisible = this.elements.cardBack.classList.contains('is-slid-up');
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
@@ -316,30 +339,90 @@ export const learningMode = {
         const noSampleImgUrl = 'images/cat-add.png';
 
         if (!isBackVisible) {
-            if (!wordData.sample || !wordData.sample.trim()) {
-                window.dispatchEvent(new CustomEvent('showNoSampleMessage'));
-                return;
-            }
+            // Allow flipping even if no sample, so user can edit empty back
             this.elements.backTitle.textContent = wordData.word;
-            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+            
+            if (!wordData.sample && (!wordData.AISample || !wordData.AISample.en)) {
+                 this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
+            } else {
+                 ui.displaySentences((wordData.sample || wordData.AISample?.en || "").split('\n'), this.elements.backContent);
+            }
+
             this.appendAIGenButton(this.elements.backContent, wordData);
 
             this.elements.cardBack.classList.add('is-slid-up');
             this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
         } else {
             this.elements.cardBack.classList.remove('is-slid-up');
-            const hasSample = wordData.sample && wordData.sample.trim() !== '';
+            const hasSample = (wordData.sample && wordData.sample.trim() !== '') || (wordData.AISample && wordData.AISample.en);
             this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
         }
     },
     
+    // ... [Copy the rest of the functions from previous learning.js exactly] ...
+    showError(message) {
+        this.elements.loader.querySelector('.loader').style.display = 'none';
+        this.elements.loaderText.innerHTML = `<p class="text-red-500 font-bold">오류 발생</p><p class="text-sm text-gray-600 mt-2 break-all">${message}</p>`;
+    },
+    launchApp() {
+        this.elements.startScreen.classList.add('hidden');
+        this.elements.loader.classList.add('hidden');
+        this.elements.appContainer.classList.remove('hidden');
+        this.elements.fixedButtons.classList.remove('hidden');
+        document.getElementById('progress-bar-container').classList.remove('hidden');
+        this.displayWord(this.state.currentIndex);
+    },
+    reset() {
+        this.elements.startScreen.classList.add('hidden');
+        this.elements.appContainer.classList.add('hidden');
+        this.elements.loader.classList.add('hidden');
+        this.elements.fixedButtons.classList.add('hidden');
+        document.getElementById('progress-bar-container').classList.add('hidden');
+        this.resetStartScreen();
+    },
+    resetStartScreen() {
+        this.elements.startInputContainer.classList.remove('hidden');
+        this.elements.suggestionsContainer.classList.add('hidden');
+        this.elements.startWordInput.value = '';
+        this.elements.startWordInput.focus();
+    },
+    displaySuggestions(vocabSuggestions, explanationSuggestions, title) {
+        this.elements.loader.classList.add('hidden');
+        this.elements.startScreen.classList.remove('hidden');
+        this.elements.startInputContainer.classList.add('hidden');
+        this.elements.suggestionsTitle.innerHTML = title;
+
+        const populateList = (listElement, suggestions) => {
+            listElement.innerHTML = '';
+            if (suggestions.length === 0) {
+                listElement.innerHTML = '<p class="text-gray-400 text-sm p-3">결과 없음</p>';
+                return;
+            }
+            suggestions.forEach(({ word, index }) => {
+                const btn = document.createElement('button');
+                btn.className = 'w-full text-left bg-gray-100 hover:bg-gray-200 py-3 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300';
+                btn.textContent = word;
+                btn.onclick = () => {
+                     this.state.currentIndex = index;
+                     this.launchApp();
+                 };
+                listElement.appendChild(btn);
+            });
+        };
+        populateList(this.elements.suggestionsVocabList, vocabSuggestions);
+        populateList(this.elements.suggestionsExplanationList, explanationSuggestions);
+        this.elements.suggestionsContainer.classList.remove('hidden');
+    },
     async displayWord(index, silent = false) {
         this.state.isEditing = false;
-        // ... (기존 로직) ...
+        
         this.updateProgressBar(index);
         this.elements.cardBack.classList.remove('is-slid-up');
         const wordData = this.state.currentWordList[index];
-        if (!wordData) return;
+        if (!wordData) {
+             console.error(`Word data not found for index: ${index}`);
+             return;
+        }
 
          if (!this.state.isMistakeMode && !this.state.isFavoriteMode) {
             try {
@@ -347,7 +430,7 @@ export const learningMode = {
             } catch (e) { console.error(e); }
         }
 
-        this.elements.wordDisplay.innerHTML = wordData.word; // input 태그 사라지고 텍스트 복귀
+        this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
         
         if (wordData.word && !silent) {
@@ -356,19 +439,15 @@ export const learningMode = {
         
         this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
-        
-        // 설명창 항상 표시 (편집 가능하도록)
-        this.elements.explanationContainer.classList.remove('hidden'); 
-        
-        // ... (기존 로직 유지)
-        const hasSample = wordData.sample && wordData.sample.trim() !== '';
+        this.elements.explanationContainer.classList.remove('hidden');
+
+        const hasSample = (wordData.sample && wordData.sample.trim() !== '') || (wordData.AISample && wordData.AISample.en);
         const sampleImgUrl = 'images/cat-delivery.png';
         const noSampleImgUrl = 'images/cat-add.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
-    // ... (나머지 start, reset, navigate 등 기존 함수 유지) ...
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -422,8 +501,10 @@ export const learningMode = {
         
         if (wordData.sample && wordData.sample.trim()) {
             ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+        } else if (wordData.AISample && wordData.AISample.en) {
+             ui.displaySentences(wordData.AISample.en.split('\n'), this.elements.backContent);
         } else {
-            this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">등록된 예문이 없습니다.</div>';
+            this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
         }
 
         this.appendAIGenButton(this.elements.backContent, wordData);
@@ -431,13 +512,11 @@ export const learningMode = {
         const backImgUrl = 'images/cat-remove.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
     },
-    
-    async startMistakeReview(mistakeWords) {
+    startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
         this.state.isFavoriteMode = false;
         if (!state.isWordListReady) {
-            await api.loadWordList();
-            await api.loadUserProgress();
+            // Wait for main loading
         }
         const wordMap = new Map(state.wordList.map(wordObj => [wordObj.word, wordObj]));
         this.state.currentWordList = mistakeWords.map(word => wordMap.get(word)).filter(Boolean);
@@ -470,17 +549,39 @@ export const learningMode = {
     },
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
+        
         if (this.state.isEditing) return;
+
         if (document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
 
-        if (e.key === 'ArrowLeft') { e.preventDefault(); this.navigate(-1); } 
-        else if (e.key === 'ArrowRight') { e.preventDefault(); this.navigate(1); } 
-        else if (e.key === 'ArrowUp') { e.preventDefault(); this.navigate(1); } 
-        else if (e.key === 'ArrowDown') { e.preventDefault(); this.navigate(-1); } 
-        else if (e.key === 'Enter') { e.preventDefault(); this.handleFlip(); } 
-        else if (e.key === ' ') { e.preventDefault(); const word = this.state.currentWordList[this.state.currentIndex]?.word; if (word) api.speak(word, 'word'); } 
-        else if (e.key.toLowerCase() === 'z') { e.preventDefault(); this.navigateBackToBack(-1); } 
-        else if (e.key.toLowerCase() === 'x') { e.preventDefault(); this.navigateBackToBack(1); }
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.navigate(-1);
+        } else if (e.key === 'ArrowRight') {
+             e.preventDefault();
+            this.navigate(1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.navigate(1);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this.navigate(-1);
+        } else if (e.key === 'Enter') {
+             e.preventDefault();
+            this.handleFlip();
+        } else if (e.key === ' ') {
+            e.preventDefault();
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) {
+                api.speak(word, 'word');
+            }
+        } else if (e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            this.navigateBackToBack(-1);
+        } else if (e.key.toLowerCase() === 'x') {
+            e.preventDefault();
+            this.navigateBackToBack(1);
+        }
     },
     handleTouchStart(e) {
          if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
@@ -588,11 +689,9 @@ export const learningMode = {
         }
     },
     updateFavoriteIcon(isFavorite) {
-        this.elements.favoriteIcon.classList.remove('text-gray-400');
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
         this.elements.favoriteIcon.classList.toggle('text-white', !isFavorite);
     },
-
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
         if (!section) {
@@ -611,7 +710,6 @@ export const learningMode = {
             this.renderInitialGenButton(section, wordData);
         }
     },
-
     renderInitialGenButton(container, wordData) {
         const btn = document.createElement('button');
         btn.className = 'text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-full transition-colors font-semibold flex items-center justify-center mx-auto gap-2 shadow-sm';
@@ -635,7 +733,6 @@ export const learningMode = {
         };
         container.appendChild(btn);
     },
-
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const p = document.createElement('p');
         p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; 
@@ -646,7 +743,7 @@ export const learningMode = {
         botBtn.title = "이 예문만 다시 만들기";
         
         botBtn.onclick = async (e) => {
-            e.stopPropagation();
+            e.stopPropagation(); 
             botBtn.innerHTML = `<span class="animate-spin text-xs inline-block">⏳</span>`;
             botBtn.disabled = true;
 
@@ -679,6 +776,7 @@ export const learningMode = {
         p.onclick = (e) => {
             if (e.target === botBtn || e.target.closest('button')) return; 
             if (e.target.closest('.interactive-word')) return;
+            
             api.speak(sentenceText, 'sample');
             showTranslation(e);
         };
