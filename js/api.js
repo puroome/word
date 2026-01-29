@@ -161,6 +161,51 @@ export const api = {
         }
     },
 
+    // [신규] 단어 데이터(뜻, 설명) 수정 기능
+    async updateWordData(wordData, newMeaning, newExplanation) {
+        if (!config.SCRIPT_URL) return;
+
+        const url = new URL(config.SCRIPT_URL);
+        url.searchParams.append('action', 'update_word');
+        url.searchParams.append('word', wordData.word);
+        url.searchParams.append('meaning', newMeaning);
+        url.searchParams.append('explanation', newExplanation);
+
+        try {
+            // 1. 구글 시트 업데이트
+            fetch(url.toString(), { mode: 'no-cors' });
+
+            // 2. Firebase 업데이트
+            if (database) {
+                const { ref, update } = window.firebaseSDK;
+                const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
+                const updates = {};
+                updates[`/vocabulary/${safeKey}/meaning`] = newMeaning;
+                updates[`/vocabulary/${safeKey}/explanation`] = newExplanation;
+                await update(ref(database), updates);
+            }
+
+            // 3. 현재 메모리 및 로컬 캐시 업데이트
+            wordData.meaning = newMeaning;
+            wordData.explanation = newExplanation;
+            
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsed = JSON.parse(cachedData);
+                const idx = parsed.words.findIndex(w => w.word === wordData.word);
+                if (idx !== -1) {
+                    parsed.words[idx].meaning = newMeaning;
+                    parsed.words[idx].explanation = newExplanation;
+                    localStorage.setItem('wordListCache', JSON.stringify(parsed));
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error("Update failed:", error);
+            throw error;
+        }
+    },
+
      async updateWordStatus(word, quizType, result) {
          if (!state.userId || !word || !quizType) return;
          if (!state.currentProgress[word]) state.currentProgress[word] = {};
@@ -282,7 +327,6 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // ▼▼▼ [수정 1] AI 생성 함수 (개수 지정 가능) ▼▼▼
     async generateAIExamples(wordData, currentMeaning, count = 1) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -322,41 +366,26 @@ export const api = {
         }
     },
 
-    // ▼▼▼ [수정 2] 3중 저장 (시트 + Firebase + 로컬캐시) ▼▼▼
     async saveAISamplesToSheet(wordData, fullEnText) {
-        // 1. 구글 시트로 전송 (백업 및 서버 강제 동기화 트리거)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'save_ai_sample');
             scriptUrl.searchParams.append('word', wordData.word);
-            // ★ 중요: Code.gs와 약속한 'ai_text' 파라미터로 보냅니다! (기존 json_data 아님)
             scriptUrl.searchParams.append('ai_text', fullEnText); 
             
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 저장 실패:", d.message);
-                    else console.log("✅ 시트 저장 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
+            fetch(scriptUrl.toString());
         }
 
         const aiSampleObj = { en: fullEnText, ko: "" };
 
-        // 2. Firebase 업데이트 (앱 재실행 시 불러올 데이터)
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
-            // Firebase의 해당 단어 아래에 AISample 저장
             updates[`/vocabulary/${safeKey}/AISample`] = aiSampleObj;
-            
-            update(ref(database), updates).then(() => {
-                console.log("✅ Firebase 저장 완료");
-            }).catch(e => console.warn("Firebase 저장 실패:", e));
+            update(ref(database), updates);
         }
 
-        // 3. 내 휴대폰 캐시 업데이트 (새로고침 시 바로 반영되도록)
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
@@ -365,11 +394,8 @@ export const api = {
                 if (targetIndex !== -1) {
                     parsedCache.words[targetIndex].AISample = aiSampleObj;
                     localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                    console.log("✅ 로컬 캐시 업데이트 완료");
                 }
             }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 실패:", e);
-        }
+        } catch (e) {}
     }
 };
