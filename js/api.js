@@ -282,32 +282,28 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// ▼▼▼ [수정] 구글 시트로 저장하도록 변경된 코드 ▼▼▼
-    async generateAIExamples(wordData, currentMeaning) {
-        const word = wordData.word;
-        
-        // 1. 키 분할 (보안)
+    // ▼▼▼ [수정 1] AI 생성 함수 (개수 지정 가능, 저장 로직 분리) ▼▼▼
+    async generateAIExamples(wordData, currentMeaning, count = 1) {
+        // 보안용 키 분할
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 2. 프롬프트 (1문장 생성)
+        // 프롬프트: 영어 문장만 배열로 요청
         const prompt = `
-            Target word: "${word}"
+            Target word: "${wordData.word}"
             Current definition: "${currentMeaning}"
 
             Task:
-            1. Create exactly 1 example sentence using "${word}".
+            1. Create exactly ${count} example sentence(s) using "${wordData.word}".
             2. Try to use a DIFFERENT part of speech or meaning if possible.
-            3. Provide Korean translation.
-            4. Output strictly as a JSON object: {"en": "...", "ko": "..."}
-            5. No markdown.
+            3. Output strictly as a JSON array of strings: ["sentence 1", "sentence 2"]
+            4. Do not include translations or markdown. Just the English sentences.
         `;
 
         try {
-            // --- (1) AI에게 예문 요청 ---
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -320,34 +316,40 @@ export const api = {
             const textResponse = data.candidates[0].content.parts[0].text;
             const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
 
-            // --- (2) 구글 시트에 저장 요청 (변경됨!) ---
-            if (config.SCRIPT_URL) {
-                // 저장할 데이터를 문자열로 변환
-                const jsonString = JSON.stringify(cleanJson);
-                
-                // 구글 스크립트 주소로 전송
-                const scriptUrl = new URL(config.SCRIPT_URL);
-                scriptUrl.searchParams.append('action', 'save_ai_sample');
-                scriptUrl.searchParams.append('word', word);
-                scriptUrl.searchParams.append('json_data', jsonString);
-
-                // 비동기로 저장 (기다리지 않고 바로 화면에 보여줌)
-                fetch(scriptUrl.toString())
-                    .then(res => res.json())
-                    .then(resData => {
-                        if(resData.success) console.log("✅ 구글 시트 저장 성공!");
-                        else console.warn("⚠️ 시트 저장 실패:", resData.message);
-                    })
-                    .catch(err => console.error("통신 에러:", err));
-            } else {
-                console.warn("config.SCRIPT_URL이 설정되지 않아 시트에 저장하지 못했습니다.");
-            }
-
-            return cleanJson;
+            // 항상 배열로 반환
+            return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
 
         } catch (error) {
             console.error("AI 생성 실패:", error);
             throw error;
         }
+    },
+
+    // ▼▼▼ [수정 2] 시트 저장 함수 (별도 분리) ▼▼▼
+    async saveAISamplesToSheet(word, fullEnText) {
+        if (!config.SCRIPT_URL) {
+            console.warn("Script URL 없음");
+            return;
+        }
+
+        // 앱이 시트에 저장할 때는 { en: "문장1\n문장2" } 형태로 포장해서 보냅니다.
+        // Code.gs가 여기서 .en을 꺼내서 저장합니다.
+        const payload = JSON.stringify({ en: fullEnText });
+
+        const scriptUrl = new URL(config.SCRIPT_URL);
+        scriptUrl.searchParams.append('action', 'save_ai_sample');
+        scriptUrl.searchParams.append('word', word);
+        scriptUrl.searchParams.append('json_data', payload);
+
+        try {
+            fetch(scriptUrl.toString())
+                .then(res => res.json())
+                .then(resData => {
+                    if(resData.success) console.log("✅ 시트 저장 성공");
+                    else console.warn("⚠️ 시트 저장 실패:", resData.message);
+                });
+        } catch (err) {
+            console.error("통신 에러:", err);
+        }
     }
-}
+};
