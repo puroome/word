@@ -576,8 +576,7 @@ export const learningMode = {
     },
     updateFavoriteIcon(isFavorite) {
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
-        this.elements.favoriteIcon.classList.toggle('text-gray-400', !isFavorite);
-        this.elements.favoriteIcon.classList.toggle('fill-current', isFavorite);
+        this.elements.favoriteIcon.classList.toggle('text-white', !isFavorite);
     },
 
     appendAIGenButton(container, wordData) {
