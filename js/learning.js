@@ -288,6 +288,10 @@ export const learningMode = {
             this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">등록된 예문이 없습니다.</div>';
         }
 
+        // ▼▼▼ [수정됨] AI 예문 생성 버튼 추가 ▼▼▼
+        this.appendAIGenButton(this.elements.backContent, wordData);
+        // ▲▲▲
+
         const backImgUrl = 'images/cat-remove.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
     },
@@ -307,6 +311,11 @@ export const learningMode = {
             }
             this.elements.backTitle.textContent = wordData.word;
             ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+
+            // ▼▼▼ [수정됨] AI 예문 생성 버튼 추가 ▼▼▼
+            this.appendAIGenButton(this.elements.backContent, wordData);
+            // ▲▲▲
+
             this.elements.cardBack.classList.add('is-slid-up');
             this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
         } else {
@@ -488,5 +497,71 @@ export const learningMode = {
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
         this.elements.favoriteIcon.classList.toggle('text-gray-400', !isFavorite);
         this.elements.favoriteIcon.classList.toggle('fill-current', isFavorite);
+    },
+
+    // ▼▼▼ [새로 추가] AI 버튼 생성 및 처리 함수 ▼▼▼
+    appendAIGenButton(container, wordData) {
+        // 이미 생성된 AI 섹션이 있다면 중복 추가 방지
+        if (container.querySelector('.ai-gen-section')) return;
+
+        const section = document.createElement('div');
+        section.className = 'ai-gen-section mt-6 border-t pt-4 text-center';
+
+        const btn = document.createElement('button');
+        btn.className = 'text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-2 px-4 rounded-full transition-colors font-semibold flex items-center justify-center mx-auto gap-2';
+        btn.innerHTML = `<span>🤖 다른 뜻 예문 추가 (AI)</span>`;
+        
+        btn.onclick = async () => {
+            btn.disabled = true;
+            btn.innerHTML = `<div class="loader w-4 h-4 border-2 border-indigo-700 border-t-transparent rounded-full animate-spin"></div> 생성 중...`;
+            
+            try {
+                // API 호출
+                const aiSentences = await api.generateAIExamples(wordData.word, wordData.meaning);
+                
+                // 결과 표시를 위해 섹션 초기화
+                section.innerHTML = ''; 
+                
+                const label = document.createElement('div');
+                label.className = 'text-left text-xs font-bold text-indigo-500 mb-2 ml-1';
+                label.textContent = '🤖 AI가 만든 추가 예문 (다른 뜻 활용)';
+                section.appendChild(label);
+
+                // 예문 렌더링
+                aiSentences.forEach(item => {
+                    const p = document.createElement('p');
+                    p.className = 'p-2 rounded transition-colors hover:bg-indigo-50 cursor-pointer text-left mb-1';
+                    
+                    // 🤖 아이콘
+                    const iconSpan = document.createElement('span');
+                    iconSpan.textContent = '🤖 ';
+                    p.appendChild(iconSpan);
+
+                    // 영어 문장
+                    const contentSpan = document.createElement('span');
+                    contentSpan.textContent = item.en;
+                    p.appendChild(contentSpan);
+
+                    // 클릭 시 읽어주기 + 번역 툴팁
+                    p.onclick = (e) => {
+                        api.speak(item.en, 'sample');
+                        ui.showTranslationTooltip(item.ko, e);
+                    };
+
+                    section.appendChild(p);
+                });
+
+            } catch (err) {
+                btn.innerHTML = `⚠️ 생성 실패 (다시 시도)`;
+                btn.disabled = false;
+                console.error(err);
+                // 에러 토스트 메시지
+                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "AI 예문 생성 중 오류가 발생했습니다.", isError: true } }));
+            }
+        };
+
+        section.appendChild(btn);
+        container.appendChild(section);
     }
+    // ▲▲▲ [여기까지 추가됨] ▲▲▲
 };
