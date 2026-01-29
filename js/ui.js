@@ -230,48 +230,42 @@ export const ui = {
             this.hideWordContextMenu(); 
         };
     },
-    // [신규] 영역별 편집 팝업 표시 (기존 검색 메뉴와 분리)
-    showAreaEditMenu(event, fieldName) {
-        event.preventDefault();
+    hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
+        if (menu) menu.classList.add('hidden');
+    },
+
+    // [추가됨] 편집 컨텍스트 메뉴 표시
+    showEditContextMenu(event) {
+        const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
 
-        // 기존 검색 메뉴 숨기기
-        menu.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
 
-        // 편집 버튼만 생성 또는 표시
-        let editBtn = document.getElementById('direct-edit-btn');
-        if (!editBtn) {
-            editBtn = document.createElement('button');
-            editBtn.id = 'direct-edit-btn';
-            editBtn.className = 'text-left w-full px-4 py-2 text-sm text-blue-600 font-bold hover:bg-gray-100 whitespace-nowrap';
-            menu.appendChild(editBtn);
-        }
-        editBtn.style.display = 'block';
-        editBtn.textContent = fieldName === 'meaning' ? '📝 뜻 편집' : '📝 설명 편집';
-        
-        editBtn.onclick = () => {
-            window.dispatchEvent(new CustomEvent('startAreaEdit', { detail: fieldName }));
-            this.hideWordContextMenu();
-        };
-
-        const x = event.clientX;
-        const y = event.clientY;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
+
+        // 위치 보정
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
     },
-    hideWordContextMenu() {
-        const menu = document.getElementById('word-context-menu');
-        if (menu) {
-            menu.classList.add('hidden');
-            // 메뉴를 닫을 때 기존 버튼들의 display 속성 초기화 로직이 필요할 수 있음
-            setTimeout(() => {
-                menu.querySelectorAll('button').forEach(btn => {
-                    if (btn.id !== 'direct-edit-btn') btn.style.display = 'block';
-                    else btn.style.display = 'none';
-                });
-            }, 200);
-        }
+
+    // [추가됨] 편집 컨텍스트 메뉴 숨김
+    hideEditContextMenu() {
+        const menu = document.getElementById('edit-context-menu');
+        if (menu) menu.classList.add('hidden');
     }
 };
