@@ -179,23 +179,6 @@ export const ui = {
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
 
-        // [신규] 편집 모드 진입용 메뉴 항목 동적 추가
-        let editBtn = document.getElementById('edit-word-context-btn');
-        if (!editBtn && options.isEditModeTrigger) {
-            editBtn = document.createElement('button');
-            editBtn.id = 'edit-word-context-btn';
-            editBtn.className = 'text-left w-full px-4 py-2 text-sm text-blue-600 font-bold hover:bg-gray-100 whitespace-nowrap border-b';
-            editBtn.textContent = '📝 편집하기';
-            menu.prepend(editBtn);
-        }
-        if (editBtn) {
-            editBtn.style.display = options.isEditModeTrigger ? 'block' : 'none';
-            editBtn.onclick = () => {
-                window.dispatchEvent(new CustomEvent('startEditMode'));
-                this.hideWordContextMenu();
-            };
-        }
-
         document.getElementById('search-app-context-btn').style.display = options.hideAppSearch ? 'none' : 'block';
 
         const touch = event.touches ? event.touches[0] : null;
@@ -247,8 +230,48 @@ export const ui = {
             this.hideWordContextMenu(); 
         };
     },
+    // [신규] 영역별 편집 팝업 표시 (기존 검색 메뉴와 분리)
+    showAreaEditMenu(event, fieldName) {
+        event.preventDefault();
+        const menu = document.getElementById('word-context-menu');
+        if (!menu) return;
+
+        // 기존 검색 메뉴 숨기기
+        menu.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
+
+        // 편집 버튼만 생성 또는 표시
+        let editBtn = document.getElementById('direct-edit-btn');
+        if (!editBtn) {
+            editBtn = document.createElement('button');
+            editBtn.id = 'direct-edit-btn';
+            editBtn.className = 'text-left w-full px-4 py-2 text-sm text-blue-600 font-bold hover:bg-gray-100 whitespace-nowrap';
+            menu.appendChild(editBtn);
+        }
+        editBtn.style.display = 'block';
+        editBtn.textContent = fieldName === 'meaning' ? '📝 뜻 편집' : '📝 설명 편집';
+        
+        editBtn.onclick = () => {
+            window.dispatchEvent(new CustomEvent('startAreaEdit', { detail: fieldName }));
+            this.hideWordContextMenu();
+        };
+
+        const x = event.clientX;
+        const y = event.clientY;
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.classList.remove('hidden');
+    },
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
-        if (menu) menu.classList.add('hidden');
+        if (menu) {
+            menu.classList.add('hidden');
+            // 메뉴를 닫을 때 기존 버튼들의 display 속성 초기화 로직이 필요할 수 있음
+            setTimeout(() => {
+                menu.querySelectorAll('button').forEach(btn => {
+                    if (btn.id !== 'direct-edit-btn') btn.style.display = 'block';
+                    else btn.style.display = 'none';
+                });
+            }, 200);
+        }
     }
 };
