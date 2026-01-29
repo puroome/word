@@ -282,5 +282,53 @@ export const api = {
          const { doc, setDoc } = window.firebaseSDK;
          const progressRef = doc(db, 'users', state.userId, 'progress', 'main');
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
-     }
+     },
+
+    // ▼▼▼ [새로 추가] AI 예문 생성 (다른 뜻/품사 우선) ▼▼▼
+    async generateAIExamples(word, currentMeaning) {
+        // config.js의 TTS_API_KEY를 재사용 (Gemini API가 활성화되어 있어야 함)
+        const apiKey = config.TTS_API_KEY; 
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+        // 프롬프트: 2문장 생성 + 다른 뜻/품사 활용 요청
+        const prompt = `
+            Target word: "${word}"
+            Current definition: "${currentMeaning}"
+
+            Task:
+            1. Create 2 example sentences using "${word}".
+            2. IMPORTANT: Try to use a DIFFERENT part of speech or a DIFFERENT meaning from the "Current definition" provided above. (e.g. if it's a noun, use it as a verb).
+            3. If the word has only one meaning, use a diverse context suitable for a high school student.
+            4. Provide Korean translations.
+            5. Output strictly as a JSON array: [{"en": "English sentence 1", "ko": "Korean translation 1"}, {"en": "English sentence 2", "ko": "Korean translation 2"}]
+            6. Do not include any markdown formatting like \`\`\`json.
+        `;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (!response.ok) {
+                if (response.status === 403) {
+                     throw new Error("Gemini API 권한 오류. Google Cloud Console에서 API 설정을 확인하세요.");
+                }
+                throw new Error(`Gemini API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const textResponse = data.candidates[0].content.parts[0].text;
+            
+            // JSON 파싱 (마크다운 기호 제거 후)
+            const cleanJsonText = textResponse.replace(/```json|```/g, '').trim();
+            return JSON.parse(cleanJsonText); // 배열 반환 [{en:.., ko:..}, {en:.., ko:..}]
+
+        } catch (error) {
+            console.error("AI 예문 생성 실패:", error);
+            throw error;
+        }
+    }
+    // ▲▲▲ [여기까지 추가됨] ▲▲▲
 };
