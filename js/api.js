@@ -366,7 +366,7 @@ export const api = {
         }
     },
 
-    // [수정됨] 단어 뜻/설명/단어/품사/예문 수정 및 동기화 (시트 + Firebase + 로컬캐시)
+    // [수정됨] 단어 상세 정보 수정 (Word, POS, Sample 등 포함)
     async updateWordDetails(wordData, newMeaning, newExplanation, newWord, newPos, newSample) {
         const originalWord = wordData.word;
         
@@ -374,15 +374,17 @@ export const api = {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('original_word', originalWord);
+            scriptUrl.searchParams.append('original_word', originalWord); // 원본 단어로 찾음
             
             if (newWord !== undefined) scriptUrl.searchParams.append('new_word', newWord);
             if (newPos !== undefined) scriptUrl.searchParams.append('new_pos', newPos);
             if (newMeaning !== undefined) scriptUrl.searchParams.append('meaning', newMeaning);
             if (newExplanation !== undefined) scriptUrl.searchParams.append('explanation', newExplanation);
             
+            // Sample 수정인 경우
             if (newSample !== undefined) {
                 scriptUrl.searchParams.append('sample', newSample);
+                // 기존 소스가 없거나 'none'이면 'manual'로 간주, AI면 'ai'로 설정
                 const target = (wordData.sampleSource === 'ai') ? 'ai' : 'manual';
                 scriptUrl.searchParams.append('sample_target', target);
             }
@@ -397,7 +399,12 @@ export const api = {
         }
 
         // 2. Firebase 및 로컬 캐시 업데이트
+        // Word가 바뀌면 Key도 바뀌어야 하므로 복잡해집니다. 
+        // 여기서는 간단히 로컬 데이터만 즉시 반영하고, Firebase는 시트->Firebase 동기화를 기다리거나 
+        // 단순 필드 업데이트만 수행합니다.
+        
         try {
+            // 메모리 상태 즉시 반영
             if (newMeaning !== undefined) wordData.meaning = newMeaning;
             if (newExplanation !== undefined) wordData.explanation = newExplanation;
             if (newWord !== undefined) wordData.word = newWord;
@@ -414,6 +421,7 @@ export const api = {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
+                // originalWord로 인덱스 찾기 (객체 참조가 유지되므로 인덱스로 접근)
                 const targetIndex = parsedCache.words.findIndex(w => w.index === wordData.index);
                 if (targetIndex !== -1) {
                     parsedCache.words[targetIndex] = wordData;
@@ -425,7 +433,7 @@ export const api = {
         }
     },
 
-    // [추가됨] 단어 삭제
+    // 2. [추가] 단어 삭제
     async deleteWord(wordData) {
         if (!wordData || !wordData.word) return;
 
@@ -436,6 +444,7 @@ export const api = {
             fetch(scriptUrl.toString()).catch(e => console.error(e));
         }
 
+        // 로컬 삭제
         state.wordList = state.wordList.filter(w => w.word !== wordData.word);
         try {
             const cachedData = localStorage.getItem('wordListCache');
@@ -447,16 +456,23 @@ export const api = {
         } catch(e) {}
     },
 
-    // [추가됨] 새 단어 생성
+    // 3. [추가] 새 단어 생성
     async createWord(currentWordData) {
         const tempWord = "New Word " + Date.now().toString().slice(-4);
-        const newIndex = currentWordData ? currentWordData.index + 0.5 : state.wordList.length;
+        const newIndex = currentWordData ? currentWordData.index + 0.5 : state.wordList.length; // 임시 인덱스
 
+        // GAS 요청
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
             if(currentWordData) scriptUrl.searchParams.append('current_word', currentWordData.word);
-            fetch(scriptUrl.toString()).then(r=>r.json());
+            
+            // 비동기로 처리
+            fetch(scriptUrl.toString()).then(r=>r.json()).then(d=>{
+                if(d.success && d.newWord) {
+                    // 실제 생성된 이름으로 업데이트 필요하면 여기서 처리 (생략)
+                }
+            });
         }
 
         const newObj = {
@@ -470,6 +486,7 @@ export const api = {
             AISample: null
         };
 
+        // 현재 위치 뒤에 삽입
         const insertIdx = state.wordList.findIndex(w => w === currentWordData);
         if (insertIdx !== -1) {
             state.wordList.splice(insertIdx + 1, 0, newObj);
