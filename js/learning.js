@@ -671,9 +671,7 @@ export const learningMode = {
         const swipeThreshold = 50;
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
             this.navigate(deltaX > 0 ? -1 : 1);
-        } else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
-            this.handleFlip();
-        }
+        } 
         this.state.touchStartX = this.state.touchStartY = 0;
     },
     updateProgressBar(index) {
