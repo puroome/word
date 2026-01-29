@@ -287,7 +287,7 @@ export const learningMode = {
         
         this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
-        this.elements.explanationContainer.classList.toggle('hidden', !wordData.explanation?.trim());
+        this.elements.explanationContainer.classList.remove('hidden');
 
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
         const sampleImgUrl = 'images/cat-delivery.png';
