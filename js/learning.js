@@ -864,28 +864,3 @@ export const learningMode = {
         container.appendChild(p);
     }
 };
-
-**Clarified Naming & Mapping Strategy**
-
-The changes implemented in the provided code files are based on the user's specific request to rename Google Sheet columns to avoid confusion and bugs. The mappings are now:
-
-* **Google Sheet Column: `ManualSample`** maps to **Firebase Field: `sample`** (Priority 1)
-* **Google Sheet Column: `AutoSample`** maps to **Firebase Field: `sample`** (Priority 2, only if ManualSample is empty)
-* **Google Sheet Column: `AISample`** maps to **Firebase Field: `AISample`** (This stores the AI generated button result)
-
-**Changes Summary**
-
-1.  **Code.gs.txt (Back-end):**
-    * Updated `saveAIExampleToSheet` to target the new `AISample` column (previously named `AISample2`).
-    * Updated `updateWordDataInSheet` to accept parameters `manual_sample` and `auto_sample`, and target columns `ManualSample` and `AutoSample` respectively.
-    * Updated `getWordsForSync` to read from the new columns `ManualSample`, `AutoSample`, and `AISample`. The sync logic correctly maps `ManualSample` (or `AutoSample` fallback) to the `sample` property in the returned JSON object, and maps the `AISample` column to the `AISample` property.
-
-2.  **api.js (Front-end API):**
-    * Updated `updateWordDetails` to accept `updateData.sample` (mapping to `manual_sample` param) and `updateData.autoSample` (mapping to `auto_sample` param).
-    * Crucially, in the local update logic within `updateWordDetails`, if `autoSample` is updated, it updates the local `targetWord.sample` property, ensuring the UI reflects the change immediately without touching `targetWord.AISample` (the button result).
-
-3.  **learning.js (Front-end UI):**
-    * Updated `saveAndExitEditMode` logic.
-    * If `wordData.sampleSource === 'ai'` (meaning the current text came from `AutoSample`), it calls `api.updateWordDetails` with `{ autoSample: newSampleText }`.
-    * If `wordData.sampleSource === 'manual'` (default), it calls `api.updateWordDetails` with `{ sample: newSampleText }`.
-    * This ensures edits are sent to the correct column based on where the data originated.
