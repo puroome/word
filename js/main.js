@@ -237,11 +237,12 @@ const app = {
             const target = e.target;
             const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
             const isCustomContextMenu = target.closest('#word-context-menu');
-            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
+            // 편집 메뉴들 예외 처리
             const isEditContextMenu = target.closest('#edit-context-menu');
-            const isEditTrigger = target.closest('#meaning-container, #explanation-container');
+            const isActionContextMenu = target.closest('#action-context-menu');
+            const isEditTrigger = target.closest('#meaning-container, #explanation-container, #word-header, #learning-card-back');
             
-            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
+            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isActionContextMenu && !isEditTrigger) {
                 e.preventDefault();
             }
         });
@@ -304,7 +305,6 @@ const app = {
     async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
         
-        // [수정됨] 화면 전환 시 일단 새로고침 버튼 숨김 (기본 초기화)
         if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
 
         this.elements.selectionScreen.classList.add('hidden');
@@ -323,7 +323,6 @@ const app = {
         const showCommonButtons = () => {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.ttsToggleBtn.classList.remove('hidden');
-            // 학습 모드 등에서는 새로고침 버튼 안 보임 (TTS 버튼이 대신 함)
         };
 
         if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode)) {
@@ -368,7 +367,6 @@ const app = {
             this.elements.dashboardContainer.classList.remove('hidden');
             dashboard.render();
         } else {
-            // [수정됨] 첫 화면(selection)에서만 새로고침 버튼 표시
             this.elements.selectionScreen.classList.remove('hidden');
             this.elements.logoutBtn.classList.remove('hidden');
             
@@ -382,7 +380,6 @@ const app = {
     },
     async forceReload() {
         this.elements.globalLoader.classList.remove('hidden');
-        // refreshBtn도 비활성화 대상에 포함
         const elementsToDisable = [
             this.elements.refreshBtn, 
             this.elements.selectDashboardBtn, 
