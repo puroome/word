@@ -32,7 +32,7 @@ export const learningMode = {
             appContainer: document.getElementById('learning-app-container'),
             cardBack: document.getElementById('learning-card-back'),
             wordDisplay: document.getElementById('word-display'),
-            wordHeader: document.getElementById('word-header'), // 추가됨
+            wordHeader: document.getElementById('word-header'),
             meaningDisplay: document.getElementById('meaning-display'),
             explanationDisplay: document.getElementById('explanation-display'),
             meaningContainer: document.getElementById('meaning-container'),
@@ -52,7 +52,7 @@ export const learningMode = {
             favoriteIcon: document.getElementById('favorite-icon'),
             editContextBtn: document.getElementById('edit-context-btn'),
             
-            // [추가됨] 배경 우클릭 메뉴 및 삭제 모달 요소
+            // 배경 우클릭 메뉴 및 삭제 모달 요소
             actionContextMenu: document.getElementById('action-context-menu'),
             createCardBtn: document.getElementById('create-card-btn'),
             deleteCardBtn: document.getElementById('delete-card-btn'),
@@ -90,10 +90,10 @@ export const learningMode = {
         });
         
         // -----------------------------------------------------------
-        // [수정] 우클릭 이벤트 분리 및 편집 모드 진입
+        // [수정 및 정리] 우클릭 이벤트 핸들링
         // -----------------------------------------------------------
 
-        // 1. 표제어 텍스트 자체(h1) 우클릭 -> 사전 검색 메뉴 (기존 유지)
+        // 1. 표제어 텍스트(h1) 우클릭 -> 사전 검색 메뉴
         this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
             if (this.state.isEditing) return;
             const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -120,30 +120,35 @@ export const learningMode = {
             e.stopPropagation();
             this.handleEditContextMenu(e, 'back');
         });
-        // 예문 카드 전체 영역에도 뒷면 편집
         this.elements.cardBack.addEventListener('contextmenu', (e) => {
              if (this.state.isEditing) return;
-             // 혹시라도 인터랙티브 단어를 클릭했다면 무시
-             if(e.target.closest('.interactive-word')) return;
+             if(e.target.closest('.interactive-word')) return; // 인터랙티브 단어는 제외
              this.handleEditContextMenu(e, 'back');
         });
 
-        // 5. 배경 우클릭 -> 카드 생성/삭제 메뉴
-        // appContainer 내부이지만 카드(front/back) 밖인 영역
-        this.elements.appContainer.addEventListener('contextmenu', (e) => {
-            if (!e.target.closest('#learning-card-front') && !e.target.closest('#learning-card-back')) {
-                this.handleActionContextMenu(e);
+        // 5. [수정됨] 배경 우클릭 -> 카드 생성/삭제 메뉴
+        // document 전체에 이벤트를 걸되, 조건을 엄격하게 체크하여 다른 모드에서 뜨지 않도록 함
+        document.addEventListener('contextmenu', (e) => {
+            // (1) 현재 학습 모드 화면(appContainer)이 숨겨져 있으면 무시 (대시보드, 퀴즈, 시작화면 등)
+            if (this.elements.appContainer.classList.contains('hidden')) return;
+            // (2) 혹시라도 전체 컨테이너가 숨겨져 있어도 무시
+            if (document.getElementById('learning-mode-container').classList.contains('hidden')) return;
+
+            // (3) 카드 내부(앞면/뒷면)나 버튼, 기존 메뉴들을 클릭한 경우 무시
+            if (e.target.closest('#learning-card-front') || 
+                e.target.closest('#learning-card-back') || 
+                e.target.closest('.fixed-buttons') ||
+                e.target.closest('#word-context-menu') ||
+                e.target.closest('#edit-context-menu') ||
+                e.target.closest('#action-context-menu')) {
+                return;
             }
-        });
-        // 전체 래퍼에서도 처리 (카드와 고양이 사이 빈공간 등)
-        document.getElementById('app-wrapper').addEventListener('contextmenu', (e) => {
-             // learning-app-container 내부가 아니거나, 고양이 버튼 근처가 아니면
-             if (!e.target.closest('#learning-app-container') && !e.target.closest('.fixed-buttons')) {
-                 this.handleActionContextMenu(e);
-             }
+
+            // 위 조건들을 통과한 경우(배경 빈 공간)에만 메뉴 표시
+            this.handleActionContextMenu(e);
         });
 
-        // 6. 편집 메뉴 버튼 클릭 (편집 진입)
+        // 6. 편집 메뉴 버튼 클릭
         this.elements.editContextBtn.addEventListener('click', () => {
             const side = this.elements.editContextBtn.dataset.side || 'front';
             if (side === 'front') this.enterFrontEditMode();
@@ -165,7 +170,6 @@ export const learningMode = {
             if (!e.target.closest('#action-context-menu')) this.hideActionMenu();
         });
 
-        // ... (기존 이벤트 리스너들) ...
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
         document.addEventListener('touchend', this.handleTouchEnd.bind(this));
@@ -177,7 +181,6 @@ export const learningMode = {
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
     },
 
-    // [편집 메뉴 표시]
     handleEditContextMenu(e, side) {
         if (this.state.isEditing) return;
         e.preventDefault();
@@ -185,31 +188,40 @@ export const learningMode = {
         ui.showEditContextMenu(e);
     },
 
-    // [배경 메뉴 표시]
     handleActionContextMenu(e) {
         if (this.state.isEditing) return;
         e.preventDefault();
         const menu = this.elements.actionContextMenu;
         menu.classList.remove('hidden');
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
+        // 위치 조정 (화면 밖으로 나가지 않도록)
+        let x = e.clientX;
+        let y = e.clientY;
+        const menuRect = menu.getBoundingClientRect(); // 처음엔 숨겨져 있어서 정확하지 않을 수 있으나 일단 시도
+        
+        // requestAnimationFrame으로 보여진 직후 위치 보정
+        requestAnimationFrame(() => {
+             const rect = menu.getBoundingClientRect();
+             if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 10;
+             if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 10;
+             menu.style.left = `${x}px`;
+             menu.style.top = `${y}px`;
+        });
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
     },
     hideActionMenu() {
         this.elements.actionContextMenu.classList.add('hidden');
     },
 
-    // [1. 앞면 편집 모드] Word(POS), Meaning, Explanation
     async enterFrontEditMode() {
         this.state.isEditing = true;
         this.state.editSide = 'front';
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
-        // Word + POS 조합
         const posText = wordData.pos ? ` [${wordData.pos}]` : '';
         const wordValue = `${wordData.word}${posText}`;
         
         this.elements.wordDisplay.innerHTML = `<input type="text" id="edit-word-input" class="w-full text-center font-bold bg-white border-b-2 border-blue-500 focus:outline-none" style="font-size:inherit;" value="${wordValue}">`;
-        
         this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3">${wordData.meaning || ""}</textarea>`;
         this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5">${wordData.explanation || ""}</textarea>`;
 
@@ -217,7 +229,6 @@ export const learningMode = {
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    // [2. 뒷면 편집 모드] Sample (AISample)
     async enterBackEditMode() {
         this.state.isEditing = true;
         this.state.editSide = 'back';
@@ -236,7 +247,6 @@ export const learningMode = {
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    // [3. 저장 및 종료]
     async saveAndExitEditMode() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
@@ -270,7 +280,6 @@ export const learningMode = {
         this.displayWord(this.state.currentIndex);
     },
 
-    // [4. 카드 삭제]
     confirmDeleteCard() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         this.elements.deleteTargetWord.textContent = wordData.word;
@@ -294,7 +303,6 @@ export const learningMode = {
         }
     },
 
-    // [5. 새 카드 생성]
     async createNewCard() {
         const currentData = this.state.currentWordList[this.state.currentIndex];
         
@@ -338,7 +346,6 @@ export const learningMode = {
         }
     },
     
-    // ... (나머지 start, reset, navigate 등 기존 함수 유지) ...
     async displayWord(index, silent = false) {
         this.state.isEditing = false;
         this.updateProgressBar(index);
@@ -352,7 +359,7 @@ export const learningMode = {
             } catch (e) { console.error(e); }
         }
 
-        this.elements.wordDisplay.innerHTML = wordData.word; // input 태그 제거 및 텍스트 복귀
+        this.elements.wordDisplay.innerHTML = wordData.word;
         this.adjustWordFontSize();
         
         if (wordData.word && !silent) {
@@ -371,7 +378,6 @@ export const learningMode = {
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
     
-    // ... (adjustWordFontSize, navigate, navigateBackToBack 등등... 원본 파일 내용 유지)
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -591,6 +597,7 @@ export const learningMode = {
         }
     },
     updateFavoriteIcon(isFavorite) {
+        this.elements.favoriteIcon.classList.remove('text-gray-400');
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
         this.elements.favoriteIcon.classList.toggle('text-white', !isFavorite);
     },
