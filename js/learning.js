@@ -524,17 +524,11 @@ export const learningMode = {
             btn.innerHTML = `<span class="animate-spin">⏳</span> 생성 중...`;
             
             try {
-                // ▼▼▼ 숫자 2가 확실하게 넘어갑니다! ▼▼▼
                 const newSentences = await api.generateAIExamples(wordData, wordData.meaning, 2);
-                
                 const fullText = newSentences.join('\n');
                 wordData.AISample = { en: fullText, ko: "" };
-                
-                // ▼▼▼ 단어 객체 전체를 넘겨서 저장 ▼▼▼
                 api.saveAISamplesToSheet(wordData, fullText);
-
                 this.appendAIGenButton(container.parentNode, wordData);
-
             } catch (err) {
                 console.error(err);
                 btn.innerHTML = `⚠️ 실패 (다시 시도)`;
@@ -544,49 +538,43 @@ export const learningMode = {
         container.appendChild(btn);
     },
 
-// [최종 수정] 이모지와 텍스트의 수평 중심선을 맞춘 렌더링 함수
-renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-    const wrapper = document.createElement('div');
-    // items-center를 추가하여 자식 요소들의 세로 중앙을 맞춥니다.
-    wrapper.className = "flex items-center gap-2 py-1 mb-1 w-full"; 
+    renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
+        const wrapper = document.createElement('div');
+        // 로봇 얼굴 중심과 텍스트 첫 줄 수평 정렬 보정
+        wrapper.className = "flex items-start gap-2 py-1 mb-1 w-full"; 
 
-    // 1. 로봇 아이콘 버튼
-    const botIcon = document.createElement('button');
-    // flex와 items-center를 주어 이모지 자체가 버튼 정중앙에 오도록 합니다.
-    botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6";
-    botIcon.innerHTML = "🤖";
-    botIcon.title = "이 예문만 다시 만들기";
-    
-    botIcon.onclick = async () => {
-        botIcon.innerHTML = `<span class="animate-spin text-xs">⏳</span>`;
-        botIcon.disabled = true;
+        const botIcon = document.createElement('button');
+        // mt-[2.5px]를 통해 텍스트 첫 줄 수평 중앙 정렬
+        botIcon.className = "flex items-center justify-center text-base hover:scale-110 transition-transform cursor-pointer flex-shrink-0 w-6 h-6 mt-[2.5px]";
+        botIcon.innerHTML = "🤖";
+        botIcon.title = "이 예문만 다시 만들기";
+        
+        botIcon.onclick = async () => {
+            botIcon.innerHTML = `<span class="animate-spin text-xs">⏳</span>`;
+            botIcon.disabled = true;
 
-        try {
-            const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
-            allSentences[index] = newSentence;
-            const fullText = allSentences.join('\n');
-            wordData.AISample = { en: fullText, ko: "" };
-            
-            api.saveAISamplesToSheet(wordData, fullText);
-            this.appendAIGenButton(container.parentNode, wordData);
+            try {
+                const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
+                allSentences[index] = newSentence;
+                const fullText = allSentences.join('\n');
+                wordData.AISample = { en: fullText, ko: "" };
+                api.saveAISamplesToSheet(wordData, fullText);
+                this.appendAIGenButton(container.parentNode, wordData);
+            } catch (err) {
+                console.error(err);
+                botIcon.innerHTML = "⚠️";
+                botIcon.disabled = false;
+                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
+            }
+        };
+        wrapper.appendChild(botIcon);
 
-        } catch (err) {
-            console.error(err);
-            botIcon.innerHTML = "⚠️";
-            botIcon.disabled = false;
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
-        }
-    };
-    wrapper.appendChild(botIcon);
-
-    // 2. 예문 텍스트 영역
-    const textDiv = document.createElement('div');
-    // leading-normal로 줄 높이를 표준화하여 정렬이 어긋나지 않게 합니다.
-    textDiv.className = "flex-1 text-left text-gray-700 leading-normal"; 
-    
-    ui.displaySentences([sentenceText], textDiv);
-    
-    wrapper.appendChild(textDiv);
-    container.appendChild(wrapper);
-}
+        const textDiv = document.createElement('div');
+        // 기존 예문과 동일한 폰트/간격 유지
+        textDiv.className = "flex-1 text-left text-gray-700 leading-relaxed"; 
+        ui.displaySentences([sentenceText], textDiv);
+        
+        wrapper.appendChild(textDiv);
+        container.appendChild(wrapper);
+    }
 };
