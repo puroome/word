@@ -127,14 +127,11 @@ export const learningMode = {
         });
 
         // 5. [수정됨] 배경 우클릭 -> 카드 생성/삭제 메뉴
-        // document 전체에 이벤트를 걸되, 조건을 엄격하게 체크하여 다른 모드에서 뜨지 않도록 함
         document.addEventListener('contextmenu', (e) => {
-            // (1) 현재 학습 모드 화면(appContainer)이 숨겨져 있으면 무시 (대시보드, 퀴즈, 시작화면 등)
+            // (1) 현재 학습 모드 카드 화면이 숨겨져 있으면 무시
             if (this.elements.appContainer.classList.contains('hidden')) return;
-            // (2) 혹시라도 전체 컨테이너가 숨겨져 있어도 무시
-            if (document.getElementById('learning-mode-container').classList.contains('hidden')) return;
-
-            // (3) 카드 내부(앞면/뒷면)나 버튼, 기존 메뉴들을 클릭한 경우 무시
+            
+            // (2) 카드 내부나 버튼 등을 클릭한 경우 무시
             if (e.target.closest('#learning-card-front') || 
                 e.target.closest('#learning-card-back') || 
                 e.target.closest('.fixed-buttons') ||
@@ -193,12 +190,10 @@ export const learningMode = {
         e.preventDefault();
         const menu = this.elements.actionContextMenu;
         menu.classList.remove('hidden');
-        // 위치 조정 (화면 밖으로 나가지 않도록)
+        
         let x = e.clientX;
         let y = e.clientY;
-        const menuRect = menu.getBoundingClientRect(); // 처음엔 숨겨져 있어서 정확하지 않을 수 있으나 일단 시도
         
-        // requestAnimationFrame으로 보여진 직후 위치 보정
         requestAnimationFrame(() => {
              const rect = menu.getBoundingClientRect();
              if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 10;
