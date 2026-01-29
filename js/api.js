@@ -9,7 +9,7 @@ export const api = {
         db = firestoreInstance;
         database = realtimeDbInstance;
     },
-
+    // ... loadWordList, speak, translate 등 기존 함수는 그대로 유지 (생략) ...
     async loadWordList(force = false) {
         if (force) {
             localStorage.removeItem('wordListCache');
@@ -424,9 +424,9 @@ export const api = {
         }
     },
 
-    // [수정됨] 새 단어 생성 (중간 삽입 + Index 처리)
+    // [수정됨] createWord: already inserted locally by learning.js draft logic
     async createWord(wordData, afterWord) {
-        // 1. GAS에 요청 (after_word 파라미터 추가)
+        // 1. GAS로 생성 요청 (after_word 포함)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
@@ -434,7 +434,7 @@ export const api = {
             scriptUrl.searchParams.append('pos', wordData.pos || "");
             scriptUrl.searchParams.append('meaning', wordData.meaning || "");
             scriptUrl.searchParams.append('explanation', wordData.explanation || "");
-            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord); // 이 단어 뒤에
+            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord);
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -445,69 +445,27 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 로컬 데이터에 중간 삽입
-        let insertIndex = state.wordList.length; // 기본값: 맨 뒤
-        let prevIndexVal = 0;
-
-        if (afterWord) {
-            const idx = state.wordList.findIndex(w => w.word === afterWord);
-            if (idx !== -1) {
-                insertIndex = idx + 1;
-                prevIndexVal = state.wordList[idx].index;
-            } else if (state.wordList.length > 0) {
-                prevIndexVal = Math.max(...state.wordList.map(w => w.index));
-            }
-        } else if (state.wordList.length > 0) {
-            prevIndexVal = Math.max(...state.wordList.map(w => w.index));
-        }
-
-        const newWordObj = {
-            index: prevIndexVal + 1, // 로컬 정렬용 (임시)
-            word: wordData.word,
-            pos: wordData.pos || "",
-            meaning: wordData.meaning || "",
-            explanation: wordData.explanation || "",
-            sample: "",
-            sampleSource: "manual",
-            AISample: null
-        };
-        
-        // 중간 삽입
-        state.wordList.splice(insertIndex, 0, newWordObj);
-        
-        // 뒤쪽 요소들 Index 밀기 (로컬 정렬 유지용)
-        for (let i = insertIndex + 1; i < state.wordList.length; i++) {
-             state.wordList[i].index += 1;
-        }
-
-        // 3. 로컬 캐시 업데이트
-         try {
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                // 캐시 데이터도 동일하게 삽입
-                let cacheInsertIdx = parsedCache.words.length;
-                if (afterWord) {
-                    const cIdx = parsedCache.words.findIndex(w => w.word === afterWord);
-                    if (cIdx !== -1) cacheInsertIdx = cIdx + 1;
-                }
-                parsedCache.words.splice(cacheInsertIdx, 0, newWordObj);
-                // 뒤쪽 인덱스 보정
-                for(let i = cacheInsertIdx + 1; i < parsedCache.words.length; i++) {
-                    parsedCache.words[i].index += 1;
-                }
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-            }
-        } catch (e) {}
-
-        // 4. Firebase (단순 생성, 순서는 시트 동기화 시 정렬됨)
+        // 2. Firebase 저장 (키 기반)
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
+            // 로컬에 있는 것과 동일한 구조로 저장 (index 값 등은 로컬 기준 임시값일 수 있음)
+            // 실제 index는 전체 재동기화 시 시트 기준으로 맞춰짐
+            const newWordObj = { ...wordData };
+            delete newWordObj.isNew; // 플래그 제거 보장
+
             const updates = {};
             updates[`/vocabulary/${safeKey}`] = newWordObj;
             update(ref(database), updates).catch(e => console.warn(e));
         }
+        
+        // 3. 캐시 업데이트
+        // 이미 state.wordList에는 learning.js에서 draft를 넣어놨고 내용을 수정했으므로,
+        // 여기서는 localStorage 캐시만 state.wordList 상태로 갱신해주면 됨.
+         try {
+             const cachePayload = { timestamp: Date.now(), words: state.wordList };
+             localStorage.setItem('wordListCache', JSON.stringify(cachePayload));
+        } catch (e) {}
     },
 
     async deleteWord(word) {
