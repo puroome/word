@@ -321,6 +321,7 @@ export const api = {
         }
     },
 
+    // [수정] AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
@@ -366,9 +367,9 @@ export const api = {
         }
     },
 
-    // [수정됨] 단어 정보 수정
+    // [수정] 단어 정보 수정 (ManualSample, AutoSample 구분 처리)
     async updateWordDetails(originalWord, updateData) {
-        // 1. Google Sheets 저장
+        // 1. Google Sheets 저장 (백엔드)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'update_word_data');
@@ -378,8 +379,10 @@ export const api = {
             if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
             if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
-            if (updateData.sample !== undefined) scriptUrl.searchParams.append('sample', updateData.sample);
-            if (updateData.aiSample !== undefined) scriptUrl.searchParams.append('ai_sample', updateData.aiSample);
+            
+            // [중요] 파라미터 이름 변경 (manual_sample, auto_sample)
+            if (updateData.sample !== undefined) scriptUrl.searchParams.append('manual_sample', updateData.sample);
+            if (updateData.autoSample !== undefined) scriptUrl.searchParams.append('auto_sample', updateData.autoSample);
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -390,7 +393,7 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 로컬 데이터 업데이트
+        // 2. 로컬 메모리 & 캐시 업데이트 (프론트엔드)
         const updateLocalList = (list) => {
              const targetIndex = list.findIndex(w => w.word === originalWord);
              if (targetIndex !== -1) {
@@ -401,14 +404,15 @@ export const api = {
                 if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
                 if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
                 
+                // ManualSample 수정 -> sample 업데이트
                 if (updateData.sample !== undefined) {
                      targetWord.sample = updateData.sample;
                      targetWord.sampleSource = 'manual';
                 }
                 
-                // [핵심 수정] AISample이 수정되면 메인 예문(sample)을 업데이트해야 함
-                if (updateData.aiSample !== undefined) {
-                     targetWord.sample = updateData.aiSample; // AISample2가 아닌 sample을 업데이트
+                // AutoSample 수정 -> sample 업데이트
+                if (updateData.autoSample !== undefined) {
+                     targetWord.sample = updateData.autoSample;
                      targetWord.sampleSource = 'ai';
                 }
              }
@@ -428,6 +432,7 @@ export const api = {
         }
     },
 
+    // [수정] 새 단어 생성
     async createWord(wordData, afterWord) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
@@ -447,6 +452,7 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
+        // 로컬 데이터에 중간 삽입
         let insertIndex = state.wordList.length;
         let prevIndexVal = 0;
 
@@ -462,7 +468,6 @@ export const api = {
             prevIndexVal = Math.max(...state.wordList.map(w => w.index));
         }
 
-        // 로컬 정렬용 인덱스 계산
         const localNewWordObj = {
             index: prevIndexVal + 1,
             word: wordData.word,
@@ -474,55 +479,30 @@ export const api = {
             AISample: null
         };
         
-        // 메모리에 삽입 (이미 learning.js에서 draft로 처리되었을 수 있지만, 여기서는 API 호출 흐름상 확정 처리)
-        // 주의: learning.js에서 이미 splice 했다면 중복 생성을 막아야 하지만, 
-        // createNewCard에서 임시 객체를 만들고, saveAndExitEditMode에서 이 함수를 부를 때
-        // save 로직에서 draft 객체를 실제 데이터로 업데이트하는 방식을 사용했으므로
-        // 여기서는 '서버 동기화' 및 '캐시'에 집중합니다.
-        // 다만, api.js가 독립적으로 쓰일 경우를 대비해 로컬 리스트 갱신 로직은 유지하되,
-        // 중복 방지를 위해 기존 draft가 있다면 교체하는 식으로 처리하는 게 안전합니다.
-        // 하지만 현재 구조상 learning.js가 플래그를 관리하므로 단순화하여 덮어쓰기/삽입 로직을 유지합니다.
+        state.wordList.splice(insertIndex, 0, localNewWordObj);
         
-        // 중복 삽입 방지를 위한 체크 (이미 해당 단어가 해당 위치 근처에 있는지)
-        // 여기서는 안전하게 로컬 리스트 조작을 생략하고(이미 UI단에서 했으므로), 캐시와 DB에만 집중해도 됩니다.
-        // 하지만 데이터 무결성을 위해 아래 로직 유지.
-        
-        // *학습 모드에서 이미 넣은 카드를 다시 넣지 않도록 체크*
-        const existingIdx = state.wordList.findIndex(w => w.word === wordData.word);
-        if (existingIdx === -1) {
-             state.wordList.splice(insertIndex, 0, localNewWordObj);
-             for (let i = insertIndex + 1; i < state.wordList.length; i++) {
-                 state.wordList[i].index += 1;
-            }
-        } else {
-            // 이미 존재한다면(Draft 상태 등) 정보를 업데이트
-            // insertIndex 로직 무시하고 해당 객체 업데이트
-            Object.assign(state.wordList[existingIdx], localNewWordObj);
+        for (let i = insertIndex + 1; i < state.wordList.length; i++) {
+             state.wordList[i].index += 1;
         }
 
          try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
-                // 캐시에도 동일 로직 적용
-                const cIdx = parsedCache.words.findIndex(w => w.word === wordData.word);
-                if (cIdx === -1) {
-                    let cacheInsertIdx = parsedCache.words.length;
-                    if (afterWord) {
-                        const target = parsedCache.words.findIndex(w => w.word === afterWord);
-                        if (target !== -1) cacheInsertIdx = target + 1;
-                    }
-                    parsedCache.words.splice(cacheInsertIdx, 0, localNewWordObj);
-                    for(let i = cacheInsertIdx + 1; i < parsedCache.words.length; i++) {
-                        parsedCache.words[i].index += 1;
-                    }
-                } else {
-                    Object.assign(parsedCache.words[cIdx], localNewWordObj);
+                let cacheInsertIdx = parsedCache.words.length;
+                if (afterWord) {
+                    const cIdx = parsedCache.words.findIndex(w => w.word === afterWord);
+                    if (cIdx !== -1) cacheInsertIdx = cIdx + 1;
+                }
+                parsedCache.words.splice(cacheInsertIdx, 0, localNewWordObj);
+                for(let i = cacheInsertIdx + 1; i < parsedCache.words.length; i++) {
+                    parsedCache.words[i].index += 1;
                 }
                 localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
             }
         } catch (e) {}
 
+        // Firebase 저장 (Index 포함)
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
