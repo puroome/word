@@ -864,7 +864,6 @@ export const learningMode = {
         container.appendChild(p);
     }
 };
-}
 
 **Clarified Naming & Mapping Strategy**
 
