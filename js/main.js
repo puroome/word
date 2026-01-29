@@ -1,6 +1,6 @@
 import { config, state } from './config.js';
 import { utils, audioCache, translationCache, imageDBCache } from './utils.js';
-import { api } from './api.js';
+import { api } from './api.js?v=fix1';
 import { ui } from './ui.js';
 import { learningMode } from './learning.js';
 import { quizMode } from './quiz.js';
