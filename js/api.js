@@ -366,15 +366,26 @@ export const api = {
         }
     },
 
-    // [추가됨] 단어 뜻/설명 수정 및 동기화 (시트 + Firebase + 로컬캐시)
-    async updateWordDetails(wordData, newMeaning, newExplanation) {
-        // 1. Google Sheets 저장 (백그라운드)
+    // [수정됨] 단어 뜻/설명/단어/품사/예문 수정 및 동기화 (시트 + Firebase + 로컬캐시)
+    async updateWordDetails(wordData, newMeaning, newExplanation, newWord, newPos, newSample) {
+        const originalWord = wordData.word;
+        
+        // 1. Google Sheets 저장
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('word', wordData.word);
+            scriptUrl.searchParams.append('original_word', originalWord);
+            
+            if (newWord !== undefined) scriptUrl.searchParams.append('new_word', newWord);
+            if (newPos !== undefined) scriptUrl.searchParams.append('new_pos', newPos);
             if (newMeaning !== undefined) scriptUrl.searchParams.append('meaning', newMeaning);
             if (newExplanation !== undefined) scriptUrl.searchParams.append('explanation', newExplanation);
+            
+            if (newSample !== undefined) {
+                scriptUrl.searchParams.append('sample', newSample);
+                const target = (wordData.sampleSource === 'ai') ? 'ai' : 'manual';
+                scriptUrl.searchParams.append('sample_target', target);
+            }
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -385,43 +396,87 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        const updates = {};
-        if (newMeaning !== undefined) updates.meaning = newMeaning;
-        if (newExplanation !== undefined) updates.explanation = newExplanation;
-
-        // 2. Firebase 저장
-        if (database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
-            const firebaseUpdates = {};
-            // Firebase 경로에 맞게 매핑
-            if (newMeaning !== undefined) firebaseUpdates[`/vocabulary/${safeKey}/meaning`] = newMeaning;
-            if (newExplanation !== undefined) firebaseUpdates[`/vocabulary/${safeKey}/explanation`] = newExplanation;
-
-            update(ref(database), firebaseUpdates).then(() => {
-                console.log("✅ Firebase 수정 완료");
-            }).catch(e => console.warn("Firebase 수정 실패:", e));
-        }
-
-        // 3. 로컬 캐시 및 메모리 업데이트
+        // 2. Firebase 및 로컬 캐시 업데이트
         try {
-            // 메모리 상태 즉시 반영
             if (newMeaning !== undefined) wordData.meaning = newMeaning;
             if (newExplanation !== undefined) wordData.explanation = newExplanation;
+            if (newWord !== undefined) wordData.word = newWord;
+            if (newPos !== undefined) wordData.pos = newPos;
+            if (newSample !== undefined) {
+                if (wordData.sampleSource === 'ai' && wordData.AISample) {
+                    wordData.AISample.en = newSample;
+                } else {
+                    wordData.sample = newSample;
+                    wordData.sampleSource = 'manual';
+                }
+            }
 
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
-                const targetIndex = parsedCache.words.findIndex(w => w.word === wordData.word);
+                const targetIndex = parsedCache.words.findIndex(w => w.index === wordData.index);
                 if (targetIndex !== -1) {
-                    if (newMeaning !== undefined) parsedCache.words[targetIndex].meaning = newMeaning;
-                    if (newExplanation !== undefined) parsedCache.words[targetIndex].explanation = newExplanation;
+                    parsedCache.words[targetIndex] = wordData;
                     localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                    console.log("✅ 로컬 캐시 수정 완료");
                 }
             }
         } catch (e) {
             console.error("로컬 캐시 수정 실패:", e);
         }
+    },
+
+    // [추가됨] 단어 삭제
+    async deleteWord(wordData) {
+        if (!wordData || !wordData.word) return;
+
+        if (config.SCRIPT_URL) {
+            const scriptUrl = new URL(config.SCRIPT_URL);
+            scriptUrl.searchParams.append('action', 'delete_word');
+            scriptUrl.searchParams.append('word', wordData.word);
+            fetch(scriptUrl.toString()).catch(e => console.error(e));
+        }
+
+        state.wordList = state.wordList.filter(w => w.word !== wordData.word);
+        try {
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                parsedCache.words = parsedCache.words.filter(w => w.word !== wordData.word);
+                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            }
+        } catch(e) {}
+    },
+
+    // [추가됨] 새 단어 생성
+    async createWord(currentWordData) {
+        const tempWord = "New Word " + Date.now().toString().slice(-4);
+        const newIndex = currentWordData ? currentWordData.index + 0.5 : state.wordList.length;
+
+        if (config.SCRIPT_URL) {
+            const scriptUrl = new URL(config.SCRIPT_URL);
+            scriptUrl.searchParams.append('action', 'create_word');
+            if(currentWordData) scriptUrl.searchParams.append('current_word', currentWordData.word);
+            fetch(scriptUrl.toString()).then(r=>r.json());
+        }
+
+        const newObj = {
+            index: newIndex,
+            word: tempWord,
+            pos: "",
+            meaning: "뜻을 입력하세요",
+            explanation: "설명을 입력하세요",
+            sample: "",
+            sampleSource: "manual",
+            AISample: null
+        };
+
+        const insertIdx = state.wordList.findIndex(w => w === currentWordData);
+        if (insertIdx !== -1) {
+            state.wordList.splice(insertIdx + 1, 0, newObj);
+        } else {
+            state.wordList.push(newObj);
+        }
+
+        return newObj;
     }
 };
