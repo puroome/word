@@ -11,6 +11,7 @@ export const api = {
     },
 
     async loadWordList(force = false) {
+        // ... (기존 loadWordList 유지) ...
         if (force) {
             localStorage.removeItem('wordListCache');
             state.isWordListReady = false;
@@ -52,6 +53,8 @@ export const api = {
             throw error;
         }
     },
+    
+    // ... (speak, translate, updateWordStatus, loadUserProgress, fetchDefinition, toggleFavorite, updateStudyTime, getStudyHistory, getQuizHistory, saveQuizHistoryToLocal, syncQuizHistory, syncProgressUpdates, generateAIExamples, saveAISamplesToSheet 기존 유지) ...
 
     async speak(text, contentType = 'word') {
         const voiceSets = {
@@ -366,28 +369,22 @@ export const api = {
         }
     },
 
-    // [수정됨] 단어 상세 정보 수정 (Word, POS, Sample 등 포함)
-    async updateWordDetails(wordData, newMeaning, newExplanation, newWord, newPos, newSample) {
-        const originalWord = wordData.word;
-        
-        // 1. Google Sheets 저장
+    // [수정됨] 단어 정보 수정 (범용: Word, Pos, Meaning, Explanation, Sample)
+    async updateWordDetails(originalWord, updateData) {
+        // updateData: { word, pos, meaning, explanation, sample, aiSample } 중 일부
+
+        // 1. Google Sheets 저장 (백그라운드)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('original_word', originalWord); // 원본 단어로 찾음
+            scriptUrl.searchParams.append('original_word', originalWord);
             
-            if (newWord !== undefined) scriptUrl.searchParams.append('new_word', newWord);
-            if (newPos !== undefined) scriptUrl.searchParams.append('new_pos', newPos);
-            if (newMeaning !== undefined) scriptUrl.searchParams.append('meaning', newMeaning);
-            if (newExplanation !== undefined) scriptUrl.searchParams.append('explanation', newExplanation);
-            
-            // Sample 수정인 경우
-            if (newSample !== undefined) {
-                scriptUrl.searchParams.append('sample', newSample);
-                // 기존 소스가 없거나 'none'이면 'manual'로 간주, AI면 'ai'로 설정
-                const target = (wordData.sampleSource === 'ai') ? 'ai' : 'manual';
-                scriptUrl.searchParams.append('sample_target', target);
-            }
+            if (updateData.word !== undefined) scriptUrl.searchParams.append('word', updateData.word);
+            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
+            if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
+            if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
+            if (updateData.sample !== undefined) scriptUrl.searchParams.append('sample', updateData.sample);
+            if (updateData.aiSample !== undefined) scriptUrl.searchParams.append('ai_sample', updateData.aiSample);
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -398,102 +395,145 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. Firebase 및 로컬 캐시 업데이트
-        // Word가 바뀌면 Key도 바뀌어야 하므로 복잡해집니다. 
-        // 여기서는 간단히 로컬 데이터만 즉시 반영하고, Firebase는 시트->Firebase 동기화를 기다리거나 
-        // 단순 필드 업데이트만 수행합니다.
+        // 2. Firebase 저장 & 로컬 캐시 업데이트
+        // Word(Key)가 바뀌는 경우: 백엔드에서 처리되길 기대하지만, 로컬 state는 즉시 갱신해야 함.
+        // 여기서는 Firebase Update를 직접 수행하는 대신, Script가 처리하게 하거나, 
+        // 키 변경시 복잡성 때문에 단순 데이터 갱신만 수행 (Code.gs에서 키 변경시 노드 재생성함)
         
-        try {
-            // 메모리 상태 즉시 반영
-            if (newMeaning !== undefined) wordData.meaning = newMeaning;
-            if (newExplanation !== undefined) wordData.explanation = newExplanation;
-            if (newWord !== undefined) wordData.word = newWord;
-            if (newPos !== undefined) wordData.pos = newPos;
-            if (newSample !== undefined) {
-                if (wordData.sampleSource === 'ai' && wordData.AISample) {
-                    wordData.AISample.en = newSample;
-                } else {
-                    wordData.sample = newSample;
-                    wordData.sampleSource = 'manual';
-                }
+        // 메모리(state.wordList) 즉시 반영
+        const targetIndex = state.wordList.findIndex(w => w.word === originalWord);
+        if (targetIndex !== -1) {
+            const targetWord = state.wordList[targetIndex];
+            if (updateData.word) targetWord.word = updateData.word;
+            if (updateData.pos !== undefined) targetWord.pos = updateData.pos;
+            if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
+            if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
+            if (updateData.sample !== undefined) {
+                 targetWord.sample = updateData.sample;
+                 targetWord.sampleSource = 'manual';
             }
-
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                // originalWord로 인덱스 찾기 (객체 참조가 유지되므로 인덱스로 접근)
-                const targetIndex = parsedCache.words.findIndex(w => w.index === wordData.index);
-                if (targetIndex !== -1) {
-                    parsedCache.words[targetIndex] = wordData;
-                    localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                }
+            if (updateData.aiSample !== undefined) {
+                 if (!targetWord.AISample) targetWord.AISample = {};
+                 targetWord.AISample.en = updateData.aiSample;
+                 targetWord.sampleSource = 'ai';
             }
-        } catch (e) {
-            console.error("로컬 캐시 수정 실패:", e);
-        }
-    },
-
-    // 2. [추가] 단어 삭제
-    async deleteWord(wordData) {
-        if (!wordData || !wordData.word) return;
-
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'delete_word');
-            scriptUrl.searchParams.append('word', wordData.word);
-            fetch(scriptUrl.toString()).catch(e => console.error(e));
         }
 
-        // 로컬 삭제
-        state.wordList = state.wordList.filter(w => w.word !== wordData.word);
+        // 로컬 스토리지 반영
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
-                parsedCache.words = parsedCache.words.filter(w => w.word !== wordData.word);
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                const cacheIndex = parsedCache.words.findIndex(w => w.word === originalWord);
+                if (cacheIndex !== -1) {
+                     // 위와 동일 로직 적용
+                     const target = parsedCache.words[cacheIndex];
+                     if (updateData.word) target.word = updateData.word;
+                     if (updateData.pos !== undefined) target.pos = updateData.pos;
+                     if (updateData.meaning !== undefined) target.meaning = updateData.meaning;
+                     if (updateData.explanation !== undefined) target.explanation = updateData.explanation;
+                     if (updateData.sample !== undefined) {
+                        target.sample = updateData.sample;
+                        target.sampleSource = 'manual';
+                     }
+                     if (updateData.aiSample !== undefined) {
+                         if(!target.AISample) target.AISample = { en: "", ko: ""};
+                         target.AISample.en = updateData.aiSample;
+                     }
+                     localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                }
             }
-        } catch(e) {}
+        } catch (e) {}
     },
 
-    // 3. [추가] 새 단어 생성
-    async createWord(currentWordData) {
-        const tempWord = "New Word " + Date.now().toString().slice(-4);
-        const newIndex = currentWordData ? currentWordData.index + 0.5 : state.wordList.length; // 임시 인덱스
-
-        // GAS 요청
+    // [신규] 새 단어 생성
+    async createWord(wordData) {
+        // wordData: { word, pos, meaning, explanation }
+        
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
-            if(currentWordData) scriptUrl.searchParams.append('current_word', currentWordData.word);
-            
-            // 비동기로 처리
-            fetch(scriptUrl.toString()).then(r=>r.json()).then(d=>{
-                if(d.success && d.newWord) {
-                    // 실제 생성된 이름으로 업데이트 필요하면 여기서 처리 (생략)
-                }
-            });
+            scriptUrl.searchParams.append('word', wordData.word);
+            scriptUrl.searchParams.append('pos', wordData.pos || "");
+            scriptUrl.searchParams.append('meaning', wordData.meaning || "");
+            scriptUrl.searchParams.append('explanation', wordData.explanation || "");
+
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 생성 실패:", d.message);
+                    else console.log("✅ 시트 생성 성공");
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        const newObj = {
-            index: newIndex,
-            word: tempWord,
-            pos: "",
-            meaning: "뜻을 입력하세요",
-            explanation: "설명을 입력하세요",
+        // 로컬 반영
+        const newWordObj = {
+            index: state.wordList.length > 0 ? state.wordList[state.wordList.length - 1].index + 1 : 1,
+            word: wordData.word,
+            pos: wordData.pos || "",
+            meaning: wordData.meaning || "",
+            explanation: wordData.explanation || "",
             sample: "",
-            sampleSource: "manual",
+            sampleSource: "none",
             AISample: null
         };
+        state.wordList.push(newWordObj);
+        
+        // 캐시 반영
+         try {
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                parsedCache.words.push(newWordObj);
+                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            }
+        } catch (e) {}
 
-        // 현재 위치 뒤에 삽입
-        const insertIdx = state.wordList.findIndex(w => w === currentWordData);
-        if (insertIdx !== -1) {
-            state.wordList.splice(insertIdx + 1, 0, newObj);
-        } else {
-            state.wordList.push(newObj);
+        // Firebase에도 직접 put (백엔드와 중복되지만 즉시성을 위해)
+        if (database) {
+            const { ref, update } = window.firebaseSDK;
+            const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
+            const updates = {};
+            updates[`/vocabulary/${safeKey}`] = newWordObj;
+            update(ref(database), updates).catch(e => console.warn(e));
+        }
+    },
+
+    // [신규] 단어 삭제
+    async deleteWord(word) {
+        if (config.SCRIPT_URL) {
+            const scriptUrl = new URL(config.SCRIPT_URL);
+            scriptUrl.searchParams.append('action', 'delete_word');
+            scriptUrl.searchParams.append('word', word);
+            
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 삭제 실패:", d.message);
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        return newObj;
+        // 로컬 삭제
+        state.wordList = state.wordList.filter(w => w.word !== word);
+
+        // 캐시 삭제
+        try {
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                parsedCache.words = parsedCache.words.filter(w => w.word !== word);
+                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            }
+        } catch (e) {}
+
+        // Firebase 삭제
+        if (database) {
+            const { ref, remove } = window.firebaseSDK;
+            const safeKey = word.replace(/[.#$\[\]\/]/g, '_');
+            const wordRef = ref(database, `/vocabulary/${safeKey}`);
+            remove(wordRef).catch(e => console.warn(e));
+        }
     }
 };
