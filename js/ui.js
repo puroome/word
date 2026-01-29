@@ -3,12 +3,11 @@ import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
 
 export const ui = {
+    // ... (createInteractiveFragment, renderExplanationText, displaySentences, showTranslationTooltip, hideTranslationTooltip, showWordContextMenu, hideWordContextMenu, showEditContextMenu, hideEditContextMenu 기존 유지) ...
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
-
         const parts = text.split(/([a-zA-Z0-9'-]+)/g);
-
         parts.forEach(part => {
             if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
                  const span = document.createElement('span');
@@ -212,43 +211,24 @@ export const ui = {
              document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
              this.hideWordContextMenu();
         };
-        
-        document.getElementById('search-daum-context-btn').onclick = () => { 
-            window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); 
-            this.hideWordContextMenu(); 
-        };
-        document.getElementById('search-naver-context-btn').onclick = () => { 
-            window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); 
-            this.hideWordContextMenu(); 
-        };
-        document.getElementById('search-etym-context-btn').onclick = () => { 
-            window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); 
-            this.hideWordContextMenu(); 
-        };
-        document.getElementById('search-longman-context-btn').onclick = () => { 
-            window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); 
-            this.hideWordContextMenu(); 
-        };
+        document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
+        document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
+        document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
+        document.getElementById('search-longman-context-btn').onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); this.hideWordContextMenu(); };
     },
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-
-    // [추가됨] 편집 컨텍스트 메뉴 표시
     showEditContextMenu(event) {
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
-
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
-
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
-
-        // 위치 보정
         requestAnimationFrame(() => {
             const menuRect = menu.getBoundingClientRect();
             let finalX = x;
@@ -257,15 +237,47 @@ export const ui = {
             if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
             if (finalX < 10) finalX = 10;
             if (finalY < 10) finalY = 10;
-
             menu.style.left = `${finalX}px`;
             menu.style.top = `${finalY}px`;
         });
     },
-
-    // [추가됨] 편집 컨텍스트 메뉴 숨김
     hideEditContextMenu() {
         const menu = document.getElementById('edit-context-menu');
         if (menu) menu.classList.add('hidden');
+    },
+    
+    // [신규] 카드 컨텍스트 메뉴 표시
+    showCardContextMenu(event) {
+        const menu = document.getElementById('card-context-menu');
+        if (!menu) return;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
+    },
+    hideCardContextMenu() {
+        const menu = document.getElementById('card-context-menu');
+        if (menu) menu.classList.add('hidden');
+    },
+    
+    // [신규] 삭제 모달 제어
+    showDeleteConfirmModal() {
+        document.getElementById('delete-confirm-modal').classList.remove('hidden');
+    },
+    hideDeleteConfirmModal() {
+        document.getElementById('delete-confirm-modal').classList.add('hidden');
     }
 };
