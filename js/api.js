@@ -282,7 +282,7 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-    // AI 생성 함수 (개수 지정 가능)
+    // ▼▼▼ [수정 1] AI 생성 함수 (개수 지정 가능) ▼▼▼
     async generateAIExamples(wordData, currentMeaning, count = 1) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -322,17 +322,23 @@ export const api = {
         }
     },
 
-    // ▼▼▼ [완전 수정] 3중 저장 (시트 + Firebase + 로컬캐시) ▼▼▼
+    // ▼▼▼ [수정 2] 3중 저장 (시트 + Firebase + 로컬캐시) ▼▼▼
     async saveAISamplesToSheet(wordData, fullEnText) {
-        // 1. 구글 시트로 전송 (백업)
+        // 1. 구글 시트로 전송 (백업 및 서버 강제 동기화 트리거)
         if (config.SCRIPT_URL) {
-            const payload = JSON.stringify({ en: fullEnText });
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'save_ai_sample');
             scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('json_data', payload);
+            // ★ 중요: Code.gs와 약속한 'ai_text' 파라미터로 보냅니다! (기존 json_data 아님)
+            scriptUrl.searchParams.append('ai_text', fullEnText); 
             
-            fetch(scriptUrl.toString()).catch(e => console.error("Sheet save error:", e));
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 저장 실패:", d.message);
+                    else console.log("✅ 시트 저장 성공");
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
         }
 
         const aiSampleObj = { en: fullEnText, ko: "" };
