@@ -321,7 +321,7 @@ export const api = {
         }
     },
 
-    // [수정] AI 생성 버튼 결과 저장 (AISample 열)
+    // AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
@@ -367,7 +367,7 @@ export const api = {
         }
     },
 
-    // [수정] 단어 정보 수정 (ManualSample, AutoSample 구분 처리)
+    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
     async updateWordDetails(originalWord, updateData) {
         // 1. Google Sheets 저장 (백엔드)
         if (config.SCRIPT_URL) {
@@ -380,9 +380,8 @@ export const api = {
             if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
             
-            // [중요] 파라미터 이름 변경 (manual_sample, auto_sample)
+            // sample 수정 시 무조건 manual_sample 파라미터 사용 (앱스스크립트에서 매핑됨)
             if (updateData.sample !== undefined) scriptUrl.searchParams.append('manual_sample', updateData.sample);
-            if (updateData.autoSample !== undefined) scriptUrl.searchParams.append('auto_sample', updateData.autoSample);
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -404,16 +403,10 @@ export const api = {
                 if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
                 if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
                 
-                // ManualSample 수정 -> sample 업데이트
+                // Sample 수정
                 if (updateData.sample !== undefined) {
                      targetWord.sample = updateData.sample;
-                     targetWord.sampleSource = 'manual';
-                }
-                
-                // AutoSample 수정 -> sample 업데이트
-                if (updateData.autoSample !== undefined) {
-                     targetWord.sample = updateData.autoSample;
-                     targetWord.sampleSource = 'ai';
+                     // Source 업데이트 로직 제거됨
                 }
              }
         };
@@ -432,7 +425,7 @@ export const api = {
         }
     },
 
-    // [수정] 새 단어 생성
+    // [수정] 새 단어 생성 (Source 초기화 제거)
     async createWord(wordData, afterWord) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
@@ -475,8 +468,8 @@ export const api = {
             meaning: wordData.meaning || "",
             explanation: wordData.explanation || "",
             sample: "",
-            sampleSource: "manual",
             AISample: null
+            // sampleSource 제거됨
         };
         
         state.wordList.splice(insertIndex, 0, localNewWordObj);
