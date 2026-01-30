@@ -57,8 +57,7 @@ export const learningMode = {
             deleteCardBtn: document.getElementById('delete-card-btn'),
             deleteConfirmModal: document.getElementById('delete-confirm-modal'),
             deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
-            deleteCancelBtn: document.getElementById('delete-confirm-btn'), // Note: In original code, it was delete-cancel-btn for event listener. Kept structure.
-            deleteCancelBtnReal: document.getElementById('delete-cancel-btn'), // Fixed mapping for clarity
+            deleteCancelBtn: document.getElementById('delete-cancel-btn'),
         };
         this.bindEvents();
     },
@@ -124,8 +123,8 @@ export const learningMode = {
                 ui.hideDeleteConfirmModal();
             });
         }
-        if (this.elements.deleteCancelBtnReal) {
-            this.elements.deleteCancelBtnReal.addEventListener('click', () => {
+        if (this.elements.deleteCancelBtn) {
+            this.elements.deleteCancelBtn.addEventListener('click', () => {
                 ui.hideDeleteConfirmModal();
             });
         }
@@ -280,6 +279,7 @@ export const learningMode = {
                          return;
                      }
                      wordData.sample = newSampleText;
+                     // source 할당 제거됨
                 } else {
                     // [수정] 무조건 sample 필드 업데이트 (Auto/Manual 구분 없음)
                     await api.updateWordDetails(wordData.word, { sample: newSampleText });
@@ -304,6 +304,7 @@ export const learningMode = {
             meaning: "",
             explanation: "",
             sample: "",
+            // sampleSource 제거됨
             isNew: true 
         };
         
@@ -386,14 +387,13 @@ export const learningMode = {
 
         const lowerCaseStartWord = startWord.toLowerCase();
 
-        // 1. 표제어 검색 (우선순위 분류 및 [최적화] Early Exit 적용)
+        // 1. 표제어 검색 (우선순위 분류)
         const exactMatches = [];
         const startsWithMatches = [];
         const includesMatches = [];
         const fuzzyMatches = [];
 
-        for (let index = 0; index < this.state.currentWordList.length; index++) {
-            const item = this.state.currentWordList[index];
+        this.state.currentWordList.forEach((item, index) => {
             const wordLower = item.word.toLowerCase();
             const wordObj = { word: item.word, index, distance: 0 };
 
@@ -404,16 +404,18 @@ export const learningMode = {
             } else if (wordLower.includes(lowerCaseStartWord)) {
                 includesMatches.push(wordObj);
             } else {
-                // [최적화] 길이 차이가 2 이상 나면 무거운 거리 계산을 건너뜀
-                if (Math.abs(wordLower.length - lowerCaseStartWord.length) > 2) continue;
-
+                // 엄격한 Fuzzy Logic 적용
+                // 1. 거리는 2 이하
+                // 2. 길이 차이도 2 이하
+                // 3. 거리 비율이 전체 길이의 40% 미만 (짧은 단어 오탐 방지)
                 const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower);
-                if (dist <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
+                const lenDiff = Math.abs(wordLower.length - lowerCaseStartWord.length);
+                if (dist <= 2 && lenDiff <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
                      wordObj.distance = dist;
                      fuzzyMatches.push(wordObj);
                 }
             }
-        }
+        });
 
         // Fuzzy 결과는 거리 순 정렬
         fuzzyMatches.sort((a, b) => a.distance - b.distance);
