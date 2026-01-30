@@ -386,17 +386,24 @@ export const learningMode = {
         }
 
         const lowerCaseStartWord = startWord.toLowerCase();
-
-        // 1. 표제어 검색 (우선순위 분류)
+        
+        // [최적화] 통합된 검색 루프 (Single Pass)
+        // 기존 4번의 순회를 1번으로 단축하고, Levenshtein 계산에 limit 적용
         const exactMatches = [];
         const startsWithMatches = [];
         const includesMatches = [];
         const fuzzyMatches = [];
+        
+        const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+        const explanationMatches = [];
 
-        this.state.currentWordList.forEach((item, index) => {
+        // 1. 단어 검색 & 설명 검색 동시 수행
+        for (let index = 0; index < this.state.currentWordList.length; index++) {
+            const item = this.state.currentWordList[index];
             const wordLower = item.word.toLowerCase();
             const wordObj = { word: item.word, index, distance: 0 };
-
+            
+            // 표제어 검색
             if (wordLower === lowerCaseStartWord) {
                 exactMatches.push(wordObj);
             } else if (wordLower.startsWith(lowerCaseStartWord)) {
@@ -404,20 +411,30 @@ export const learningMode = {
             } else if (wordLower.includes(lowerCaseStartWord)) {
                 includesMatches.push(wordObj);
             } else {
-                // 엄격한 Fuzzy Logic 적용
-                // 1. 거리는 2 이하
-                // 2. 길이 차이도 2 이하
-                // 3. 거리 비율이 전체 길이의 40% 미만 (짧은 단어 오탐 방지)
-                const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower);
+                // Fuzzy Logic (Optimized)
+                // 길이 차이가 2 이하인 경우에만 계산
                 const lenDiff = Math.abs(wordLower.length - lowerCaseStartWord.length);
-                if (dist <= 2 && lenDiff <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
-                     wordObj.distance = dist;
-                     fuzzyMatches.push(wordObj);
+                if (lenDiff <= 2) {
+                    // limit=2 로 설정하여 조기 종료 유도
+                    const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower, 2);
+                    // 거리 2 이하이고, 길이가 충분히 긴 단어(오탐 방지)인 경우만 추가
+                    if (dist <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
+                        wordObj.distance = dist;
+                        fuzzyMatches.push(wordObj);
+                    }
                 }
             }
-        });
 
-        // Fuzzy 결과는 거리 순 정렬
+            // 설명 검색
+            if (item.explanation) {
+                const cleanedExplanation = item.explanation.replace(/\[.*?\]|\*/g, '');
+                if (searchRegex.test(cleanedExplanation)) {
+                    explanationMatches.push({ word: item.word, index });
+                }
+            }
+        }
+
+        // Fuzzy 결과 정렬 (거리 순)
         fuzzyMatches.sort((a, b) => a.distance - b.distance);
 
         // 결과 통합
@@ -426,18 +443,7 @@ export const learningMode = {
             ...startsWithMatches,
             ...includesMatches,
             ...fuzzyMatches
-        ].slice(0, 50); // 결과는 최대 50개까지 표시
-
-        // 2. 설명 검색 (기존 로직 유지)
-        const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
-        const explanationMatches = this.state.currentWordList
-            .map((item, index) => ({ word: item.word, index }))
-            .filter((item, index) => {
-                const explanation = this.state.currentWordList[index].explanation;
-                 if (!explanation) return false;
-                const cleanedExplanation = explanation.replace(/\[.*?\]|\*/g, '');
-                return searchRegex.test(cleanedExplanation);
-            });
+        ].slice(0, 50);
 
         // 3. 결과 표시
         let title = `<strong>'${startWord}'</strong> 검색 결과`;
