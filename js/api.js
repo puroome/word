@@ -226,22 +226,30 @@ export const api = {
 
     async getStudyHistory() {
         if (!state.userId) return {};
-        const { doc, getDoc } = window.firebaseSDK;
-        const historyRef = doc(db, 'users', state.userId, 'history', 'study');
         try {
+            const { doc, getDoc } = window.firebaseSDK;
+            if (!db) return {}; 
+            const historyRef = doc(db, 'users', state.userId, 'history', 'study');
             const docSnap = await getDoc(historyRef);
             return docSnap.exists() ? docSnap.data() : {};
-        } catch(e) { return {}; }
+        } catch(e) { 
+            console.warn("학습 기록 로딩 실패:", e);
+            return {}; 
+        }
     },
 
     async getQuizHistory() {
         if (!state.userId) return {};
-        const { doc, getDoc } = window.firebaseSDK;
-        const historyRef = doc(db, 'users', state.userId, 'history', 'quiz');
         try {
+            const { doc, getDoc } = window.firebaseSDK;
+            if (!db) return {};
+            const historyRef = doc(db, 'users', state.userId, 'history', 'quiz');
             const docSnap = await getDoc(historyRef);
             return docSnap.exists() ? docSnap.data() : {};
-        } catch(e) { return {}; }
+        } catch(e) { 
+            console.warn("퀴즈 기록 로딩 실패:", e);
+            return {}; 
+        }
     },
 
     saveQuizHistoryToLocal(quizType, isCorrect) {
