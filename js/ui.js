@@ -3,223 +3,198 @@ import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
 
 export const ui = {
-    // ... (createInteractiveFragment, renderExplanationText, displaySentences, showTranslationTooltip, hideTranslationTooltip, showWordContextMenu, hideWordContextMenu, showEditContextMenu, hideEditContextMenu 기존 유지) ...
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
+
         const parts = text.split(/([a-zA-Z0-9'-]+)/g);
+
         parts.forEach(part => {
             if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
                  const span = document.createElement('span');
                 span.textContent = part;
                 span.className = 'interactive-word';
+                
                 span.onclick = (e) => {
                     if (isForSampleSentence) e.stopPropagation();
                     clearTimeout(state.longPressTimer);
                     api.speak(part, 'word');
                 };
+
                 span.oncontextmenu = (e) => {
                     e.preventDefault();
                     if (isForSampleSentence) e.stopPropagation();
                     this.showWordContextMenu(e, part);
                 };
+
                  let touchMove = false;
                 span.addEventListener('touchstart', (e) => {
                     if (isForSampleSentence) e.stopPropagation();
                     touchMove = false;
-                    clearTimeout(state.longPressTimer);
-                    state.longPressTimer = setTimeout(() => { if (!touchMove) { this.showWordContextMenu(e, part); } }, 700);
+                    state.longPressTimer = setTimeout(() => {
+                        if (!touchMove) this.showWordContextMenu(e, part);
+                    }, 500);
                 }, { passive: true });
-                span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
+                span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); }, { passive: true });
+                span.addEventListener('touchend', () => clearTimeout(state.longPressTimer));
+
                 fragment.appendChild(span);
             } else {
                 fragment.appendChild(document.createTextNode(part));
             }
         });
+
         return fragment;
     },
-    renderExplanationText(targetElement, text) {
-        targetElement.innerHTML = '';
-        if (!text || !text.trim()) return;
-        const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
-        text.split('\n').forEach((line, lineIndex, lineArr) => {
-            let lastIndex = 0;
-            let match;
-            while ((match = regex.exec(line))) {
-                if (match.index > lastIndex) {
-                    targetElement.appendChild(document.createTextNode(line.substring(lastIndex, match.index)));
-                }
-                const [_, nonClickable, englishPhrase] = match;
-                if (englishPhrase) {
-                    const span = document.createElement('span');
-                    span.textContent = englishPhrase;
-                    if (!nonInteractiveWords.has(englishPhrase.toLowerCase())) {
-                        span.className = 'interactive-word';
-                        span.onclick = () => {
-                            clearTimeout(state.longPressTimer);
-                            api.speak(englishPhrase, 'word');
-                        };
-                        span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
-                        let touchMove = false;
-                        span.addEventListener('touchstart', (e) => {
-                            touchMove = false;
-                            clearTimeout(state.longPressTimer);
-                            state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, englishPhrase); }, 700);
-                        }, { passive: true });
-                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                        span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
-                    }
-                    targetElement.appendChild(span);
-                } else if (nonClickable) {
-                    targetElement.appendChild(document.createTextNode(nonClickable));
-                }
-                lastIndex = regex.lastIndex;
-            }
-            if (lastIndex < line.length) {
-                targetElement.appendChild(document.createTextNode(line.substring(lastIndex)));
-            }
-            if (lineIndex < lineArr.length - 1) {
-                targetElement.appendChild(document.createElement('br'));
+
+    renderExplanationText(container, explanation) {
+        if (!container || !explanation) return;
+        container.innerHTML = '';
+        const parts = explanation.split(/(\*.*?\*)/g);
+        parts.forEach(part => {
+            if (part.startsWith('*') && part.endsWith('*')) {
+                const strong = document.createElement('strong');
+                strong.appendChild(this.createInteractiveFragment(part.slice(1, -1)));
+                container.appendChild(strong);
+            } else {
+                container.appendChild(this.createInteractiveFragment(part));
             }
         });
     },
-    displaySentences(sentences, containerElement) {
-        containerElement.innerHTML = '';
-        (sentences || []).filter(s => s && s.trim()).forEach(sentence => {
-            const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer';
 
-            const showTranslation = async (event) => {
-                state.activeTranslationTarget = p;
-                const translatedText = await api.translate(p.textContent);
-                if (state.activeTranslationTarget !== p) return;
-                this.showTranslationTooltip(translatedText, event);
-            };
-
-            p.onclick = (e) => {
-                if (e.target.closest('.sentence-content-area .interactive-word')) return;
-                api.speak(p.textContent, 'sample');
-                showTranslation(e);
-            };
-
-            p.addEventListener('mouseenter', (e) => {
-                 if (e.target === p) {
-                    clearTimeout(state.translationTimer);
+    displaySentences(sentences, container) {
+        if (!container) return;
+        container.innerHTML = '';
+        sentences.forEach(sent => {
+            if (sent.trim()) {
+                const p = document.createElement('p');
+                p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
+                
+                const showTranslation = async (event) => {
                     state.activeTranslationTarget = p;
-                    state.translationTimer = setTimeout(() => {
-                        if (state.activeTranslationTarget === p) {
-                            showTranslation(e);
-                        }
-                    }, 1000);
-                 }
-            });
+                    const translatedText = await api.translate(sent);
+                    if (state.activeTranslationTarget !== p) return;
+                    this.showTranslationTooltip(translatedText, event);
+                };
 
-            p.addEventListener('mouseleave', () => {
-                clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
-                }
-                this.hideTranslationTooltip();
-            });
+                p.onclick = (e) => {
+                    if (e.target.closest('.interactive-word')) return;
+                    api.speak(sent, 'sample');
+                    showTranslation(e);
+                };
 
-            const sentenceContent = document.createElement('span');
-            sentenceContent.className = 'sentence-content-area';
-            sentenceContent.style.cursor = 'text';
+                p.addEventListener('mouseenter', (e) => {
+                     if (e.target === p) {
+                        clearTimeout(state.translationTimer);
+                        state.activeTranslationTarget = p;
+                        state.translationTimer = setTimeout(() => {
+                            if (state.activeTranslationTarget === p) {
+                                showTranslation(e);
+                            }
+                        }, 1000);
+                     }
+                });
 
-            sentenceContent.addEventListener('mouseenter', () => {
-                clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
-                }
-                this.hideTranslationTooltip();
-            });
+                p.addEventListener('mouseleave', () => {
+                    clearTimeout(state.translationTimer);
+                    if (state.activeTranslationTarget === p) {
+                        state.activeTranslationTarget = null;
+                    }
+                    this.hideTranslationTooltip();
+                });
 
-            const sentenceParts = sentence.split(/(\*.*?\*)/g);
-            sentenceParts.forEach(part => {
-                if (part.startsWith('*') && part.endsWith('*')) {
-                    const strong = document.createElement('strong');
-                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
-                    sentenceContent.appendChild(strong);
-                } else if (part) {
-                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
-                }
-            });
-            p.appendChild(sentenceContent);
-            containerElement.appendChild(p);
+                p.appendChild(this.createInteractiveFragment(sent, true));
+                container.appendChild(p);
+            }
         });
     },
+
     showTranslationTooltip(text, event) {
-        const tooltip = document.getElementById('translation-tooltip');
+        let tooltip = document.getElementById('translation-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'translation-tooltip';
+            document.body.appendChild(tooltip);
+        }
+
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
-        const rect = event.target.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        let left = rect.left;
-        let top = rect.bottom + scrollTop + 5;
-        tooltip.style.left = `${left}px`;
+
+        const isTouch = event.touches && event.touches.length > 0;
+        const clientX = isTouch ? event.touches[0].clientX : event.clientX;
+        const clientY = isTouch ? event.touches[0].clientY : event.clientY;
+
+        const rect = tooltip.getBoundingClientRect();
+        let top = clientY - rect.height - 10;
+        let left = clientX - (rect.width / 2);
+
+        if (top < 10) top = clientY + 20;
+        if (left < 10) left = 10;
+        if (left + rect.width > window.innerWidth - 10) left = window.innerWidth - rect.width - 10;
+
         tooltip.style.top = `${top}px`;
-
-         requestAnimationFrame(() => {
-             const tooltipRect = tooltip.getBoundingClientRect();
-             if (tooltipRect.right > window.innerWidth - 10) {
-                 tooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
-             }
-             if (left < 10) {
-                 tooltip.style.left = '10px';
-             }
-         });
+        tooltip.style.left = `${left}px`;
     },
+
     hideTranslationTooltip() {
-        document.getElementById('translation-tooltip').classList.add('hidden');
+        const tooltip = document.getElementById('translation-tooltip');
+        if (tooltip) tooltip.classList.add('hidden');
     },
-    showWordContextMenu(event, word, options = {}) {
-        event.preventDefault();
+
+    showWordContextMenu(event, word) {
         const menu = document.getElementById('word-context-menu');
-        if (!menu) return;
+        const contextWordSpan = document.getElementById('context-word');
+        const contextMeaningBtn = document.getElementById('context-meaning-btn');
+        const contextNaverBtn = document.getElementById('context-naver-btn');
 
-        document.getElementById('search-app-context-btn').style.display = options.hideAppSearch ? 'none' : 'block';
+        if (menu && contextWordSpan) {
+            contextWordSpan.textContent = word;
+            
+            // 이벤트 리스너 중복 방지를 위한 클론 노드 교체
+            const newMeaningBtn = contextMeaningBtn.cloneNode(true);
+            const newNaverBtn = contextNaverBtn.cloneNode(true);
+            
+            contextMeaningBtn.parentNode.replaceChild(newMeaningBtn, contextMeaningBtn);
+            contextNaverBtn.parentNode.replaceChild(newNaverBtn, contextNaverBtn);
 
-        const touch = event.touches ? event.touches[0] : null;
-        const x = touch ? touch.clientX : event.clientX;
-        const y = touch ? touch.clientY : event.clientY;
+            newMeaningBtn.addEventListener('click', () => {
+                 window.open(`https://en.dict.naver.com/#/search?query=${encodeURIComponent(word)}`, '_blank');
+                 this.hideWordContextMenu();
+            });
 
-        menu.style.left = `0px`;
-        menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
+            newNaverBtn.addEventListener('click', () => {
+                 window.open(`https://search.naver.com/search.naver?query=${encodeURIComponent(word)}`, '_blank');
+                 this.hideWordContextMenu();
+            });
 
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) {
-                finalX = window.innerWidth - menuRect.width - 10;
-            }
-            if (y + menuRect.height > window.innerHeight - 10) {
-                 finalY = window.innerHeight - menuRect.height - 10;
-            }
-             if (finalX < 10) finalX = 10;
-             if (finalY < 10) finalY = 10;
+            const isTouch = event.touches && event.touches.length > 0;
+            const x = isTouch ? event.touches[0].clientX : event.clientX;
+            const y = isTouch ? event.touches[0].clientY : event.clientY;
 
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
+            menu.style.left = `${x}px`;
+            menu.style.top = `${y}px`;
+            menu.classList.remove('hidden');
 
-        const encodedWord = encodeURIComponent(word);
+            // 화면 밖으로 나가는 것 방지
+            requestAnimationFrame(() => {
+                const menuRect = menu.getBoundingClientRect();
+                let finalX = x;
+                let finalY = y;
 
-        document.getElementById('search-app-context-btn').onclick = () => {
-             document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
-             this.hideWordContextMenu();
-        };
-        document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
-        document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
-        document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
-        document.getElementById('search-longman-context-btn').onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); this.hideWordContextMenu(); };
+                if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+                if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+                
+                menu.style.left = `${finalX}px`;
+                menu.style.top = `${finalY}px`;
+            });
+        }
     },
+
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
+
     showEditContextMenu(event) {
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
@@ -229,24 +204,13 @@ export const ui = {
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
-            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
-            if (finalX < 10) finalX = 10;
-            if (finalY < 10) finalY = 10;
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
     },
+
     hideEditContextMenu() {
         const menu = document.getElementById('edit-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-    
-    // [신규] 카드 컨텍스트 메뉴 표시
+
     showCardContextMenu(event) {
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
@@ -256,6 +220,7 @@ export const ui = {
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
+        
         requestAnimationFrame(() => {
             const menuRect = menu.getBoundingClientRect();
             let finalX = x;
@@ -268,16 +233,46 @@ export const ui = {
             menu.style.top = `${finalY}px`;
         });
     },
+
     hideCardContextMenu() {
         const menu = document.getElementById('card-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-    
-    // [신규] 삭제 모달 제어
+
     showDeleteConfirmModal() {
-        document.getElementById('delete-confirm-modal').classList.remove('hidden');
+        const modal = document.getElementById('delete-confirm-modal');
+        if (modal) modal.classList.remove('hidden');
     },
+
     hideDeleteConfirmModal() {
-        document.getElementById('delete-confirm-modal').classList.add('hidden');
+        const modal = document.getElementById('delete-confirm-modal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    // [신규 기능] 알림 토스트 메시지 표시
+    showToast(message, isError = false) {
+        let toast = document.getElementById('ui-toast-message');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'ui-toast-message';
+            toast.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg text-white font-semibold transition-opacity duration-300 z-50 pointer-events-none opacity-0';
+            document.body.appendChild(toast);
+        }
+
+        toast.textContent = message;
+        if (isError) {
+            toast.classList.remove('bg-gray-800');
+            toast.classList.add('bg-red-500');
+        } else {
+            toast.classList.remove('bg-red-500');
+            toast.classList.add('bg-gray-800');
+        }
+
+        toast.classList.remove('opacity-0');
+        
+        if (this.toastTimeout) clearTimeout(this.toastTimeout);
+        this.toastTimeout = setTimeout(() => {
+            toast.classList.add('opacity-0');
+        }, 2500);
     }
 };
