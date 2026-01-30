@@ -4,6 +4,43 @@ import { audioCache, translationCache, utils } from './utils.js';
 let db = null; // Firestore
 let database = null; // Realtime DB
 
+// [신규] GAS 통신을 위한 내부 헬퍼 함수
+// GET은 쿼리 파라미터로, POST는 본문에 JSON 담아서 전송 (CORS Preflight 방지 위해 text/plain 사용)
+async function requestToSheet(action, params = {}, method = 'GET') {
+    if (!config.SCRIPT_URL) {
+        console.error("스크립트 URL이 설정되지 않았습니다.");
+        return { success: false, message: "URL 설정 오류" };
+    }
+
+    const url = new URL(config.SCRIPT_URL);
+    const fetchOptions = { method };
+
+    if (method === 'GET') {
+        url.searchParams.append('action', action);
+        for (const key in params) {
+            if (params[key] !== undefined && params[key] !== null) {
+                url.searchParams.append(key, params[key]);
+            }
+        }
+    } else {
+        // POST 요청
+        // GAS는 OPTIONS 요청(Preflight)을 처리하기 까다로우므로, 
+        // Content-Type을 text/plain으로 보내 CORS를 단순화하고 Body는 JSON 문자열로 보냄.
+        // 백엔드(GAS)에서는 e.postData.contents로 파싱함.
+        fetchOptions.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+        fetchOptions.body = JSON.stringify({ action, ...params });
+    }
+
+    try {
+        const response = await fetch(url.toString(), fetchOptions);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        console.error(`Google Sheet API Error (${action}):`, error);
+        return { success: false, message: error.message };
+    }
+}
+
 export const api = {
     init(firestoreInstance, realtimeDbInstance) {
         db = firestoreInstance;
@@ -132,36 +169,25 @@ export const api = {
         }
     },
 
+    // [수정] translate는 데이터 조회가 목적이므로 GET 유지 (requestToSheet 활용)
     async translate(text) {
         try {
             const cached = await translationCache.get(text);
             if (cached) return cached;
         } catch (e) { console.warn("Translation cache read error:", e); }
 
-        if (!config.SCRIPT_URL) return "번역 스크립트 URL이 설정되지 않았습니다.";
+        const data = await requestToSheet('translate', { text }, 'GET');
 
-        const url = new URL(config.SCRIPT_URL);
-        url.searchParams.append('action', 'translate');
-        url.searchParams.append('text', text);
-
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-
-            if (data.success) {
-                translationCache.save(text, data.translatedText);
-                return data.translatedText;
-            } else {
-                throw new Error(data.message || '번역 실패');
-            }
-        } catch (error) {
-            console.error("Translation API error:", error);
+        if (data.success) {
+            translationCache.save(text, data.translatedText);
+            return data.translatedText;
+        } else {
+            console.error("Translation API error:", data.message);
             return "번역 오류";
         }
     },
 
-     async updateWordStatus(word, quizType, result) {
+    async updateWordStatus(word, quizType, result) {
          if (!state.userId || !word || !quizType) return;
          if (!state.currentProgress[word]) state.currentProgress[word] = {};
          state.currentProgress[word][quizType] = result;
@@ -319,7 +345,12 @@ export const api = {
 
             const data = await response.json();
             const textResponse = data.candidates[0].content.parts[0].text;
-            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
+            
+            // [수정] JSON 파싱 강화: 백틱이나 잡다한 텍스트가 섞여 있어도 JSON 부분만 추출
+            const jsonMatch = textResponse.match(/\[[\s\S]*\]/); 
+            if (!jsonMatch) throw new Error("AI 응답에서 JSON 배열을 찾을 수 없습니다.");
+            
+            const cleanJson = JSON.parse(jsonMatch[0]);
 
             return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
 
@@ -329,23 +360,18 @@ export const api = {
         }
     },
 
-    // AI 생성 버튼 결과 저장 (AISample 열)
+    // [수정] AI 샘플 저장 -> POST 방식 (requestToSheet 사용)
     async saveAISamplesToSheet(wordData, fullEnText) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'save_ai_sample');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('ai_text', fullEnText); 
-            
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 저장 실패:", d.message);
-                    else console.log("✅ 시트 저장 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // GAS에 저장 요청 (비동기)
+        requestToSheet('save_ai_sample', {
+            word: wordData.word,
+            ai_text: fullEnText
+        }, 'POST').then(d => {
+            if(!d.success) console.warn("시트 저장 실패:", d.message);
+            else console.log("✅ 시트 저장 성공");
+        });
 
+        // Firebase 및 로컬 캐시 즉시 업데이트 (UI 반응성 확보)
         const aiSampleObj = { en: fullEnText, ko: "" };
 
         if (database) {
@@ -354,9 +380,7 @@ export const api = {
             const updates = {};
             updates[`/vocabulary/${safeKey}/AISample`] = aiSampleObj;
             
-            update(ref(database), updates).then(() => {
-                console.log("✅ Firebase 저장 완료");
-            }).catch(e => console.warn("Firebase 저장 실패:", e));
+            update(ref(database), updates).catch(e => console.warn("Firebase 저장 실패:", e));
         }
 
         try {
@@ -367,7 +391,6 @@ export const api = {
                 if (targetIndex !== -1) {
                     parsedCache.words[targetIndex].AISample = aiSampleObj;
                     localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                    console.log("✅ 로컬 캐시 업데이트 완료");
                 }
             }
         } catch (e) {
@@ -375,30 +398,22 @@ export const api = {
         }
     },
 
-    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
+    // [수정] 단어 정보 수정 -> POST 방식
     async updateWordDetails(originalWord, updateData) {
-        // 1. Google Sheets 저장 (백엔드)
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('original_word', originalWord);
-            
-            if (updateData.word !== undefined) scriptUrl.searchParams.append('word', updateData.word);
-            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
-            if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
-            if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
-            
-            // sample 수정 시 무조건 manual_sample 파라미터 사용 (앱스스크립트에서 매핑됨)
-            if (updateData.sample !== undefined) scriptUrl.searchParams.append('manual_sample', updateData.sample);
+        // 1. Google Sheets 저장 (POST)
+        const params = {
+            original_word: originalWord,
+            word: updateData.word,
+            pos: updateData.pos,
+            meaning: updateData.meaning,
+            explanation: updateData.explanation,
+            manual_sample: updateData.sample // 앱스스크립트 매핑 이름 주의
+        };
 
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 수정 실패:", d.message);
-                    else console.log("✅ 시트 수정 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        requestToSheet('update_word_data', params, 'POST').then(d => {
+            if(!d.success) console.warn("시트 수정 실패:", d.message);
+            else console.log("✅ 시트 수정 성공");
+        });
 
         // 2. 로컬 메모리 & 캐시 업데이트 (프론트엔드)
         const updateLocalList = (list) => {
@@ -410,12 +425,7 @@ export const api = {
                 if (updateData.pos !== undefined) targetWord.pos = updateData.pos;
                 if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
                 if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
-                
-                // Sample 수정
-                if (updateData.sample !== undefined) {
-                     targetWord.sample = updateData.sample;
-                     // Source 업데이트 로직 제거됨
-                }
+                if (updateData.sample !== undefined) targetWord.sample = updateData.sample;
              }
         };
 
@@ -433,27 +443,23 @@ export const api = {
         }
     },
 
-    // [수정] 새 단어 생성 (Source 초기화 제거)
+    // [수정] 새 단어 생성 -> POST 방식
     async createWord(wordData, afterWord) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('pos', wordData.pos || "");
-            scriptUrl.searchParams.append('meaning', wordData.meaning || "");
-            scriptUrl.searchParams.append('explanation', wordData.explanation || "");
-            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord);
+        // Google Sheets 저장 (POST)
+        const params = {
+            word: wordData.word,
+            pos: wordData.pos || "",
+            meaning: wordData.meaning || "",
+            explanation: wordData.explanation || "",
+            after_word: afterWord
+        };
 
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 생성 실패:", d.message);
-                    else console.log("✅ 시트 생성 성공 (삽입)");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        requestToSheet('create_word', params, 'POST').then(d => {
+            if(!d.success) console.warn("시트 생성 실패:", d.message);
+            else console.log("✅ 시트 생성 성공 (삽입)");
+        });
 
-        // 로컬 데이터에 중간 삽입
+        // 로컬 데이터에 중간 삽입 (UI 즉시 반영)
         let insertIndex = state.wordList.length;
         let prevIndexVal = 0;
 
@@ -477,11 +483,11 @@ export const api = {
             explanation: wordData.explanation || "",
             sample: "",
             AISample: null
-            // sampleSource 제거됨
         };
         
         state.wordList.splice(insertIndex, 0, localNewWordObj);
         
+        // 뒷부분 인덱스 조정 (로컬에서만)
         for (let i = insertIndex + 1; i < state.wordList.length; i++) {
              state.wordList[i].index += 1;
         }
@@ -516,21 +522,15 @@ export const api = {
         }
     },
 
+    // [수정] 단어 삭제 -> POST 방식
     async deleteWord(word) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'delete_word');
-            scriptUrl.searchParams.append('word', word);
-            
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 삭제 실패:", d.message);
-                    else console.log("✅ 시트 삭제 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // Google Sheets 삭제 (POST)
+        requestToSheet('delete_word', { word }, 'POST').then(d => {
+            if(!d.success) console.warn("시트 삭제 실패:", d.message);
+            else console.log("✅ 시트 삭제 성공");
+        });
 
+        // 로컬 삭제 (UI 즉시 반영)
         state.wordList = state.wordList.filter(w => w.word !== word);
 
         try {
