@@ -216,6 +216,7 @@ export const quizMode = {
                     console.error("Error saving quiz range to localStorage", e);
                 }
             } else {
+                // Toast logic needed or just alert
                 alert("숫자만 입력 가능합니다.");
             }
         }
@@ -557,12 +558,9 @@ export const quizMode = {
     },
     createMeaningQuiz(correctWordData, allWordsData) {
         const wrongAnswers = new Set();
-        // [최적화] 전체 셔플 대신 pickRandomItems 사용
-        const candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.meaning !== correctWordData.meaning);
-        const selected = utils.pickRandomItems(candidates, 3);
-        selected.forEach(w => wrongAnswers.add(w.meaning));
-
-        // 후보가 부족하면 전체에서 무작위 보충 (기존 로직 유지)
+        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.meaning !== correctWordData.meaning);
+        utils.shuffleArray(candidates);
+        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.meaning));
         while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
             const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
             if (randomWord.meaning !== correctWordData.meaning && !wrongAnswers.has(randomWord.meaning)) {
@@ -586,11 +584,9 @@ export const quizMode = {
         const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
 
         const wrongAnswers = new Set();
-        // [최적화] 전체 셔플 대신 pickRandomItems 사용
-        const candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        const selected = utils.pickRandomItems(candidates, 3);
-        selected.forEach(w => wrongAnswers.add(w.word));
-
+        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
+        utils.shuffleArray(candidates);
+        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
         while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
             const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
              if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
@@ -607,11 +603,9 @@ export const quizMode = {
         if (!definition) return null;
 
         const wrongAnswers = new Set();
-        // [최적화] 전체 셔플 대신 pickRandomItems 사용
-        const candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        const selected = utils.pickRandomItems(candidates, 3);
-        selected.forEach(w => wrongAnswers.add(w.word));
-
+        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
+        utils.shuffleArray(candidates);
+        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
         while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
              const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
              if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
