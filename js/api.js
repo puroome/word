@@ -46,6 +46,7 @@ export const api = {
                     state.wordList = words.sort((a, b) => a.index - b.index);
                     state.isWordListReady = true;
                     state.lastCacheTimestamp = timestamp;
+                    document.dispatchEvent(new CustomEvent('wordListUpdated'));
                 }
             } catch (e) {
                 localStorage.removeItem('wordListCache');
@@ -70,6 +71,7 @@ export const api = {
             const cachePayload = { timestamp: newTimestamp, words: wordsArray };
             localStorage.setItem('wordListCache', JSON.stringify(cachePayload));
             state.lastCacheTimestamp = newTimestamp;
+            document.dispatchEvent(new CustomEvent('wordListUpdated'));
         } catch (error) {
             throw error;
         }
