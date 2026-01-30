@@ -76,10 +76,11 @@ const app = {
             imageDBCache.init()
         ]);
 
-        const { getFirestore, getDatabase, getAuth, onAuthStateChanged } = window.firebaseSDK;
-        const db = getFirestore();
-        const database = getDatabase(undefined, config.FIREBASE_CONFIG.databaseURL);
-        const auth = getAuth();
+        const { initializeApp, getFirestore, getDatabase, getAuth, onAuthStateChanged } = window.firebaseSDK;
+        const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
+        const db = getFirestore(firebaseApp);
+        const database = getDatabase(firebaseApp, config.FIREBASE_CONFIG.databaseURL);
+        const auth = getAuth(firebaseApp);
 
         api.init(db, database);
         
