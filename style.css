@@ -1,137 +1,180 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+/* =========================================
+   기본 설정 (Reset & Base)
+   ========================================= */
 body {
     font-family: 'Noto Sans KR', sans-serif;
-    -webkit-tap-highlight-color: transparent;
-    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent; /* 모바일 터치 하이라이트 제거 */
+    -webkit-user-select: none; /* 텍스트 선택 방지 (앱 같은 느낌) */
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-}
-/* ... (기존 스타일 모두 유지) ... */
-.loader {
-    border: 4px solid #f3f3f3;
-    border-radius: 50%;
-    border-top: 4px solid #3498db;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-}
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-#tts-toggle-btn {
-    transition: transform 0.6s, background-color 0.3s;
-    transform-style: preserve-3d;
-}
-#tts-toggle-btn.is-flipped {
-    transform: rotateY(180deg);
-}
-#tts-toggle-text {
-    transform: rotateY(0deg);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-}
-#tts-toggle-btn.is-flipped #tts-toggle-text {
-    transform: rotateY(-180deg);
-}
-.choice-item:hover { transform: scale(1.02); }
-.choice-item.submitting { background-color: #e2e8f0; }
-.correct { background-color: #28a745 !important; color: white !important; transform: scale(1.05); border-color: #28a745; }
-.incorrect { background-color: #dc3545 !important; color: white !important; border-color: #dc3545; }
-.disabled { pointer-events: none; opacity: 0.7; }
-
-.interactive-word {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
+    background-color: #f9fafb; /* bg-gray-50 */
+    overflow-x: hidden; /* 가로 스크롤 방지 */
 }
 
-.interactive-word:hover {
-    background-color: #dbeafe;
-    border-radius: 0.25rem;
-    cursor: pointer;
+/* 입력 필드나 텍스트 영역에서는 선택 허용 */
+input, textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
 }
 
-#word-display {
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-.pronunciation-inline {
-    font-size: 60%;
-    opacity: 0.8;
-    font-weight: normal;
-    margin-left: 0.75rem;
-    vertical-align: middle;
+/* =========================================
+   학습 카드 애니메이션 (Slide Up Effect)
+   ========================================= */
+#learning-app-container {
+    perspective: 1000px;
 }
 
 #learning-app-container .relative {
-    overflow: hidden;
-    border-radius: 1rem;
+    overflow: hidden; /* 카드가 둥근 모서리를 넘지 않도록 */
+    border-radius: 1rem; /* rounded-2xl 대응 */
+    transform: translateZ(0); /* 사파리 렌더링 최적화 */
 }
+
+/* 카드 뒷면 (기본: 아래에 숨겨짐) */
 #learning-card-back {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    transform: translateY(100%);
+    transform: translateY(100%); /* 아래로 내려가 있음 */
     opacity: 0;
     transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease-in-out;
-    pointer-events: none;
+    pointer-events: none; /* 숨겨져 있을 때 클릭 방지 */
     display: flex;
     flex-direction: column;
+    background-color: white;
+    z-index: 20;
 }
+
+/* 카드 뒷면 활성화 (위로 올라옴) */
 #learning-card-back.is-slid-up {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
 }
 
+/* 카드 앞면 높이 확보 */
 #learning-card-front {
-    min-height: 45vh;
+    min-height: 50vh; /* 모바일에서 충분한 높이 확보 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
+/* =========================================
+   TTS 버튼 회전 애니메이션 (3D Flip)
+   ========================================= */
+#tts-toggle-btn {
+    transition: transform 0.6s, background-color 0.3s;
+    transform-style: preserve-3d;
+}
+
+#tts-toggle-btn.is-flipped {
+    transform: rotateY(180deg);
+}
+
+#tts-toggle-text {
+    display: block;
+    transform: rotateY(0deg); /* 텍스트가 뒤집히지 않도록 내부 처리 필요시 보정 */
+    /* 현재 JS 로직상 버튼 자체가 뒤집히므로 텍스트 반전이 필요하다면 아래 코드 사용 */
+    /* backface-visibility: hidden; */
+}
+
+/* =========================================
+   로딩 스피너 (Loader)
+   ========================================= */
+.loader {
+    border: 4px solid #f3f3f3; /* Light grey */
+    border-radius: 50%;
+    border-top: 4px solid #4F46E5; /* Indigo-600 */
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* =========================================
+   상호작용 요소 (Interactive Words)
+   ========================================= */
+.interactive-word {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: all 0.2s ease;
+}
+
+.interactive-word:hover {
+    color: #2563EB; /* blue-600 */
+    border-bottom-color: #2563EB;
+}
+
+.interactive-word:active {
+    color: #1E40AF; /* blue-800 */
+    transform: scale(0.95);
+}
+
+/* 예문 내 강조 구문 */
+.sentence-content-area strong {
+    font-weight: 700;
+    color: #4F46E5; /* indigo-600 */
+}
+
+/* =========================================
+   퀴즈 스타일
+   ========================================= */
 .quiz-blank {
     display: inline-block;
-    white-space: nowrap;
+    min-width: 60px;
+    text-align: center;
+    border-bottom: 2px solid #374151; /* gray-700 */
+    color: transparent; /* 정답 숨기기 */
+    margin: 0 4px;
+    vertical-align: bottom;
 }
 
-#progress-bar-handle:active {
-    cursor: grabbing;
-    transform: scale(1.2) translateY(-10%);
+/* =========================================
+   툴팁 & 기타 UI
+   ========================================= */
+#translation-tooltip {
+    pointer-events: none; /* 툴팁이 마우스 이벤트를 가리지 않도록 */
+    backdrop-filter: blur(4px);
+    background-color: rgba(17, 24, 39, 0.9); /* gray-900 + opacity */
 }
 
-#translation-tooltip::after {
+/* 진행바 핸들 터치 영역 확대 */
+#progress-bar-handle::after {
     content: '';
     position: absolute;
-    bottom: 100%;
-    left: 15px;
-    margin-left: -5px;
-    border-width: 5px;
-    border-style: solid;
-    border-color: transparent transparent #1f2937 transparent;
+    top: -15px;
+    bottom: -15px;
+    left: -15px;
+    right: -15px;
 }
 
-#app-wrapper.hidden {
-    display: none;
+/* 스크롤바 커스텀 (Webkit) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
 }
 
-#favorite-icon {
-    transition: color 0.2s, fill 0.2s;
+::-webkit-scrollbar-track {
+    background: #f1f1f1; 
 }
 
-#favorite-icon.fill-current {
-    fill: currentColor;
+::-webkit-scrollbar-thumb {
+    background: #c7c7c7; 
+    border-radius: 3px;
 }
 
-#range-input-modal input[type="number"]::-webkit-outer-spin-button,
-#range-input-modal input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-#range-input-modal input[type="number"] {
-    -moz-appearance: textfield;
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8; 
 }
