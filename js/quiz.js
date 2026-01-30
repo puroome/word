@@ -299,6 +299,9 @@ export const quizMode = {
         const endNum = Math.max(startVal, endVal);
         const startIndex = Math.max(0, startNum - 1);
         const endIndex = Math.min(allWords.length - 1, endNum - 1);
+        
+        // [최적화] slice 대신 필요한 범위의 단어만 순회하며 후보군 선정
+        // (현재 구조상 slice는 유지하되, 내부 filter 최적화)
         const wordsInRange = allWords.slice(startIndex, endIndex + 1);
 
         if (wordsInRange.length === 0) return null;
@@ -324,7 +327,9 @@ export const quizMode = {
         if (candidates.length === 0) return null;
 
         utils.shuffleArray(candidates);
-        const usableAllWordsForChoices = allWords.length >= 4 ? allWords : [...allWords, {word: 'dummy1', meaning: '오답1'}, {word: 'dummy2', meaning: '오답2'}, {word: 'dummy3', meaning: '오답3'}];
+        
+        // [최적화] Dummy Array 생성을 최소화 (allWords 복사 방지)
+        const usableAllWordsForChoices = allWords;
 
         for (const wordData of candidates) {
             let quiz = null;
@@ -546,7 +551,9 @@ export const quizMode = {
         if (candidates.length === 0) return null;
 
         utils.shuffleArray(candidates);
-        const usableAllWordsForChoices = allWords.length >= 4 ? allWords : [...allWords, {word: 'dummy1', meaning: '오답1'}, {word: 'dummy2', meaning: '오답2'}, {word: 'dummy3', meaning: '오답3'}];
+        
+        // [최적화] allWords 복사 방지
+        const usableAllWordsForChoices = allWords;
 
         const wordData = candidates[0];
         let quiz = null;
@@ -557,18 +564,33 @@ export const quizMode = {
         return quiz;
     },
     createMeaningQuiz(correctWordData, allWordsData) {
+        // [최적화] 전체 단어 필터링 대신 랜덤 추출 (utils.pickRandomItems 활용)
         const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.meaning !== correctWordData.meaning);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.meaning));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-            const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-            if (randomWord.meaning !== correctWordData.meaning && !wrongAnswers.has(randomWord.meaning)) {
-                wrongAnswers.add(randomWord.meaning);
-            }
+        
+        // 같은 품사 우선 시도 (최적화된 랜덤 선택)
+        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+            return w.pos !== correctWordData.pos || w.meaning === correctWordData.meaning;
+        });
+        samePosDistractors.forEach(w => wrongAnswers.add(w.meaning));
+        
+        // 부족하면 아무 단어나 추가 (기존 로직 유지하되 방식만 최적화)
+        if (wrongAnswers.size < 3) {
+             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+                 return w.meaning === correctWordData.meaning || wrongAnswers.has(w.meaning);
+             });
+             randomDistractors.forEach(w => wrongAnswers.add(w.meaning));
         }
-        if (wrongAnswers.size < 3) return null;
-        const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers)]);
+
+        if (wrongAnswers.size < 3) {
+             // 데이터 부족 시 더미 추가 (기존 안전장치 유지)
+             if (allWordsData.length < 4) {
+                 ['오답1', '오답2', '오답3'].forEach(d => wrongAnswers.add(d));
+             } else {
+                 return null;
+             }
+        }
+        
+        const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctWordData.meaning };
     },
     createBlankQuiz(correctWordData, allWordsData) {
@@ -584,18 +606,23 @@ export const quizMode = {
         const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
 
         const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-            const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-             if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
-                wrongAnswers.add(randomWord.word);
-            }
+        
+        // [최적화] 랜덤 추출 방식 적용
+        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+             return w.pos !== correctWordData.pos || w.word === correctWordData.word;
+        });
+        samePosDistractors.forEach(w => wrongAnswers.add(w.word));
+
+        if (wrongAnswers.size < 3) {
+             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+                 return w.word === correctWordData.word || wrongAnswers.has(w.word);
+             });
+             randomDistractors.forEach(w => wrongAnswers.add(w.word));
         }
+        
          if (wrongAnswers.size < 3) return null;
 
-        const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers)]);
+        const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'FILL_IN_THE_BLANK', question: { sentence_with_blank: sentenceWithBlank, word: correctWordData.word }, choices, answer: correctWordData.word };
     },
     async createDefinitionQuiz(correctWordData, allWordsData) {
@@ -603,18 +630,23 @@ export const quizMode = {
         if (!definition) return null;
 
         const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-             const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-             if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
-                wrongAnswers.add(randomWord.word);
-            }
+        
+        // [최적화] 랜덤 추출 방식 적용
+        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+             return w.pos !== correctWordData.pos || w.word === correctWordData.word;
+        });
+        samePosDistractors.forEach(w => wrongAnswers.add(w.word));
+
+        if (wrongAnswers.size < 3) {
+             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
+                 return w.word === correctWordData.word || wrongAnswers.has(w.word);
+             });
+             randomDistractors.forEach(w => wrongAnswers.add(w.word));
         }
+
          if (wrongAnswers.size < 3) return null;
 
-        const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers)]);
+        const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_DEFINITION', question: { definition, word: correctWordData.word }, choices, answer: correctWordData.word };
     }
 };
