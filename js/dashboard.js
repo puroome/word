@@ -2,6 +2,18 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
 
+// Chart.js 동적 로딩을 위한 헬퍼 함수
+const loadChartJs = () => {
+    return new Promise((resolve, reject) => {
+        if (window.Chart) return resolve(); // 이미 로드되어 있으면 즉시 반환
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+};
+
 export const dashboard = {
     elements: {
         container: document.getElementById('dashboard-container'),
@@ -64,6 +76,15 @@ export const dashboard = {
     },
     async renderSummary() {
         this.destroyCharts();
+
+        // 여기서 Chart.js 로딩을 기다립니다.
+        try {
+            await loadChartJs();
+        } catch (e) {
+            console.error("Chart.js 로딩 실패:", e);
+            return; // 라이브러리 로드 실패 시 차트 렌더링 중단
+        }
+
         const studyHistory = await api.getStudyHistory();
         const quizHistory = await api.getQuizHistory();
         const today = new Date();
