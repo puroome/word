@@ -2,18 +2,44 @@ import { state } from './config.js';
 
 // --- General Utils ---
 export const utils = {
-    levenshteinDistance(a = '', b = '') {
-        const track = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
-        for (let i = 0; i <= a.length; i += 1) track[0][i] = i;
-        for (let j = 0; j <= b.length; j += 1) track[j][0] = j;
-        for (let j = 1; j <= b.length; j += 1) {
-            for (let i = 1; i <= a.length; i += 1) {
-                const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
-                track[j][i] = Math.min(track[j][i - 1] + 1, track[j - 1][i] + 1, track[j - 1][i - 1] + indicator);
+    // [최적화] 제한된 Levenshtein 거리 계산 (속도 개선)
+    // limit을 넘어가면 즉시 중단하여 긴 단어 목록 검색 시 성능 저하 방지
+    levenshteinDistance(s, t, limit = Infinity) {
+        if (s === t) return 0;
+        if (s.length === 0) return t.length;
+        if (t.length === 0) return s.length;
+        
+        // 길이 차이가 limit을 넘으면 계산 불필요
+        if (Math.abs(s.length - t.length) > limit) return limit + 1;
+
+        // 메모리 최적화를 위해 2개의 행만 사용 (Two-row approach)
+        let v0 = new Array(t.length + 1);
+        let v1 = new Array(t.length + 1);
+
+        for (let i = 0; i < v0.length; i++) v0[i] = i;
+
+        for (let i = 0; i < s.length; i++) {
+            v1[0] = i + 1;
+            let minRow = v1[0]; // 현재 행의 최소값 추적
+
+            for (let j = 0; j < t.length; j++) {
+                const cost = s[i] === t[j] ? 0 : 1;
+                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+                minRow = Math.min(minRow, v1[j + 1]);
             }
+
+            // 현재 행의 모든 값이 limit보다 크면 조기 종료
+            if (minRow > limit) return limit + 1;
+
+            // 배열 교체 (v0 <-> v1)
+            const temp = v0;
+            v0 = v1;
+            v1 = temp;
         }
-        return track[b.length][a.length];
+
+        return v0[t.length];
     },
+
     shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -21,6 +47,38 @@ export const utils = {
         }
         return array;
     },
+
+    // [최적화] 배열에서 N개의 랜덤 요소 추출 (Quiz 오답 생성용)
+    // 전체 배열을 섞지 않고 필요한 만큼만 뽑아 성능 향상
+    pickRandomItems(array, count, excludeFilter = () => false) {
+        const result = [];
+        const len = array.length;
+        // 배열이 작으면 shuffle 사용 (기존 방식)
+        if (len < count * 3) {
+            const shuffled = [...array].filter(item => !excludeFilter(item));
+            this.shuffleArray(shuffled);
+            return shuffled.slice(0, count);
+        }
+
+        // 배열이 크면 랜덤 인덱스 접근 (성능 최적화)
+        const seenIndices = new Set();
+        let attempts = 0;
+        const maxAttempts = count * 5; // 무한 루프 방지
+
+        while (result.length < count && attempts < maxAttempts) {
+            attempts++;
+            const idx = Math.floor(Math.random() * len);
+            if (seenIndices.has(idx)) continue;
+            
+            const item = array[idx];
+            if (!excludeFilter(item)) {
+                seenIndices.add(idx);
+                result.push(item);
+            }
+        }
+        return result;
+    },
+
     formatSeconds(totalSeconds) {
         if (!totalSeconds || totalSeconds < 60) return `0분`;
         const d = Math.floor(totalSeconds / 86400);
@@ -32,12 +90,16 @@ export const utils = {
         if (m > 0) result += `${m}분`;
         return result.trim() || '0분';
     },
+
     getWordStatus(word) {
         let localStatus = {};
         try {
             const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const unsynced = JSON.parse(localStorage.getItem(key) || '{}');
-            if (unsynced[word]) localStatus = unsynced[word];
+            const item = localStorage.getItem(key);
+            if (item) {
+                const unsynced = JSON.parse(item);
+                if (unsynced[word]) localStatus = unsynced[word];
+            }
         } catch(e) { console.warn("Error reading local progress:", e); }
 
         const progress = { ...(state.currentProgress[word] || {}), ...localStatus };
@@ -49,17 +111,22 @@ export const utils = {
         if (statuses.some(s => s === 'correct')) return 'learning';
         return 'unseen';
     },
+
     isFavorite(word) {
         let isFav = state.currentProgress[word]?.favorite || false;
         try {
             const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const unsynced = JSON.parse(localStorage.getItem(key) || '{}');
-            if (unsynced[word] && unsynced[word].favorite !== undefined) {
-                isFav = unsynced[word].favorite;
+            const item = localStorage.getItem(key);
+            if (item) {
+                const unsynced = JSON.parse(item);
+                if (unsynced[word] && unsynced[word].favorite !== undefined) {
+                    isFav = unsynced[word].favorite;
+                }
             }
         } catch (e) { console.warn("Error reading local favorite status:", e); }
         return isFav;
     },
+
     getFavoriteWords() {
         let localUpdates = {};
         try {
@@ -84,6 +151,7 @@ export const utils = {
         });
         return favoriteWords.sort((a, b) => b.time - a.time).map(item => item.word);
     },
+
     addProgressUpdateToLocalSync(word, key, value) {
         try {
             const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
