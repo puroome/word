@@ -54,10 +54,12 @@ const app = {
         googleLoginBtn: document.getElementById('google-login-btn'),
         loginError: document.getElementById('login-error'),
         appContent: document.getElementById('app-content'),
+        // HTML에 없을 수도 있으므로 null 체크가 필요함
         userInfo: document.getElementById('user-info'),
         userName: document.getElementById('user-name'),
         userEmail: document.getElementById('user-email'),
         userAvatar: document.getElementById('user-avatar'),
+        
         tabButtons: document.querySelectorAll('.tab-btn'),
         tabContents: document.querySelectorAll('.tab-content'),
         ttsToggleBtn: document.getElementById('tts-toggle-btn'),
@@ -77,7 +79,10 @@ const app = {
         ]);
 
         const { initializeApp, getFirestore, getDatabase, getAuth, onAuthStateChanged } = window.firebaseSDK;
+        
+        // Firebase 앱 초기화
         const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
+
         const db = getFirestore(firebaseApp);
         const database = getDatabase(firebaseApp, config.FIREBASE_CONFIG.databaseURL);
         const auth = getAuth(firebaseApp);
@@ -98,7 +103,9 @@ const app = {
     },
 
     bindEvents() {
-        this.elements.googleLoginBtn.addEventListener('click', () => this.handleLogin());
+        if (this.elements.googleLoginBtn) {
+            this.elements.googleLoginBtn.addEventListener('click', () => this.handleLogin());
+        }
         
         this.elements.tabButtons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -107,7 +114,9 @@ const app = {
             });
         });
 
-        this.elements.ttsToggleBtn.addEventListener('click', () => this.toggleTTS());
+        if (this.elements.ttsToggleBtn) {
+            this.elements.ttsToggleBtn.addEventListener('click', () => this.toggleTTS());
+        }
 
         // [중요] 모듈 간 통신을 위한 중앙 이벤트 리스너
         window.addEventListener('navigate', (e) => {
@@ -147,16 +156,19 @@ const app = {
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 if (user.email !== config.ALLOWED_USER_EMAIL) {
-                    this.elements.loginError.textContent = "허용되지 않은 사용자입니다.";
-                    this.elements.loginError.classList.remove('hidden');
+                    if (this.elements.loginError) {
+                        this.elements.loginError.textContent = "허용되지 않은 사용자입니다.";
+                        this.elements.loginError.classList.remove('hidden');
+                    }
                     await window.firebaseSDK.signOut(auth);
                     return;
                 }
                 state.userId = user.uid;
                 state.isAppStarted = true;
                 this.updateUserInfo(user);
-                this.elements.loginScreen.classList.add('hidden');
-                this.elements.appContent.classList.remove('hidden');
+                
+                if (this.elements.loginScreen) this.elements.loginScreen.classList.add('hidden');
+                if (this.elements.appContent) this.elements.appContent.classList.remove('hidden');
                 
                 await api.loadWordList();
                 await api.loadUserProgress();
@@ -168,8 +180,8 @@ const app = {
             } else {
                 state.userId = null;
                 state.isAppStarted = false;
-                this.elements.loginScreen.classList.remove('hidden');
-                this.elements.appContent.classList.add('hidden');
+                if (this.elements.loginScreen) this.elements.loginScreen.classList.remove('hidden');
+                if (this.elements.appContent) this.elements.appContent.classList.add('hidden');
                 studyTracker.stop();
             }
         });
@@ -182,15 +194,20 @@ const app = {
         try {
             await signInWithPopup(auth, provider);
         } catch (error) {
-            this.elements.loginError.textContent = "로그인 실패: " + error.message;
-            this.elements.loginError.classList.remove('hidden');
+            if (this.elements.loginError) {
+                this.elements.loginError.textContent = "로그인 실패: " + error.message;
+                this.elements.loginError.classList.remove('hidden');
+            } else {
+                alert("로그인 실패: " + error.message);
+            }
         }
     },
 
+    // [수정] 요소가 존재할 때만 업데이트하도록 방어 코드 추가
     updateUserInfo(user) {
-        this.elements.userName.textContent = user.displayName;
-        this.elements.userEmail.textContent = user.email;
-        this.elements.userAvatar.src = user.photoURL;
+        if (this.elements.userName) this.elements.userName.textContent = user.displayName;
+        if (this.elements.userEmail) this.elements.userEmail.textContent = user.email;
+        if (this.elements.userAvatar) this.elements.userAvatar.src = user.photoURL;
     },
 
     switchTab(tabName) {
@@ -205,14 +222,15 @@ const app = {
         });
 
         this.elements.tabContents.forEach(content => content.classList.add('hidden'));
-        document.getElementById(`${tabName}-container`).classList.remove('hidden');
+        const targetContainer = document.getElementById(`${tabName}-container`);
+        if (targetContainer) targetContainer.classList.remove('hidden');
 
         if (tabName === 'learning') {
-            if (learningMode.elements.appContainer.classList.contains('hidden')) {
+            if (learningMode.elements.appContainer && learningMode.elements.appContainer.classList.contains('hidden')) {
                 learningMode.resetStartScreen();
             }
         } else if (tabName === 'quiz') {
-            if (quizMode.elements.contentContainer.classList.contains('hidden')) {
+            if (quizMode.elements.contentContainer && quizMode.elements.contentContainer.classList.contains('hidden')) {
                 quizMode.reset();
             }
         } else if (tabName === 'dashboard') {
@@ -228,6 +246,7 @@ const app = {
 
     toggleTTS() {
         const btn = this.elements.ttsToggleBtn;
+        if (!btn) return;
         btn.classList.toggle('is-flipped');
         
         setTimeout(() => {
@@ -239,7 +258,8 @@ const app = {
 
     updateTTSToggleUI() {
         const btn = this.elements.ttsToggleBtn;
-        this.elements.ttsToggleText.textContent = state.currentVoiceSet;
+        if (!btn) return;
+        if (this.elements.ttsToggleText) this.elements.ttsToggleText.textContent = state.currentVoiceSet;
         
         btn.classList.toggle('bg-indigo-700', state.currentVoiceSet === 'UK');
         btn.classList.toggle('hover:bg-indigo-800', state.currentVoiceSet === 'UK');
@@ -248,6 +268,7 @@ const app = {
     },
 
     showImeWarning() {
+        if (!this.elements.imeWarning) return;
         this.elements.imeWarning.classList.remove('hidden');
         clearTimeout(this.imeWarningTimeout);
         this.imeWarningTimeout = setTimeout(() => {
@@ -255,9 +276,13 @@ const app = {
         }, 2000);
     },
 
+    // [수정] syncStatus 요소가 없어도 에러나지 않도록 방어 코드 추가
     async syncData() {
         if (!state.userId) return;
-        this.elements.syncStatus.classList.remove('opacity-0');
+        
+        if (this.elements.syncStatus) {
+            this.elements.syncStatus.classList.remove('opacity-0');
+        }
         
         let hasUpdates = false;
 
@@ -289,7 +314,9 @@ const app = {
         }
 
         setTimeout(() => {
-            this.elements.syncStatus.classList.add('opacity-0');
+            if (this.elements.syncStatus) {
+                this.elements.syncStatus.classList.add('opacity-0');
+            }
         }, 1000);
     }
 };
