@@ -1,7 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
-import { utils, playSequence, correctBeep, incorrectBeep } from './utils.js';
-import { ui } from './ui.js'; // ui 모듈 필요 시 사용 (현재 코드에서는 직접 DOM 조작이 많음)
+import { utils, correctBeep, incorrectBeep } from './utils.js';
 
 export const quizMode = {
     state: {
