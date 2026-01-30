@@ -3,33 +3,35 @@ import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
 
 export const ui = {
-    // 텍스트를 단어 단위로 쪼개기 (원본 복구)
-    createInteractiveFragment(text, isForSample = false) {
+    // ... (createInteractiveFragment, renderExplanationText, displaySentences, showTranslationTooltip, hideTranslationTooltip, showWordContextMenu, hideWordContextMenu, showEditContextMenu, hideEditContextMenu 기존 유지) ...
+    createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
-        if (!text) return fragment;
-
-        // 정규식도 원본과 동일하게 유지해야 함
+        if (!text || !text.trim()) return fragment;
         const parts = text.split(/([a-zA-Z0-9'-]+)/g);
-
         parts.forEach(part => {
             if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
-                const span = document.createElement('span');
+                 const span = document.createElement('span');
                 span.textContent = part;
-                span.className = 'interactive-word'; // 스타일 복구
-                
-                // 이벤트 핸들러
+                span.className = 'interactive-word';
                 span.onclick = (e) => {
-                    if (isForSample) e.stopPropagation();
+                    if (isForSampleSentence) e.stopPropagation();
+                    clearTimeout(state.longPressTimer);
                     api.speak(part, 'word');
                 };
-                
-                // [중요] 우클릭 컨텍스트 메뉴 복구
                 span.oncontextmenu = (e) => {
                     e.preventDefault();
-                    if (isForSample) e.stopPropagation();
+                    if (isForSampleSentence) e.stopPropagation();
                     this.showWordContextMenu(e, part);
                 };
-                
+                 let touchMove = false;
+                span.addEventListener('touchstart', (e) => {
+                    if (isForSampleSentence) e.stopPropagation();
+                    touchMove = false;
+                    clearTimeout(state.longPressTimer);
+                    state.longPressTimer = setTimeout(() => { if (!touchMove) { this.showWordContextMenu(e, part); } }, 700);
+                }, { passive: true });
+                span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+                span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
                 fragment.appendChild(span);
             } else {
                 fragment.appendChild(document.createTextNode(part));
@@ -37,102 +39,245 @@ export const ui = {
         });
         return fragment;
     },
+    renderExplanationText(targetElement, text) {
+        targetElement.innerHTML = '';
+        if (!text || !text.trim()) return;
+        const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
+        text.split('\n').forEach((line, lineIndex, lineArr) => {
+            let lastIndex = 0;
+            let match;
+            while ((match = regex.exec(line))) {
+                if (match.index > lastIndex) {
+                    targetElement.appendChild(document.createTextNode(line.substring(lastIndex, match.index)));
+                }
+                const [_, nonClickable, englishPhrase] = match;
+                if (englishPhrase) {
+                    const span = document.createElement('span');
+                    span.textContent = englishPhrase;
+                    if (!nonInteractiveWords.has(englishPhrase.toLowerCase())) {
+                        span.className = 'interactive-word';
+                        span.onclick = () => {
+                            clearTimeout(state.longPressTimer);
+                            api.speak(englishPhrase, 'word');
+                        };
+                        span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
+                        let touchMove = false;
+                        span.addEventListener('touchstart', (e) => {
+                            touchMove = false;
+                            clearTimeout(state.longPressTimer);
+                            state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, englishPhrase); }, 700);
+                        }, { passive: true });
+                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+                        span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
+                    }
+                    targetElement.appendChild(span);
+                } else if (nonClickable) {
+                    targetElement.appendChild(document.createTextNode(nonClickable));
+                }
+                lastIndex = regex.lastIndex;
+            }
+            if (lastIndex < line.length) {
+                targetElement.appendChild(document.createTextNode(line.substring(lastIndex)));
+            }
+            if (lineIndex < lineArr.length - 1) {
+                targetElement.appendChild(document.createElement('br'));
+            }
+        });
+    },
+    displaySentences(sentences, containerElement) {
+        containerElement.innerHTML = '';
+        (sentences || []).filter(s => s && s.trim()).forEach(sentence => {
+            const p = document.createElement('p');
+            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer';
 
-    // 컨텍스트 메뉴 표시 (위치 계산 단순화 - 원본 로직 추정)
-    showWordContextMenu(e, word) {
+            const showTranslation = async (event) => {
+                state.activeTranslationTarget = p;
+                const translatedText = await api.translate(p.textContent);
+                if (state.activeTranslationTarget !== p) return;
+                this.showTranslationTooltip(translatedText, event);
+            };
+
+            p.onclick = (e) => {
+                if (e.target.closest('.sentence-content-area .interactive-word')) return;
+                api.speak(p.textContent, 'sample');
+                showTranslation(e);
+            };
+
+            p.addEventListener('mouseenter', (e) => {
+                 if (e.target === p) {
+                    clearTimeout(state.translationTimer);
+                    state.activeTranslationTarget = p;
+                    state.translationTimer = setTimeout(() => {
+                        if (state.activeTranslationTarget === p) {
+                            showTranslation(e);
+                        }
+                    }, 1000);
+                 }
+            });
+
+            p.addEventListener('mouseleave', () => {
+                clearTimeout(state.translationTimer);
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
+                }
+                this.hideTranslationTooltip();
+            });
+
+            const sentenceContent = document.createElement('span');
+            sentenceContent.className = 'sentence-content-area';
+            sentenceContent.style.cursor = 'text';
+
+            sentenceContent.addEventListener('mouseenter', () => {
+                clearTimeout(state.translationTimer);
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
+                }
+                this.hideTranslationTooltip();
+            });
+
+            const sentenceParts = sentence.split(/(\*.*?\*)/g);
+            sentenceParts.forEach(part => {
+                if (part.startsWith('*') && part.endsWith('*')) {
+                    const strong = document.createElement('strong');
+                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
+                    sentenceContent.appendChild(strong);
+                } else if (part) {
+                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
+                }
+            });
+            p.appendChild(sentenceContent);
+            containerElement.appendChild(p);
+        });
+    },
+    showTranslationTooltip(text, event) {
+        const tooltip = document.getElementById('translation-tooltip');
+        tooltip.textContent = text;
+        tooltip.classList.remove('hidden');
+        const rect = event.target.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        let left = rect.left;
+        let top = rect.bottom + scrollTop + 5;
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+
+         requestAnimationFrame(() => {
+             const tooltipRect = tooltip.getBoundingClientRect();
+             if (tooltipRect.right > window.innerWidth - 10) {
+                 tooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
+             }
+             if (left < 10) {
+                 tooltip.style.left = '10px';
+             }
+         });
+    },
+    hideTranslationTooltip() {
+        document.getElementById('translation-tooltip').classList.add('hidden');
+    },
+    showWordContextMenu(event, word, options = {}) {
+        event.preventDefault();
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
 
-        // 사전 링크 업데이트
-        const dictLink = document.getElementById('dict-link');
-        if (dictLink) dictLink.href = `https://en.dict.naver.com/#/search?query=${encodeURIComponent(word)}`;
+        document.getElementById('search-app-context-btn').style.display = options.hideAppSearch ? 'none' : 'block';
 
-        // 위치 지정 (마우스 좌표 기준)
-        const x = e.clientX || (e.touches && e.touches[0].clientX);
-        const y = e.clientY || (e.touches && e.touches[0].clientY);
-        
-        menu.style.left = `${x}px`;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
+
+        menu.style.left = `0px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
-        
-        // 화면 밖으로 나가는 것만 간단히 방지
-        const rect = menu.getBoundingClientRect();
-        if (x + rect.width > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 5}px`;
-        if (y + rect.height > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 5}px`;
-    },
 
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) {
+                finalX = window.innerWidth - menuRect.width - 10;
+            }
+            if (y + menuRect.height > window.innerHeight - 10) {
+                 finalY = window.innerHeight - menuRect.height - 10;
+            }
+             if (finalX < 10) finalX = 10;
+             if (finalY < 10) finalY = 10;
+
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
+
+        const encodedWord = encodeURIComponent(word);
+
+        document.getElementById('search-app-context-btn').onclick = () => {
+             document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
+             this.hideWordContextMenu();
+        };
+        document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
+        document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
+        document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
+        document.getElementById('search-longman-context-btn').onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); this.hideWordContextMenu(); };
+    },
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-
-    // 번역 툴팁 (위치 복구)
-    showTranslationTooltip(text, e) {
-        let tooltip = document.getElementById('translation-tooltip');
-        if (!tooltip) {
-            tooltip = document.createElement('div');
-            tooltip.id = 'translation-tooltip';
-            tooltip.className = 'fixed bg-gray-800 text-white text-sm px-3 py-2 rounded shadow-lg z-50'; // Tailwind 클래스 원본 추정
-            document.body.appendChild(tooltip);
-        }
-        tooltip.textContent = text;
-        tooltip.classList.remove('hidden');
-
-        // 커서 바로 위나 아래에 표시
-        const x = e.clientX;
-        const y = e.clientY;
-        tooltip.style.left = `${x + 10}px`;
-        tooltip.style.top = `${y + 10}px`;
-    },
-
-    hideTranslationTooltip() {
-        const tooltip = document.getElementById('translation-tooltip');
-        if (tooltip) tooltip.classList.add('hidden');
-    },
-
-    // 예문 리스트 출력 (UI 구조 원본 복구)
-    displaySentences(sentences, container) {
-        container.innerHTML = '';
-        const list = document.createElement('ul');
-        list.className = "space-y-2"; // 원본 간격
-
-        sentences.forEach(sent => {
-            if (!sent.trim()) return;
-            const li = document.createElement('li');
-            li.className = "p-2 bg-gray-50 rounded border cursor-pointer hover:bg-gray-100"; // 원본 스타일
-            
-            li.onclick = (e) => {
-                if(e.target.classList.contains('interactive-word')) return;
-                api.speak(sent, 'sample');
-                // 번역 툴팁 표시
-                api.translate(sent).then(trans => this.showTranslationTooltip(trans, e));
-            };
-
-            // 문장 파싱 및 추가
-            const parts = sent.split(/(\*.*?\*)/g);
-            parts.forEach(p => {
-                if (p.startsWith('*') && p.endsWith('*')) {
-                    const strong = document.createElement('strong');
-                    strong.className = "text-indigo-600 font-bold";
-                    strong.appendChild(this.createInteractiveFragment(p.slice(1, -1), true));
-                    li.appendChild(strong);
-                } else {
-                    li.appendChild(this.createInteractiveFragment(p, true));
-                }
-            });
-            list.appendChild(li);
+    showEditContextMenu(event) {
+        const menu = document.getElementById('edit-context-menu');
+        if (!menu) return;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
         });
-        container.appendChild(list);
+    },
+    hideEditContextMenu() {
+        const menu = document.getElementById('edit-context-menu');
+        if (menu) menu.classList.add('hidden');
     },
     
-    // 기타 필요한 UI 함수들
-    renderExplanationText(container, text) {
-        container.innerHTML = text.replace(/\n/g, '<br>').replace(/\[(.*?)\]/g, '<span class="font-bold text-indigo-700">[$1]</span>');
+    // [신규] 카드 컨텍스트 메뉴 표시
+    showCardContextMenu(event) {
+        const menu = document.getElementById('card-context-menu');
+        if (!menu) return;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
     },
-    showEditContextMenu(e) { /* ... 위치만 단순화하여 유지 ... */ },
-    hideEditContextMenu() { document.getElementById('edit-context-menu')?.classList.add('hidden'); },
-    showCardContextMenu(e) { /* ... 위치만 단순화하여 유지 ... */ },
-    hideCardContextMenu() { document.getElementById('card-context-menu')?.classList.add('hidden'); },
-    showDeleteConfirmModal() { document.getElementById('delete-confirm-modal')?.classList.remove('hidden'); },
-    hideDeleteConfirmModal() { document.getElementById('delete-confirm-modal')?.classList.add('hidden'); }
+    hideCardContextMenu() {
+        const menu = document.getElementById('card-context-menu');
+        if (menu) menu.classList.add('hidden');
+    },
+    
+    // [신규] 삭제 모달 제어
+    showDeleteConfirmModal() {
+        document.getElementById('delete-confirm-modal').classList.remove('hidden');
+    },
+    hideDeleteConfirmModal() {
+        document.getElementById('delete-confirm-modal').classList.add('hidden');
+    }
 };

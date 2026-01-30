@@ -17,25 +17,26 @@ export const config = {
 export const state = {
     isAppStarted: false,
     userId: null,
-    isWordListReady: false,
-    lastCacheTimestamp: 0,
-    wordList: [],
-    currentProgress: {},
     currentVoiceSet: 'UK',
     isSpeaking: false,
     audioContext: null,
     currentSource: null,
-    activeTranslationTarget: null,
-    translationTimer: null,
+    wordList: [],
+    currentProgress: {},
+    isWordListReady: false,
+    lastCacheTimestamp: null,
     longPressTimer: null,
-    
-    // 오타 방지용 상수 (기능 변경 없음)
+    translationTimer: null,
+    activeTranslationTarget: null,
+    favorites: [],
     LOCAL_STORAGE_KEYS: {
-        TTS_VOICE: 'ttsVoice',
-        LAST_INDEX: 'lastIndex',
-        PRACTICE_MODE: 'practiceMode',
-        UNSYNCED_TIME: 'unsyncedStudyTime',
-        UNSYNCED_QUIZ: 'unsyncedQuizHistory',
-        UNSYNCED_PROGRESS_UPDATES: 'unsyncedProgressUpdates'
+        TTS_VOICE: 'student_ttsVoice',
+        LAST_INDEX: 'student_lastIndex_main',
+        UNSYNCED_TIME: 'student_unsyncedTime_main',
+        UNSYNCED_QUIZ: 'student_unsyncedQuizStats_main',
+        UNSYNCED_PROGRESS_UPDATES: 'student_unsyncedProgress_main',
+        PRACTICE_MODE: 'student_practiceMode_main',
+        QUIZ_RANGE_START: 'student_quizRangeStart_main',
+        QUIZ_RANGE_END: 'student_quizRangeEnd_main'
     }
 };
