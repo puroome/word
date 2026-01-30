@@ -183,8 +183,6 @@ export const learningMode = {
             this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5" placeholder="설명">${currentExplanation}</textarea>`;
 
         } else {
-            // [중요] AutoSample(ai)인 경우에도 wordData.sample을 사용함 (이미 sync에서 매핑됨)
-            // 절대 AISample.en을 불러오지 않음
             let currentSample = "";
             if (wordData.sample) {
                 currentSample = wordData.sample;
@@ -283,13 +281,10 @@ export const learningMode = {
                      wordData.sample = newSampleText;
                      wordData.sampleSource = 'manual';
                 } else {
-                    // [수정] Source에 따라 ManualSample 또는 AutoSample 업데이트
                     if (wordData.sampleSource === 'ai') {
-                        // AutoSample 수정
                         await api.updateWordDetails(wordData.word, { autoSample: newSampleText });
                         wordData.sample = newSampleText;
                     } else {
-                        // ManualSample 수정
                         await api.updateWordDetails(wordData.word, { sample: newSampleText });
                         wordData.sample = newSampleText;
                     }
@@ -381,6 +376,7 @@ export const learningMode = {
 
         if (this.state.currentWordList.length === 0) { this.showError("학습할 단어가 없습니다."); return; }
 
+        // 검색어 없을 때: 기존 로직 (마지막 학습 위치로)
         if (!startWord) {
             try {
                 const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
@@ -394,17 +390,49 @@ export const learningMode = {
         }
 
         const lowerCaseStartWord = startWord.toLowerCase();
-        const exactMatchIndex = this.state.currentWordList.findIndex(item => item.word.toLowerCase() === lowerCaseStartWord);
-        if (exactMatchIndex !== -1) {
-            this.state.currentIndex = exactMatchIndex;
-            this.launchApp();
-            return;
-        }
 
-        const levenshteinSuggestions = this.state.currentWordList.map((item, index) => ({
-            word: item.word, index, distance: utils.levenshteinDistance(lowerCaseStartWord, item.word.toLowerCase())
-        })).sort((a, b) => a.distance - b.distance).slice(0, 5).filter(s => s.distance < s.word.length / 2 + 1);
+        // 1. 표제어 검색 (우선순위 분류)
+        const exactMatches = [];
+        const startsWithMatches = [];
+        const includesMatches = [];
+        const fuzzyMatches = [];
 
+        this.state.currentWordList.forEach((item, index) => {
+            const wordLower = item.word.toLowerCase();
+            const wordObj = { word: item.word, index, distance: 0 };
+
+            if (wordLower === lowerCaseStartWord) {
+                exactMatches.push(wordObj);
+            } else if (wordLower.startsWith(lowerCaseStartWord)) {
+                startsWithMatches.push(wordObj);
+            } else if (wordLower.includes(lowerCaseStartWord)) {
+                includesMatches.push(wordObj);
+            } else {
+                // 엄격한 Fuzzy Logic 적용
+                // 1. 거리는 2 이하
+                // 2. 길이 차이도 2 이하
+                // 3. 거리 비율이 전체 길이의 40% 미만 (짧은 단어 오탐 방지)
+                const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower);
+                const lenDiff = Math.abs(wordLower.length - lowerCaseStartWord.length);
+                if (dist <= 2 && lenDiff <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
+                     wordObj.distance = dist;
+                     fuzzyMatches.push(wordObj);
+                }
+            }
+        });
+
+        // Fuzzy 결과는 거리 순 정렬
+        fuzzyMatches.sort((a, b) => a.distance - b.distance);
+
+        // 결과 통합
+        const vocabSuggestions = [
+            ...exactMatches,
+            ...startsWithMatches,
+            ...includesMatches,
+            ...fuzzyMatches
+        ].slice(0, 50); // 결과는 최대 50개까지 표시
+
+        // 2. 설명 검색 (기존 로직 유지)
         const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
         const explanationMatches = this.state.currentWordList
             .map((item, index) => ({ word: item.word, index }))
@@ -415,12 +443,15 @@ export const learningMode = {
                 return searchRegex.test(cleanedExplanation);
             });
 
-        const title = (levenshteinSuggestions.length > 0 || explanationMatches.length > 0)
-            ? `<strong>'${startWord}'</strong>(을)를 찾을 수 없습니다. 혹시 이 단어인가요?`
-            : `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
-        this.displaySuggestions(levenshteinSuggestions, explanationMatches, title);
+        // 3. 결과 표시
+        let title = `<strong>'${startWord}'</strong> 검색 결과`;
+        if (vocabSuggestions.length === 0 && explanationMatches.length === 0) {
+            title = `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
+        }
+
+        this.displaySuggestions(vocabSuggestions, explanationMatches, title);
     },
-    // ... (이후 함수들은 변경 사항 없음 - 기존 learning.js 내용 유지)
+
     showError(message) {
         this.elements.loader.querySelector('.loader').style.display = 'none';
         this.elements.loaderText.innerHTML = `<p class="text-red-500 font-bold">오류 발생</p><p class="text-sm text-gray-600 mt-2 break-all">${message}</p>`;
@@ -558,12 +589,10 @@ export const learningMode = {
 
         this.elements.backTitle.textContent = wordData.word;
         
-        // [수정됨] 수동 Sample이 있을 때만 여기서 렌더링. AISample은 아래 appendAIGenButton에서 처리.
         this.elements.backContent.innerHTML = '';
         if (wordData.sample && wordData.sample.trim()) {
             ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
         } else if ((!wordData.sample || !wordData.sample.trim()) && (!wordData.AISample || !wordData.AISample.en)) {
-            // 둘 다 없을 때만 메시지 표시
             this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
         }
 
@@ -589,7 +618,6 @@ export const learningMode = {
         if (!isBackVisible) {
             this.elements.backTitle.textContent = wordData.word;
             
-            // [수정됨] navigateBackToBack과 동일 로직 적용 (중복 방지)
             this.elements.backContent.innerHTML = '';
             if (wordData.sample && wordData.sample.trim()) {
                  ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
@@ -606,7 +634,6 @@ export const learningMode = {
             this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
         }
     },
-    // ... 나머지 함수들 (mistakeReview, favoriteMode, touch/key handlers 등등 기존 유지)
     startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
         this.state.isFavoriteMode = false;
