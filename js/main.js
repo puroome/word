@@ -50,26 +50,46 @@ const studyTracker = {
 
 const app = {
     elements: {
+        // 인증 관련
         loginScreen: document.getElementById('login-screen'),
         googleLoginBtn: document.getElementById('google-login-btn'),
         loginError: document.getElementById('login-error'),
-        appContent: document.getElementById('app-wrapper'),
-        // HTML에 없을 수도 있으므로 null 체크가 필요함
+        
+        // 메인 컨테이너
+        appWrapper: document.getElementById('app-wrapper'), // ID 수정됨
+        
+        // 상단 바 버튼
+        homeBtn: document.getElementById('home-btn'),
+        refreshBtn: document.getElementById('refresh-btn'),
+        logoutBtn: document.getElementById('logout-btn'),
+        ttsToggleBtn: document.getElementById('tts-toggle-btn'),
+        ttsToggleText: document.getElementById('tts-toggle-text'),
+        
+        // 메인 화면(선택 화면) 및 버튼들
+        selectionScreen: document.getElementById('selection-screen'),
+        selectLearningBtn: document.getElementById('select-learning-btn'),
+        selectQuizBtn: document.getElementById('select-quiz-btn'),
+        selectDashboardBtn: document.getElementById('select-dashboard-btn'),
+        selectMistakesBtn: document.getElementById('select-mistakes-btn'),
+        selectFavoritesBtn: document.getElementById('select-favorites-btn'),
+
+        // 각 기능별 컨테이너 (화면들)
+        dashboardContainer: document.getElementById('dashboard-container'),
+        quizModeContainer: document.getElementById('quiz-mode-container'),
+        learningModeContainer: document.getElementById('learning-mode-container'),
+
+        // 정보 표시
         userInfo: document.getElementById('user-info'),
         userName: document.getElementById('user-name'),
         userEmail: document.getElementById('user-email'),
         userAvatar: document.getElementById('user-avatar'),
-        
-        tabButtons: document.querySelectorAll('.tab-btn'),
-        tabContents: document.querySelectorAll('.tab-content'),
-        ttsToggleBtn: document.getElementById('tts-toggle-btn'),
-        ttsToggleText: document.getElementById('tts-toggle-text'),
         syncStatus: document.getElementById('sync-status'),
         imeWarning: document.getElementById('ime-warning'),
         noSampleMessage: document.getElementById('no-sample-message')
     },
     
     imeWarningTimeout: null,
+    authInstance: null, // 로그아웃을 위해 auth 객체 저장
 
     async init() {
         await Promise.all([
@@ -78,77 +98,161 @@ const app = {
             imageDBCache.init()
         ]);
 
-        const { initializeApp, getFirestore, getDatabase, getAuth, onAuthStateChanged } = window.firebaseSDK;
+        const { initializeApp, getFirestore, getDatabase, getAuth } = window.firebaseSDK;
         
-        // Firebase 앱 초기화
         const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
-
         const db = getFirestore(firebaseApp);
         const database = getDatabase(firebaseApp, config.FIREBASE_CONFIG.databaseURL);
-        const auth = getAuth(firebaseApp);
+        this.authInstance = getAuth(firebaseApp);
 
         api.init(db, database);
         
-        // 하위 모듈 초기화
         learningMode.init();
         quizMode.init();
         dashboard.init();
 
         this.bindEvents();
-        this.setupAuth(auth);
+        this.setupAuth(this.authInstance);
         this.loadSettings();
 
-        // 1초마다 자동 동기화 시도 (Study Time 등)
         setInterval(() => this.syncData(), 10000);
     },
 
     bindEvents() {
+        // 로그인
         if (this.elements.googleLoginBtn) {
             this.elements.googleLoginBtn.addEventListener('click', () => this.handleLogin());
         }
-        
-        this.elements.tabButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tabName = btn.dataset.tab;
-                this.switchTab(tabName);
-            });
-        });
 
+        // --- 상단 네비게이션 버튼 ---
+        if (this.elements.homeBtn) {
+            this.elements.homeBtn.addEventListener('click', () => this.navigateTo('home'));
+        }
+        if (this.elements.refreshBtn) {
+            this.elements.refreshBtn.addEventListener('click', async () => {
+                const icon = this.elements.refreshBtn.querySelector('svg');
+                if(icon) icon.classList.add('animate-spin');
+                await api.loadWordList(true);
+                await api.loadUserProgress();
+                if(icon) icon.classList.remove('animate-spin');
+                ui.showToast("데이터를 새로고침했습니다.");
+            });
+        }
+        if (this.elements.logoutBtn) {
+            this.elements.logoutBtn.addEventListener('click', () => {
+                if (confirm("로그아웃 하시겠습니까?")) {
+                    window.firebaseSDK.signOut(this.authInstance);
+                }
+            });
+        }
         if (this.elements.ttsToggleBtn) {
             this.elements.ttsToggleBtn.addEventListener('click', () => this.toggleTTS());
         }
 
-        // [중요] 모듈 간 통신을 위한 중앙 이벤트 리스너
+        // --- 메인 선택 화면 버튼 (기능 연결 복구) ---
+        if (this.elements.selectLearningBtn) {
+            this.elements.selectLearningBtn.addEventListener('click', () => {
+                this.navigateTo('learning');
+                learningMode.resetStartScreen();
+            });
+        }
+        if (this.elements.selectQuizBtn) {
+            this.elements.selectQuizBtn.addEventListener('click', () => {
+                this.navigateTo('quiz');
+                quizMode.reset();
+            });
+        }
+        if (this.elements.selectDashboardBtn) {
+            this.elements.selectDashboardBtn.addEventListener('click', () => {
+                this.navigateTo('dashboard');
+            });
+        }
+        if (this.elements.selectMistakesBtn) {
+            this.elements.selectMistakesBtn.addEventListener('click', () => {
+                const mistakes = Object.keys(state.currentProgress).filter(word => {
+                    const prog = state.currentProgress[word];
+                    return Object.values(prog).includes('incorrect');
+                });
+                
+                if (mistakes.length === 0) {
+                    ui.showToast("오답 기록이 없습니다.", true);
+                    return;
+                }
+                this.navigateTo('learning');
+                learningMode.startMistakeReview(mistakes);
+            });
+        }
+        if (this.elements.selectFavoritesBtn) {
+            this.elements.selectFavoritesBtn.addEventListener('click', () => {
+                this.navigateTo('learning');
+                learningMode.startFavoriteMode();
+            });
+        }
+
+        // --- 모듈 간 네비게이션 이벤트 수신 ---
         window.addEventListener('navigate', (e) => {
             const { mode, options } = e.detail;
-            if (mode === 'quiz') this.switchTab('quiz');
-            else if (mode === 'selection') this.switchTab('learning');
-            else if (mode === 'quiz-play') {
-                this.switchTab('quiz'); 
-                // 퀴즈 탭 안에서 퀴즈 플레이 모드로 전환하는 로직은 quizMode가 처리함
-            } else if (mode === 'mistakeReview') {
-                this.switchTab('learning');
+            if (mode === 'selection' || mode === 'home') this.navigateTo('home');
+            else if (mode === 'quiz') this.navigateTo('quiz');
+            else if (mode === 'quiz-play') this.navigateTo('quiz'); // 퀴즈 컨테이너 유지
+            else if (mode === 'learning') this.navigateTo('learning');
+            else if (mode === 'mistakeReview') {
+                this.navigateTo('learning');
                 learningMode.startMistakeReview(options.mistakeWords);
             }
         });
 
-        window.addEventListener('showToast', (e) => {
-            const { message, isError } = e.detail;
-            ui.showToast(message, isError);
-        });
-
-        window.addEventListener('showImeWarning', () => {
-            this.showImeWarning();
-        });
-        
-        window.addEventListener('syncRequest', () => {
-             this.syncData();
-        });
+        window.addEventListener('showToast', (e) => ui.showToast(e.detail.message, e.detail.isError));
+        window.addEventListener('showImeWarning', () => this.showImeWarning());
+        window.addEventListener('syncRequest', () => this.syncData());
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#word-context-menu')) ui.hideWordContextMenu();
             if (!e.target.closest('#translation-tooltip') && e.target.id !== 'translation-tooltip') ui.hideTranslationTooltip();
         });
+    },
+
+    // [핵심 수정] 화면 겹침 방지: 모든 화면을 숨기고 타겟만 보여줌
+    navigateTo(screenName) {
+        // 1. 모든 메인 컨테이너 숨기기
+        const containers = [
+            this.elements.selectionScreen,
+            this.elements.dashboardContainer,
+            this.elements.quizModeContainer,
+            this.elements.learningModeContainer
+        ];
+        containers.forEach(el => {
+            if (el) el.classList.add('hidden');
+        });
+
+        // 2. 상단 홈 버튼 표시 여부 (홈 화면이 아닐 때만 표시)
+        if (this.elements.homeBtn) {
+            if (screenName === 'home') this.elements.homeBtn.classList.add('hidden');
+            else this.elements.homeBtn.classList.remove('hidden');
+        }
+        if (this.elements.refreshBtn) {
+             if (screenName === 'home') this.elements.refreshBtn.classList.remove('hidden');
+             else this.elements.refreshBtn.classList.add('hidden');
+        }
+
+        // 3. 타겟 화면 보여주기
+        switch (screenName) {
+            case 'home':
+                if (this.elements.selectionScreen) this.elements.selectionScreen.classList.remove('hidden');
+                break;
+            case 'dashboard':
+                if (this.elements.dashboardContainer) {
+                    this.elements.dashboardContainer.classList.remove('hidden');
+                    dashboard.render();
+                }
+                break;
+            case 'quiz':
+                if (this.elements.quizModeContainer) this.elements.quizModeContainer.classList.remove('hidden');
+                break;
+            case 'learning':
+                if (this.elements.learningModeContainer) this.elements.learningModeContainer.classList.remove('hidden');
+                break;
+        }
     },
 
     setupAuth(auth) {
@@ -168,31 +272,30 @@ const app = {
                 this.updateUserInfo(user);
                 
                 if (this.elements.loginScreen) this.elements.loginScreen.classList.add('hidden');
-                if (this.elements.appContent) this.elements.appContent.classList.remove('hidden');
+                if (this.elements.appWrapper) this.elements.appWrapper.classList.remove('hidden');
                 
                 await api.loadWordList();
                 await api.loadUserProgress();
                 
-                // 앱 시작 시 대시보드 먼저 보여주기
-                this.switchTab('dashboard');
+                // 로그인 성공 시 홈 화면(선택 화면)으로 이동
+                this.navigateTo('home');
                 studyTracker.start();
 
             } else {
                 state.userId = null;
                 state.isAppStarted = false;
                 if (this.elements.loginScreen) this.elements.loginScreen.classList.remove('hidden');
-                if (this.elements.appContent) this.elements.appContent.classList.add('hidden');
+                if (this.elements.appWrapper) this.elements.appWrapper.classList.add('hidden');
                 studyTracker.stop();
             }
         });
     },
 
     async handleLogin() {
-        const { signInWithPopup, GoogleAuthProvider, getAuth } = window.firebaseSDK;
-        const auth = getAuth();
+        const { signInWithPopup, GoogleAuthProvider } = window.firebaseSDK;
         const provider = new GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
+            await signInWithPopup(this.authInstance, provider);
         } catch (error) {
             if (this.elements.loginError) {
                 this.elements.loginError.textContent = "로그인 실패: " + error.message;
@@ -203,39 +306,10 @@ const app = {
         }
     },
 
-    // [수정] 요소가 존재할 때만 업데이트하도록 방어 코드 추가
     updateUserInfo(user) {
         if (this.elements.userName) this.elements.userName.textContent = user.displayName;
         if (this.elements.userEmail) this.elements.userEmail.textContent = user.email;
         if (this.elements.userAvatar) this.elements.userAvatar.src = user.photoURL;
-    },
-
-    switchTab(tabName) {
-        this.elements.tabButtons.forEach(btn => {
-            if (btn.dataset.tab === tabName) {
-                btn.classList.add('text-blue-600', 'active');
-                btn.classList.remove('text-gray-500');
-            } else {
-                btn.classList.remove('text-blue-600', 'active');
-                btn.classList.add('text-gray-500');
-            }
-        });
-
-        this.elements.tabContents.forEach(content => content.classList.add('hidden'));
-        const targetContainer = document.getElementById(`${tabName}-container`);
-        if (targetContainer) targetContainer.classList.remove('hidden');
-
-        if (tabName === 'learning') {
-            if (learningMode.elements.appContainer && learningMode.elements.appContainer.classList.contains('hidden')) {
-                learningMode.resetStartScreen();
-            }
-        } else if (tabName === 'quiz') {
-            if (quizMode.elements.contentContainer && quizMode.elements.contentContainer.classList.contains('hidden')) {
-                quizMode.reset();
-            }
-        } else if (tabName === 'dashboard') {
-            dashboard.render();
-        }
     },
 
     loadSettings() {
@@ -276,7 +350,6 @@ const app = {
         }, 2000);
     },
 
-    // [수정] syncStatus 요소가 없어도 에러나지 않도록 방어 코드 추가
     async syncData() {
         if (!state.userId) return;
         
@@ -286,7 +359,6 @@ const app = {
         
         let hasUpdates = false;
 
-        // 1. 학습 시간 동기화
         const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
         const unsyncedTime = parseInt(localStorage.getItem(timeKey) || '0');
         if (unsyncedTime > 0) {
@@ -295,7 +367,6 @@ const app = {
             hasUpdates = true;
         }
 
-        // 2. 퀴즈 결과 동기화
         const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const unsyncedQuiz = JSON.parse(localStorage.getItem(quizKey) || '{}');
         if (Object.keys(unsyncedQuiz).length > 0) {
@@ -304,7 +375,6 @@ const app = {
             hasUpdates = true;
         }
 
-        // 3. 진척도(즐겨찾기, 퀴즈성공여부) 동기화
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
         const unsyncedProgress = JSON.parse(localStorage.getItem(progressKey) || '{}');
         if (Object.keys(unsyncedProgress).length > 0) {
@@ -321,9 +391,7 @@ const app = {
     }
 };
 
-// 앱 진입점
 window.addEventListener('DOMContentLoaded', () => {
-    // Firebase SDK 로드 대기
     if (window.firebaseSDK) {
         app.init();
     } else {
