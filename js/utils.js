@@ -21,6 +21,26 @@ export const utils = {
         }
         return array;
     },
+    // [최적화] 배열 전체를 섞지 않고, 필요한 개수만큼만 랜덤하게 추출하는 함수
+    pickRandomItems(array, count) {
+        if (!array || array.length === 0) return [];
+        if (array.length <= count) return this.shuffleArray([...array]); // 개수가 적으면 그냥 섞어서 반환
+
+        const result = [];
+        const takenIndices = new Set();
+        
+        // 필요한 개수가 찰 때까지 랜덤 인덱스 뽑기 (무한 루프 방지용 안전장치 포함)
+        let safetyCounter = 0;
+        while (result.length < count && safetyCounter < count * 10) {
+            const idx = Math.floor(Math.random() * array.length);
+            if (!takenIndices.has(idx)) {
+                takenIndices.add(idx);
+                result.push(array[idx]);
+            }
+            safetyCounter++;
+        }
+        return result;
+    },
     formatSeconds(totalSeconds) {
         if (!totalSeconds || totalSeconds < 60) return `0분`;
         const d = Math.floor(totalSeconds / 86400);
