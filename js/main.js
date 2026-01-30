@@ -53,7 +53,7 @@ const app = {
         loginScreen: document.getElementById('login-screen'),
         googleLoginBtn: document.getElementById('google-login-btn'),
         loginError: document.getElementById('login-error'),
-        appContent: document.getElementById('app-content'),
+        appContent: document.getElementById('app-wrapper'),
         // HTML에 없을 수도 있으므로 null 체크가 필요함
         userInfo: document.getElementById('user-info'),
         userName: document.getElementById('user-name'),
