@@ -97,11 +97,14 @@ const app = {
             api.init(db, database);
 
             onAuthStateChanged(auth, async (user) => {
+                // [보안 주의] 클라이언트 사이드 체크는 UX용입니다. 
+                // 실제 데이터 보안은 Firebase Console의 Security Rules에서 반드시 처리해야 합니다.
                 if (user && user.email === config.ALLOWED_USER_EMAIL) {
                     state.userId = user.uid;
                     const { doc, setDoc } = window.firebaseSDK;
                     const userRef = doc(db, 'users', user.uid);
-                    await setDoc(userRef, { displayName: user.displayName, email: user.email }, { merge: true });
+                    // 사용자 정보 갱신 (비동기)
+                    setDoc(userRef, { displayName: user.displayName, email: user.email }, { merge: true }).catch(console.error);
 
                     this.elements.loginScreen.classList.add('hidden');
                     this.elements.appWrapper.classList.remove('hidden');
@@ -112,6 +115,7 @@ const app = {
                     this.elements.loginScreen.classList.remove('hidden');
                     this.elements.appWrapper.classList.add('hidden');
                     if (user) {
+                        alert("허용되지 않은 계정입니다.");
                         signOut(auth);
                     }
                 }
@@ -158,11 +162,15 @@ const app = {
             await api.loadWordList();
             await api.loadUserProgress();
             this.updateLastUpdatedText();
-        } catch (e) { return; }
+        } catch (e) { 
+            console.error("초기 데이터 로드 실패:", e);
+        }
 
         this.loadInitialImages();
+        
+        // 모듈 초기화
         quizMode.init();
-        learningMode.init();
+        learningMode.init(); // DOM 요소 바인딩
         dashboard.init();
 
         quizMode.preloadAllQuizTypesBasedOnSavedRange();
@@ -177,7 +185,7 @@ const app = {
              const provider = new GoogleAuthProvider();
              this.elements.loginError.textContent = '';
              try { await signInWithPopup(auth, provider); } 
-             catch (error) { this.elements.loginError.textContent = '로그인 실패'; }
+             catch (error) { this.elements.loginError.textContent = '로그인 실패: ' + error.message; }
         });
 
         this.elements.logoutBtn.addEventListener('click', () => signOut(auth));
@@ -237,11 +245,11 @@ const app = {
             const target = e.target;
             const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
             const isCustomContextMenu = target.closest('#word-context-menu');
-            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
             const isEditContextMenu = target.closest('#edit-context-menu');
             const isEditTrigger = target.closest('#meaning-container, #explanation-container');
+            const isCardContextMenu = target.closest('#card-context-menu');
             
-            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
+            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger && !isCardContextMenu) {
                 e.preventDefault();
             }
         });
@@ -294,6 +302,8 @@ const app = {
     navigateTo(mode, options = {}) {
         const currentState = history.state || {};
         if (currentState.mode !== mode) this.syncOfflineData();
+        
+        // 같은 모드로 이동 시 중복 렌더링 방지 (단, 특정 모드는 예외)
         if (currentState.mode === mode && JSON.stringify(currentState.options) === JSON.stringify(options) && !['learning', 'mistakeReview', 'favorites', 'quiz-play'].includes(mode)) return;
 
         const newPath = mode === 'selection' ? window.location.pathname + window.location.search : `#${mode}`;
@@ -304,9 +314,20 @@ const app = {
     async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
         
-        // [수정됨] 화면 전환 시 일단 새로고침 버튼 숨김 (기본 초기화)
-        if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
+        // [Cleanup] 모드 전환 전 정리 (Lifecycle Unmount)
+        // learning 모드가 아닐 경우 리스너 해제를 위해 reset 호출
+        if (!['learning', 'mistakeReview', 'favorites'].includes(mode)) {
+            learningMode.reset(); // 내부에서 unmount() 호출됨
+        }
+        
+        // quiz 모드가 아닐 경우
+        if (!['quiz', 'quiz-play'].includes(mode)) {
+            // quizMode.reset()은 UI 숨김 및 상태 초기화 담당
+            // 추후 quiz.js 리팩토링 시 unmount 추가 권장
+            quizMode.reset(true); 
+        }
 
+        // 화면 초기화 (모두 숨김)
         this.elements.selectionScreen.classList.add('hidden');
         this.elements.quizModeContainer.classList.add('hidden');
         this.elements.learningModeContainer.classList.add('hidden');
@@ -316,16 +337,14 @@ const app = {
         this.elements.ttsToggleBtn.classList.add('hidden');
         this.elements.progressBarContainer.classList.add('hidden');
         this.elements.practiceModeControl.classList.add('hidden');
-        learningMode.elements.fixedButtons.classList.add('hidden');
-        learningMode.elements.appContainer.classList.add('hidden');
-        learningMode.elements.startScreen.classList.add('hidden');
+        if(this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
 
         const showCommonButtons = () => {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.ttsToggleBtn.classList.remove('hidden');
-            // 학습 모드 등에서는 새로고침 버튼 안 보임 (TTS 버튼이 대신 함)
         };
 
+        // 모드별 진입 로직
         if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode)) {
              studyTracker.start();
         }
@@ -334,12 +353,13 @@ const app = {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.quizModeContainer.classList.remove('hidden');
             this.elements.practiceModeControl.classList.remove('hidden');
-            quizMode.reset();
+            quizMode.reset(); // 퀴즈 메인 화면 리셋
         } else if (mode === 'quiz-play') {
             showCommonButtons();
             this.elements.quizModeContainer.classList.remove('hidden');
             this.elements.practiceModeControl.classList.remove('hidden');
-            quizMode.reset(false);
+            // reset(false)를 통해 퀴즈 선택 화면은 숨기고 플레이 화면 유지
+            quizMode.reset(false); 
             if (!state.isWordListReady) await api.loadWordList();
             quizMode.displayNextQuiz();
         } else if (mode === 'learning') {
@@ -350,7 +370,7 @@ const app = {
                 learningMode.state.isFavoriteMode = false;
                 learningMode.state.currentWordList = state.wordList;
                 learningMode.state.currentIndex = options.startIndex;
-                learningMode.launchApp();
+                learningMode.launchApp(); // 내부에서 mount() 호출됨
             } else {
                 this.elements.learningModeContainer.querySelector('#learning-start-screen').classList.remove('hidden');
                 learningMode.resetStartScreen();
@@ -358,31 +378,27 @@ const app = {
         } else if (mode === 'mistakeReview') {
             showCommonButtons();
             this.elements.learningModeContainer.classList.remove('hidden');
-            learningMode.startMistakeReview(options.mistakeWords);
+            learningMode.startMistakeReview(options.mistakeWords); // 내부에서 launchApp -> mount 호출
         } else if (mode === 'favorites') {
             showCommonButtons();
             this.elements.learningModeContainer.classList.remove('hidden');
-            learningMode.startFavoriteMode();
+            learningMode.startFavoriteMode(); // 내부에서 launchApp -> mount 호출
         } else if (mode === 'dashboard') {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.dashboardContainer.classList.remove('hidden');
             dashboard.render();
         } else {
-            // [수정됨] 첫 화면(selection)에서만 새로고침 버튼 표시
+            // 기본: 선택 화면 (selection)
             this.elements.selectionScreen.classList.remove('hidden');
             this.elements.logoutBtn.classList.remove('hidden');
-            
             if (this.elements.refreshBtn) {
                 this.elements.refreshBtn.classList.remove('hidden');
             }
-
-            quizMode.reset();
-            learningMode.reset();
         }
     },
+
     async forceReload() {
         this.elements.globalLoader.classList.remove('hidden');
-        // refreshBtn도 비활성화 대상에 포함
         const elementsToDisable = [
             this.elements.refreshBtn, 
             this.elements.selectDashboardBtn, 
@@ -408,6 +424,7 @@ const app = {
             this.elements.globalLoader.classList.add('hidden');
         }
     },
+
     showToast(message, isError = false) {
         const toast = document.createElement('div');
         toast.textContent = message;
@@ -419,6 +436,7 @@ const app = {
             setTimeout(() => toast.remove(), 500);
         }, 2500);
     },
+
     updateLastUpdatedText() {
         if (this.elements.lastUpdatedText && state.lastCacheTimestamp) {
             const d = new Date(state.lastCacheTimestamp);
@@ -430,6 +448,7 @@ const app = {
             this.elements.lastUpdatedText.classList.remove('hidden');
         }
     },
+
     toggleVoiceSet() {
         const btn = this.elements.ttsToggleBtn;
         btn.classList.toggle('is-flipped');
@@ -443,6 +462,7 @@ const app = {
             try { localStorage.setItem(state.LOCAL_STORAGE_KEYS.TTS_VOICE, state.currentVoiceSet); } catch (e) { console.error(e); }
         }, 250);
     },
+
     showImeWarning() {
         this.elements.imeWarning.classList.remove('hidden');
         clearTimeout(this.imeWarningTimeout);
@@ -450,6 +470,7 @@ const app = {
             this.elements.imeWarning.classList.add('hidden');
         }, 2000);
     },
+
     showNoSampleMessage() {
         const msgEl = this.elements.noSampleMessage;
         msgEl.classList.remove('hidden', 'opacity-0');
@@ -458,6 +479,7 @@ const app = {
             setTimeout(() => msgEl.classList.add('hidden'), 500);
         }, 1500);
     },
+
     searchWordInLearningMode(word) {
         if (!word) return;
         this.navigateTo('learning');
