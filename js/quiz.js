@@ -1,6 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { utils, playSequence, correctBeep, incorrectBeep } from './utils.js';
+import { ui } from './ui.js'; // ui 모듈 필요 시 사용 (현재 코드에서는 직접 DOM 조작이 많음)
 
 export const quizMode = {
     state: {
@@ -11,6 +12,8 @@ export const quizMode = {
         sessionCorrectInSet: 0,
         sessionMistakes: [],
         answeredWords: new Set(),
+        
+        // 퀴즈 데이터 캐싱 (Preloading)
         preloadedQuizzes: {
             'MULTIPLE_CHOICE_MEANING': null,
             'FILL_IN_THE_BLANK': null,
@@ -21,10 +24,19 @@ export const quizMode = {
             'FILL_IN_THE_BLANK': false,
             'MULTIPLE_CHOICE_DEFINITION': false
         },
+        
         currentRangeInputTarget: null,
+        
+        // Lifecycle 상태
+        mounted: false,
+        isProcessingAnswer: false, // 정답 처리 중 입력 방지
     },
+
     elements: {},
+    handlers: {}, // 이벤트 핸들러 저장소
+
     init() {
+        // DOM 요소 캐싱
         this.elements = {
             quizSelectionScreen: document.getElementById('quiz-selection-screen'),
             startMeaningQuizBtn: document.getElementById('start-meaning-quiz-btn'),
@@ -34,587 +46,415 @@ export const quizMode = {
             loaderText: document.getElementById('quiz-loader-text'),
             contentContainer: document.getElementById('quiz-content-container'),
             questionDisplay: document.getElementById('quiz-question-display'),
-            choices: document.getElementById('quiz-choices'),
-            modal: document.getElementById('quiz-result-modal'),
-            modalScore: document.getElementById('quiz-result-score'),
-            modalMistakesBtn: document.getElementById('quiz-result-mistakes-btn'),
-            modalContinueBtn: document.getElementById('quiz-result-continue-btn'),
+            choicesContainer: document.getElementById('quiz-choices-container'),
+            resultMessage: document.getElementById('quiz-result-message'),
+            quizStats: document.getElementById('quiz-stats'),
+            correctCountEl: document.getElementById('quiz-correct-count'),
+            totalCountEl: document.getElementById('quiz-total-count'),
+            quizRangeConfig: document.getElementById('quiz-range-config'),
             quizRangeStart: document.getElementById('quiz-range-start'),
             quizRangeEnd: document.getElementById('quiz-range-end'),
-            quizRangeLabel: document.getElementById('quiz-range-label'),
-            rangeInputModal: document.getElementById('range-input-modal'),
-            rangeInputLabel: document.getElementById('range-input-label'),
-            rangeInputField: document.getElementById('range-input-field'),
-            rangeInputCancelBtn: document.getElementById('range-input-cancel-btn'),
-            rangeInputConfirmBtn: document.getElementById('range-input-confirm-btn'),
-            finishedScreen: document.getElementById('quiz-finished-screen'),
-            finishedMessage: document.getElementById('quiz-finished-message'),
+            quizRangeTotal: document.getElementById('quiz-range-total'),
         };
-        this.bindEvents();
+
+        // 핸들러 바인딩
+        this.handlers.startMeaningQuiz = () => this.startQuiz('MULTIPLE_CHOICE_MEANING');
+        this.handlers.startBlankQuiz = () => this.startQuiz('FILL_IN_THE_BLANK');
+        this.handlers.startDefinitionQuiz = () => this.startQuiz('MULTIPLE_CHOICE_DEFINITION');
+        
+        this.handlers.inputRange = (e) => this.validateRangeInput(e);
+        this.handlers.blurRange = () => this.saveRangeSettings();
+        
+        this.handlers.globalKeydown = (e) => this.handleKeyDown(e);
+
+        // 초기화 시 정적 버튼 이벤트 등록
+        if (this.elements.startMeaningQuizBtn) this.elements.startMeaningQuizBtn.addEventListener('click', this.handlers.startMeaningQuiz);
+        if (this.elements.startBlankQuizBtn) this.elements.startBlankQuizBtn.addEventListener('click', this.handlers.startBlankQuiz);
+        if (this.elements.startDefinitionQuizBtn) this.elements.startDefinitionQuizBtn.addEventListener('click', this.handlers.startDefinitionQuiz);
+
+        // 범위 설정 입력 이벤트
+        if (this.elements.quizRangeStart && this.elements.quizRangeEnd) {
+            this.elements.quizRangeStart.addEventListener('input', this.handlers.inputRange);
+            this.elements.quizRangeEnd.addEventListener('input', this.handlers.inputRange);
+            this.elements.quizRangeStart.addEventListener('blur', this.handlers.blurRange);
+            this.elements.quizRangeEnd.addEventListener('blur', this.handlers.blurRange);
+        }
     },
-    bindEvents() {
-        this.elements.startMeaningQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_MEANING'));
-        this.elements.startBlankQuizBtn.addEventListener('click', () => this.start('FILL_IN_THE_BLANK'));
-        this.elements.startDefinitionQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_DEFINITION'));
 
-        this.elements.quizRangeStart.addEventListener('click', (e) => this.promptForRangeValue(e.target));
-        this.elements.quizRangeEnd.addEventListener('click', (e) => this.promptForRangeValue(e.target));
-        this.elements.rangeInputConfirmBtn.addEventListener('click', () => this.confirmRangeInput());
-        this.elements.rangeInputCancelBtn.addEventListener('click', () => this.hideRangeInput());
-        this.elements.rangeInputModal.addEventListener('click', () => this.hideRangeInput());
-        this.elements.rangeInputField.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') this.confirmRangeInput();
-            if (e.key === 'Escape') this.hideRangeInput();
-        });
-        this.elements.quizRangeLabel.addEventListener('click', () => this.resetQuizRange());
-
-        this.elements.modalContinueBtn.addEventListener('click', () => this.continueAfterResult());
-        this.elements.modalMistakesBtn.addEventListener('click', () => this.reviewSessionMistakes());
-
-        document.addEventListener('keydown', (e) => {
-            const isQuizModeActive = !this.elements.contentContainer.classList.contains('hidden') && !this.elements.choices.classList.contains('disabled');
-            if (!isQuizModeActive) return;
-
-            const choiceCount = Array.from(this.elements.choices.children).filter(el => !el.textContent.includes('PASS')).length;
-
-            if (e.key.toLowerCase() === 'p' || e.key === '0') {
-                 e.preventDefault();
-                 const passButton = Array.from(this.elements.choices.children).find(el => el.textContent.includes('PASS'));
-                 if(passButton) passButton.click();
-            } else {
-                const choiceIndex = parseInt(e.key);
-                if (choiceIndex >= 1 && choiceIndex <= choiceCount) {
-                    e.preventDefault();
-                    const targetLi = this.elements.choices.children[choiceIndex - 1];
-                    targetLi.classList.add('bg-gray-200');
-                    setTimeout(() => targetLi.classList.remove('bg-gray-200'), 150);
-                    targetLi.click();
-                }
-            }
-        });
+    // [Lifecycle] 화면 진입 시 (main.js에서 호출)
+    mount() {
+        if (this.state.mounted) return;
+        document.addEventListener('keydown', this.handlers.globalKeydown);
+        this.state.mounted = true;
     },
-    async start(quizType) {
-        this.state.currentQuizType = quizType;
-        window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz-play' } }));
+
+    // [Lifecycle] 화면 이탈 시 (main.js에서 호출)
+    unmount() {
+        if (!this.state.mounted) return;
+        document.removeEventListener('keydown', this.handlers.globalKeydown);
+        this.state.mounted = false;
     },
-    reset(showSelection = true) {
-        this.state.currentQuiz = {};
+
+    // 퀴즈 모드 초기화 (화면 전환 시 호출됨)
+    reset(fullReset = true) {
+        if (fullReset) {
+            // 완전히 나갈 때 (Dashboard 등으로 이동)
+            this.unmount();
+            this.elements.quizSelectionScreen.classList.remove('hidden');
+            this.elements.contentContainer.classList.add('hidden');
+            this.elements.loader.classList.add('hidden');
+        } else {
+            // 퀴즈 플레이 화면만 유지할 때 (Play 모드 진입)
+            this.mount();
+            this.elements.quizSelectionScreen.classList.add('hidden');
+            this.elements.contentContainer.classList.remove('hidden');
+        }
+    },
+
+    preloadAllQuizTypesBasedOnSavedRange() {
+        if (!state.isWordListReady) return;
+        this.preloadQuiz('MULTIPLE_CHOICE_MEANING');
+        this.preloadQuiz('FILL_IN_THE_BLANK');
+        this.preloadQuiz('MULTIPLE_CHOICE_DEFINITION');
+    },
+
+    validateRangeInput(e) {
+        let value = parseInt(e.target.value);
+        if (isNaN(value)) return;
+        
+        const total = state.wordList.length;
+        if (value < 1) value = 1;
+        if (value > total) value = total;
+        
+        // UI에는 즉시 반영하지 않고(타이핑 방해 방지), 저장 시점에만 검증하거나 블러 시점에 처리
+        this.state.currentRangeInputTarget = e.target;
+    },
+
+    saveRangeSettings() {
+        const startEl = this.elements.quizRangeStart;
+        const endEl = this.elements.quizRangeEnd;
+        if (!startEl || !endEl) return;
+
+        let start = parseInt(startEl.value);
+        let end = parseInt(endEl.value);
+        const total = state.wordList.length;
+
+        if (isNaN(start) || start < 1) start = 1;
+        if (isNaN(end) || end > total) end = total;
+        if (start > end) start = end;
+
+        startEl.value = start;
+        endEl.value = end;
+
+        localStorage.setItem('quizRangeStart', start);
+        localStorage.setItem('quizRangeEnd', end);
+        
+        // 범위가 바뀌었으므로 프리로드 데이터 초기화
+        this.state.preloadedQuizzes = {
+            'MULTIPLE_CHOICE_MEANING': null,
+            'FILL_IN_THE_BLANK': null,
+            'MULTIPLE_CHOICE_DEFINITION': null
+        };
+        this.preloadAllQuizTypesBasedOnSavedRange();
+    },
+
+    getQuizRange() {
+        const total = state.wordList.length;
+        if (this.elements.quizRangeTotal) this.elements.quizRangeTotal.textContent = total;
+
+        let start = parseInt(localStorage.getItem('quizRangeStart'));
+        let end = parseInt(localStorage.getItem('quizRangeEnd'));
+
+        if (isNaN(start) || start < 1 || start > total) start = 1;
+        if (isNaN(end) || end < 1 || end > total) end = total;
+        
+        // 저장된 값이 있어도 현재 단어장 크기가 줄었을 수 있으므로 재보정
+        if (end > total) end = total;
+        if (start > end) start = 1;
+
+        if (this.elements.quizRangeStart) this.elements.quizRangeStart.value = start;
+        if (this.elements.quizRangeEnd) this.elements.quizRangeEnd.value = end;
+
+        return { start: start - 1, end: end - 1 }; // 0-based index
+    },
+
+    async startQuiz(type) {
+        if (!state.isWordListReady) {
+            alert("단어 목록을 불러오는 중입니다.");
+            return;
+        }
+
+        this.state.currentQuizType = type;
         this.state.sessionAnsweredInSet = 0;
         this.state.sessionCorrectInSet = 0;
         this.state.sessionMistakes = [];
-        if (showSelection) {
-            this.state.answeredWords.clear();
-            this.state.currentQuizType = null;
-        }
+        this.state.answeredWords.clear();
 
-        this.elements.loader.querySelector('.loader').style.display = 'block';
-        this.elements.loaderText.textContent = "퀴즈 데이터를 불러오는 중...";
-        if (showSelection) {
-            this.elements.quizSelectionScreen.classList.remove('hidden');
-            this.elements.loader.classList.add('hidden');
-        } else {
-            this.showLoader(true);
-        }
-        this.elements.contentContainer.classList.add('hidden');
-        this.elements.finishedScreen.classList.add('hidden');
-        if (this.elements.modal) this.elements.modal.classList.add('hidden');
-
-        if (showSelection) {
-            this.updateRangeInputs();
-        }
+        // UI 전환 및 URL 변경
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz-play' } }));
+        
+        this.displayNextQuiz();
     },
-    async updateRangeInputs() {
-        let startValue = 1;
-        let endValue = 1;
-        let totalWords = 1;
 
-        try {
-            if (!state.isWordListReady) {
-                await api.loadWordList();
-            }
-            totalWords = state.wordList?.length || 1;
-            endValue = totalWords;
-
-            const startStorageKey = state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START;
-            const endStorageKey = state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END;
-
-            const savedStart = localStorage.getItem(startStorageKey);
-            const savedEnd = localStorage.getItem(endStorageKey);
-
-            if (savedStart !== null) {
-                const parsedStart = parseInt(savedStart);
-                if (!isNaN(parsedStart) && parsedStart >= 1 && parsedStart <= totalWords) {
-                    startValue = parsedStart;
-                } else {
-                    localStorage.removeItem(startStorageKey);
-                }
-            }
-            if (savedEnd !== null) {
-                const parsedEnd = parseInt(savedEnd);
-                if (!isNaN(parsedEnd) && parsedEnd >= 1 && parsedEnd <= totalWords) {
-                    endValue = parsedEnd;
-                } else {
-                     localStorage.removeItem(endStorageKey);
-                }
-            }
-        } catch (error) {
-            startValue = 1;
-            endValue = 1;
-            totalWords = 1;
-        } finally {
-            this.elements.quizRangeStart.textContent = startValue;
-            this.elements.quizRangeStart.dataset.min = 1;
-            this.elements.quizRangeStart.dataset.max = totalWords;
-
-            this.elements.quizRangeEnd.textContent = endValue;
-            this.elements.quizRangeEnd.dataset.min = 1;
-            this.elements.quizRangeEnd.dataset.max = totalWords;
-        }
-    },
-    promptForRangeValue(targetButton) {
-        if (!targetButton) return;
-        this.state.currentRangeInputTarget = targetButton;
-        const isStart = targetButton.id === 'quiz-range-start';
-        const min = parseInt(targetButton.dataset.min) || 1;
-        const max = parseInt(targetButton.dataset.max) || 1;
-
-        const labelText = isStart ? `시작번호 (1-${max}) :` : `마지막번호 (1-${max}) :`;
-        this.elements.rangeInputLabel.textContent = labelText;
-        this.elements.rangeInputField.value = targetButton.textContent;
-        this.elements.rangeInputField.min = min;
-        this.elements.rangeInputField.max = max;
-
-        this.elements.rangeInputModal.classList.remove('hidden');
-        this.elements.rangeInputField.focus();
-        this.elements.rangeInputField.select();
-    },
-    hideRangeInput() {
-        this.elements.rangeInputModal.classList.add('hidden');
-        this.state.currentRangeInputTarget = null;
-    },
-    confirmRangeInput() {
-        const targetButton = this.state.currentRangeInputTarget;
-        if (!targetButton) return;
-
-        const min = parseInt(targetButton.dataset.min) || 1;
-        const max = parseInt(targetButton.dataset.max) || 1;
-        const newValueStr = this.elements.rangeInputField.value;
-
-        if (newValueStr !== null && newValueStr.trim() !== '') {
-            let newValue = parseInt(newValueStr);
-            if (!isNaN(newValue)) {
-                newValue = Math.max(min, Math.min(max, newValue));
-                targetButton.textContent = newValue;
-
-                const storageKey = targetButton.id === 'quiz-range-start'
-                                   ? state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START
-                                   : state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END;
-                try {
-                    localStorage.setItem(storageKey, newValue);
-                    this.clearAndPreloadQuizzesForNewRange();
-                } catch (e) {
-                    console.error("Error saving quiz range to localStorage", e);
-                }
-            } else {
-                // Toast logic needed or just alert
-                alert("숫자만 입력 가능합니다.");
-            }
-        }
-        this.hideRangeInput();
-    },
-    resetQuizRange() {
-        const allWords = state.wordList || [];
-        const totalWords = allWords.length > 0 ? allWords.length : 1;
-        this.elements.quizRangeStart.textContent = 1;
-        this.elements.quizRangeEnd.textContent = totalWords;
-        try {
-            localStorage.setItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START, 1);
-            localStorage.setItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END, totalWords);
-            this.clearAndPreloadQuizzesForNewRange();
-        } catch (e) { console.error(e); }
-    },
-    clearAndPreloadQuizzesForNewRange() {
-        const quizTypes = Object.keys(this.state.preloadedQuizzes);
-        quizTypes.forEach(type => {
-            this.state.preloadedQuizzes[type] = null;
-            this.state.isPreloading[type] = false;
-        });
-        this.preloadAllQuizTypesBasedOnSavedRange();
-    },
     async displayNextQuiz() {
-        this.showLoader(true, "다음 문제 생성 중...");
-        let nextQuiz = null;
-        const type = this.state.currentQuizType;
-        let preloaded = this.state.preloadedQuizzes[type];
-
-        if (preloaded) {
-            const allWords = state.wordList || [];
-            const startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
-            const endVal = parseInt(this.elements.quizRangeEnd.textContent) || allWords.length;
-            const startNum = Math.min(startVal, endVal);
-            const endNum = Math.max(startVal, endVal);
-            const startIndex = Math.max(0, startNum - 1);
-            const endIndex = Math.min(allWords.length - 1, endNum - 1);
-            const wordIndex = allWords.findIndex(w => w.word === preloaded.question.word);
-
-            if (wordIndex < startIndex || wordIndex > endIndex) preloaded = null;
-            if (preloaded && this.state.answeredWords.has(preloaded.question.word)) preloaded = null;
-            if (preloaded && !this.state.isPracticeMode) {
-                 const status = utils.getWordStatus(preloaded.question.word);
-                 if (status === 'learned') preloaded = null;
-            }
-        }
-
-        if (preloaded) {
-            nextQuiz = preloaded;
-            this.state.preloadedQuizzes[type] = null;
-            this.preloadNextQuiz(type, nextQuiz.question.word);
-        }
-
-        if (!nextQuiz) {
-            nextQuiz = await this.generateSingleQuiz();
-            if (nextQuiz) this.preloadNextQuiz(type, nextQuiz.question.word);
-        }
-
-        if (nextQuiz) {
-            this.state.currentQuiz = nextQuiz;
-            this.showLoader(false);
-            this.renderQuiz(nextQuiz);
+        this.state.isProcessingAnswer = false;
+        
+        // 연습 모드나 세션 진행도 UI 업데이트
+        if (this.state.isPracticeMode) {
+            this.elements.quizStats.classList.add('hidden');
         } else {
-            if (this.state.sessionAnsweredInSet > 0) {
-                 this.showSessionResultModal(true);
-            } else {
-                 this.showFinishedScreen("No more quizzes!");
-                 setTimeout(() => window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } })), 800);
-            }
+            this.elements.quizStats.classList.remove('hidden');
+            this.elements.correctCountEl.textContent = this.state.sessionCorrectInSet;
+            this.elements.totalCountEl.textContent = this.state.sessionAnsweredInSet;
         }
-    },
-    async generateSingleQuiz() {
-        const allWords = state.wordList || [];
-        if (allWords.length === 0) return null;
+        
+        this.elements.resultMessage.classList.add('hidden');
+        this.elements.resultMessage.textContent = '';
+        this.elements.resultMessage.className = 'text-center text-lg font-bold mb-4 hidden';
 
-        const startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
-        const endVal = parseInt(this.elements.quizRangeEnd.textContent) || allWords.length;
-        const startNum = Math.min(startVal, endVal);
-        const endNum = Math.max(startVal, endVal);
-        const startIndex = Math.max(0, startNum - 1);
-        const endIndex = Math.min(allWords.length - 1, endNum - 1);
-        const wordsInRange = allWords.slice(startIndex, endIndex + 1);
-
-        if (wordsInRange.length === 0) return null;
-
-        const currentQuizType = this.state.currentQuizType;
-        const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-        let unsynced = {};
-        try { unsynced = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch(e) {}
-
-        let candidates = wordsInRange.filter(wordObj => {
-            const word = wordObj.word;
-            if (this.state.answeredWords.has(word)) return false;
-            if (this.state.isPracticeMode) return true;
-            if (unsynced[word] && unsynced[word][currentQuizType] === 'correct') return false;
-            const serverProgress = state.currentProgress[word];
-            if (!unsynced[word] && serverProgress && serverProgress[currentQuizType] === 'correct') return false;
-            return true;
-        });
-        if (this.state.currentQuizType === 'FILL_IN_THE_BLANK') {
-            candidates = candidates.filter(word => word.sample && word.sample.trim() !== '');
+        // 퀴즈 데이터 가져오기 (캐시 확인)
+        let quizData = this.state.preloadedQuizzes[this.state.currentQuizType];
+        
+        // 캐시가 없으면 생성 (로딩 표시)
+        if (!quizData) {
+            this.elements.contentContainer.classList.add('hidden');
+            this.elements.loader.classList.remove('hidden');
+            this.elements.loaderText.textContent = "문제 생성 중...";
+            
+            quizData = await this.generateQuiz(this.state.currentQuizType);
+            this.elements.loader.classList.add('hidden');
+            this.elements.contentContainer.classList.remove('hidden');
         }
 
-        if (candidates.length === 0) return null;
+        // 사용한 캐시 비우고 다음 문제 미리 로딩
+        this.state.preloadedQuizzes[this.state.currentQuizType] = null;
+        this.preloadQuiz(this.state.currentQuizType);
 
-        utils.shuffleArray(candidates);
-        const usableAllWordsForChoices = allWords.length >= 4 ? allWords : [...allWords, {word: 'dummy1', meaning: '오답1'}, {word: 'dummy2', meaning: '오답2'}, {word: 'dummy3', meaning: '오답3'}];
-
-        for (const wordData of candidates) {
-            let quiz = null;
-            if (this.state.currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, usableAllWordsForChoices);
-            else if (this.state.currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, usableAllWordsForChoices);
-            else if (this.state.currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, usableAllWordsForChoices);
-            if (quiz) return quiz;
-        }
-        return null;
-    },
-    renderQuiz(quizData) {
-        const { type, question, choices } = quizData;
-        const questionDisplay = this.elements.questionDisplay;
-        questionDisplay.innerHTML = '';
-        questionDisplay.className = 'bg-green-100 p-4 rounded-lg mb-4 flex min-h-[100px]';
-
-        if (type === 'FILL_IN_THE_BLANK') {
-            questionDisplay.classList.add('items-start', 'text-left');
-            const p = document.createElement('p');
-            p.className = 'text-xl sm:text-2xl text-gray-800 leading-relaxed';
-            const parts = question.sentence_with_blank.split('___BLANK___');
-            parts.forEach((part, index) => {
-                const textParts = part.split(/(\*.*?\*)/g);
-                textParts.forEach(textPart => {
-                    if (textPart.startsWith('*') && textPart.endsWith('*')) {
-                        const strong = document.createElement('strong');
-                        strong.textContent = textPart.slice(1, -1);
-                        p.appendChild(strong);
-                    } else if (textPart) {
-                        p.appendChild(document.createTextNode(textPart));
-                    }
-                });
-
-                if (index < parts.length - 1) {
-                    const blankSpan = document.createElement('span');
-                    blankSpan.className = 'quiz-blank inline-block font-mono text-blue-600';
-                    blankSpan.textContent = '＿＿＿＿';
-                    p.appendChild(blankSpan);
-                }
-            });
-            questionDisplay.appendChild(p);
-        } else if (type === 'MULTIPLE_CHOICE_MEANING') {
-            questionDisplay.classList.add('items-center', 'justify-center');
-            questionDisplay.innerHTML = `<h1 id="quiz-word" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer">${question.word}</h1>`;
-            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); };
-        } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
-            questionDisplay.classList.add('items-start', 'text-left');
-            questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
-        }
-
-        this.elements.choices.innerHTML = '';
-        choices.forEach((choice, index) => {
-            const li = document.createElement('li');
-            li.className = 'choice-item border-2 border-gray-300 py-3 px-4 rounded-lg cursor-pointer flex items-start transition-all text-lg hover:bg-blue-50';
-            li.innerHTML = `<span class="font-bold mr-3 text-blue-600">${index + 1}.</span> <span>${choice}</span>`;
-            li.onclick = () => this.checkAnswer(li, choice);
-            this.elements.choices.appendChild(li);
-        });
-
-        const passLi = document.createElement('li');
-        passLi.className = 'choice-item border-2 border-red-500 bg-red-500 hover:bg-red-600 text-white p-4 rounded-lg cursor-pointer flex items-center justify-center transition-all font-bold text-lg';
-        passLi.innerHTML = `<span>PASS</span>`;
-        passLi.onclick = () => this.checkAnswer(passLi, 'USER_PASSED');
-        this.elements.choices.appendChild(passLi);
-        this.elements.choices.classList.remove('disabled');
-    },
-    async checkAnswer(selectedLi, selectedChoice) {
-        this.elements.choices.classList.add('disabled');
-        const isCorrect = selectedChoice === this.state.currentQuiz.answer;
-        const isPass = selectedChoice === 'USER_PASSED';
-        const word = this.state.currentQuiz.question.word;
-        const quizType = this.state.currentQuiz.type;
-
-        this.state.answeredWords.add(word);
-        selectedLi.classList.add(isCorrect ? 'correct' : 'incorrect');
-
-        if (isCorrect && !isPass) playSequence(correctBeep);
-        else playSequence(incorrectBeep);
-
-        if (!isCorrect) {
-            Array.from(this.elements.choices.children)
-                 .find(li => li.textContent.includes(this.state.currentQuiz.answer))
-                 ?.classList.add('correct');
-             if (!isPass) this.state.sessionMistakes.push(word);
-        }
-
-        this.state.sessionAnsweredInSet++;
-        if (isCorrect && !isPass) this.state.sessionCorrectInSet++;
-
-        if (!this.state.isPracticeMode) {
-             await api.updateWordStatus(word, quizType, (isCorrect && !isPass) ? 'correct' : 'incorrect');
-        }
-
-        setTimeout(() => {
-            if (this.state.sessionAnsweredInSet >= 10) this.showSessionResultModal();
-            else this.displayNextQuiz();
-        }, 600);
-    },
-    showLoader(isLoading, message = '퀴즈를 준비 중입니다...') {
-        this.elements.loader.classList.toggle('hidden', !isLoading);
-        this.elements.loaderText.textContent = message;
-        this.elements.contentContainer.classList.toggle('hidden', isLoading);
-        this.elements.quizSelectionScreen.classList.add('hidden');
-        this.elements.finishedScreen.classList.add('hidden');
-    },
-    showFinishedScreen(message) {
-        this.showLoader(false);
-        this.elements.contentContainer.classList.add('hidden');
-        this.elements.finishedScreen.classList.remove('hidden');
-        this.elements.finishedMessage.textContent = message;
-    },
-    showSessionResultModal(isFinal = false) {
-        this.elements.modalScore.textContent = `${this.state.sessionAnsweredInSet}문제 중 ${this.state.sessionCorrectInSet}개 정답!`;
-        this.elements.modalMistakesBtn.classList.toggle('hidden', this.state.sessionMistakes.length === 0);
-        this.elements.modalContinueBtn.textContent = isFinal ? "퀴즈 유형으로" : "다음 퀴즈 계속";
-        this.elements.modal.classList.remove('hidden');
-    },
-    continueAfterResult() {
-        this.elements.modal.classList.add('hidden');
-        if (this.elements.modalContinueBtn.textContent === "퀴즈 유형으로") {
-            window.dispatchEvent(new CustomEvent('syncRequest'));
+        if (!quizData) {
+            alert("퀴즈를 생성할 수 없습니다. 단어 데이터를 확인해주세요.");
             window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } }));
             return;
         }
-        this.state.sessionAnsweredInSet = 0;
-        this.state.sessionCorrectInSet = 0;
-        this.state.sessionMistakes = [];
-        this.displayNextQuiz();
-    },
-    reviewSessionMistakes() {
-        this.elements.modal.classList.add('hidden');
-        const mistakes = [...new Set(this.state.sessionMistakes)];
-        this.state.sessionAnsweredInSet = 0;
-        this.state.sessionCorrectInSet = 0;
-        this.state.sessionMistakes = [];
-        window.dispatchEvent(new CustomEvent('syncRequest'));
-        window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'mistakeReview', options: { mistakeWords: mistakes } } }));
-    },
-    async preloadAllQuizTypesBasedOnSavedRange() {
-        if (!state.isWordListReady) {
-            try { await api.loadWordList(); } catch (e) { return; }
-        }
 
-        let startValue = 1;
-        let endValue = state.wordList.length;
+        this.state.currentQuiz = quizData;
+        this.renderQuiz(quizData);
+    },
+
+    async preloadQuiz(type) {
+        if (this.state.preloadedQuizzes[type] || this.state.isPreloading[type]) return;
+        
+        this.state.isPreloading[type] = true;
         try {
-            const savedStart = localStorage.getItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START);
-            const savedEnd = localStorage.getItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END);
-            const totalWords = state.wordList.length || 1;
-
-            if (savedStart !== null) {
-                const parsedStart = parseInt(savedStart);
-                if (!isNaN(parsedStart) && parsedStart >= 1 && parsedStart <= totalWords) startValue = parsedStart;
-            }
-            if (savedEnd !== null) {
-                const parsedEnd = parseInt(savedEnd);
-                if (!isNaN(parsedEnd) && parsedEnd >= 1 && parsedEnd <= totalWords) endValue = parsedEnd;
-            }
-        } catch(e) { console.warn("Error reading saved range for initial preload:", e); }
-
-        const quizTypes = Object.keys(this.state.preloadedQuizzes);
-        for (const type of quizTypes) {
-            this.preloadNextQuiz(type, null, { start: startValue, end: endValue });
-        }
-    },
-    async preloadNextQuiz(quizType, wordToExclude = null, rangeOverride = null) {
-        if (this.state.isPreloading[quizType] || this.state.preloadedQuizzes[quizType]) return;
-
-        this.state.isPreloading[quizType] = true;
-        try {
-            const quiz = await this._generateSingleQuizForPreload(quizType, wordToExclude, rangeOverride);
-            if (quiz) this.state.preloadedQuizzes[quizType] = quiz;
-        } catch (error) {
-            console.warn(`Preloading quiz type ${quizType} failed:`, error);
+            const quiz = await this.generateQuiz(type);
+            this.state.preloadedQuizzes[type] = quiz;
+        } catch (e) {
+            console.error("Preload failed:", e);
         } finally {
-            this.state.isPreloading[quizType] = false;
+            this.state.isPreloading[type] = false;
         }
     },
-    async _generateSingleQuizForPreload(quizType, wordToExclude = null, rangeOverride = null) {
-        const allWords = state.wordList || [];
-        if (allWords.length === 0) return null;
 
-        let startVal, endVal;
-        if (rangeOverride) {
-            startVal = rangeOverride.start;
-            endVal = rangeOverride.end;
-        } else {
-            startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
-            endVal = parseInt(this.elements.quizRangeEnd.textContent) || allWords.length;
+    async generateQuiz(type) {
+        const { start, end } = this.getQuizRange();
+        const rangeWords = state.wordList.filter(w => w.index >= start + 1 && w.index <= end + 1);
+
+        if (rangeWords.length < 4) return null;
+
+        // 아직 안 푼 단어 우선 선택
+        let candidates = rangeWords.filter(w => !this.state.answeredWords.has(w.word));
+        if (candidates.length === 0) {
+            // 범위 내 모든 단어를 다 풀었으면 초기화
+            this.state.answeredWords.clear();
+            candidates = rangeWords;
         }
 
-        const startNum = Math.min(startVal, endVal);
-        const endNum = Math.max(startVal, endVal);
-        const startIndex = Math.max(0, startNum - 1);
-        const endIndex = Math.min(allWords.length - 1, endNum - 1);
-        const wordsInRange = allWords.slice(startIndex, endIndex + 1);
+        const correctWordData = candidates[Math.floor(Math.random() * candidates.length)];
+        this.state.answeredWords.add(correctWordData.word);
 
-        if (wordsInRange.length === 0) return null;
-
-        const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-        let unsynced = {};
-        try { unsynced = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch(e) {}
-
-        let candidates = wordsInRange.filter(wordObj => {
-            const word = wordObj.word;
-            if (word === wordToExclude) return false;
-            if (this.state.answeredWords.has(word)) return false;
-            if (this.state.isPracticeMode) return true;
-            if (unsynced[word] && unsynced[word][quizType] === 'correct') return false;
-            const serverProgress = state.currentProgress[word];
-            if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
-            return true;
-        });
-
-        if (quizType === 'FILL_IN_THE_BLANK') {
-             candidates = candidates.filter(word => word.sample && word.sample.trim() !== '');
+        if (type === 'MULTIPLE_CHOICE_MEANING') {
+            return this.createMeaningQuiz(correctWordData, rangeWords);
+        } else if (type === 'FILL_IN_THE_BLANK') {
+            return this.createBlankQuiz(correctWordData, rangeWords);
+        } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
+            return this.createDefinitionQuiz(correctWordData, rangeWords);
         }
-
-        if (candidates.length === 0) return null;
-
-        utils.shuffleArray(candidates);
-        const usableAllWordsForChoices = allWords.length >= 4 ? allWords : [...allWords, {word: 'dummy1', meaning: '오답1'}, {word: 'dummy2', meaning: '오답2'}, {word: 'dummy3', meaning: '오답3'}];
-
-        const wordData = candidates[0];
-        let quiz = null;
-        if (quizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, usableAllWordsForChoices);
-        else if (quizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, usableAllWordsForChoices);
-        else if (quizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, usableAllWordsForChoices);
-
-        return quiz;
+        return null;
     },
-    createMeaningQuiz(correctWordData, allWordsData) {
+
+    createMeaningQuiz(correctWordData, rangeWords) {
         const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.meaning !== correctWordData.meaning);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.meaning));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-            const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-            if (randomWord.meaning !== correctWordData.meaning && !wrongAnswers.has(randomWord.meaning)) {
+        while (wrongAnswers.size < 3) {
+            const randomWord = rangeWords[Math.floor(Math.random() * rangeWords.length)];
+            if (randomWord.word !== correctWordData.word) {
                 wrongAnswers.add(randomWord.meaning);
             }
         }
-        if (wrongAnswers.size < 3) return null;
         const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers)]);
-        return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctWordData.meaning };
+        return { 
+            type: 'MULTIPLE_CHOICE_MEANING', 
+            question: correctWordData.word, 
+            choices, 
+            answer: correctWordData.meaning, 
+            correctWord: correctWordData.word 
+        };
     },
-    createBlankQuiz(correctWordData, allWordsData) {
-        if (!correctWordData.sample || !correctWordData.sample.trim()) return null;
 
-        const firstLine = correctWordData.sample.split('\n')[0]
-            .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, "")
-            .replace(/\*/g, '')
-            .trim();
-
-        const placeholderRegex = new RegExp(`\\b${correctWordData.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
-        if (!firstLine.match(placeholderRegex)) return null;
-        const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
-
-        const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-            const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-             if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
-                wrongAnswers.add(randomWord.word);
+    createBlankQuiz(correctWordData, rangeWords) {
+        let sentenceWithBlank = "";
+        if (correctWordData.sample) {
+            const sentences = correctWordData.sample.split('\n');
+            const targetSentence = sentences[Math.floor(Math.random() * sentences.length)];
+            const regex = new RegExp(`\\b${correctWordData.word}\\b`, 'gi');
+            if (regex.test(targetSentence)) {
+                sentenceWithBlank = targetSentence.replace(regex, '_______');
             }
         }
-         if (wrongAnswers.size < 3) return null;
+        
+        // 예문이 없거나 매칭 실패 시 fallback
+        if (!sentenceWithBlank) {
+             return this.createMeaningQuiz(correctWordData, rangeWords);
+        }
+
+        const wrongAnswers = new Set();
+        // 품사가 같은 오답 우선 선택
+        let wrongCandidates = rangeWords.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
+        
+        // 품사 매칭되는게 부족하면 전체에서 선택
+        if (wrongCandidates.length < 3) {
+            wrongCandidates = rangeWords.filter(w => w.word !== correctWordData.word);
+        }
+
+        utils.shuffleArray(wrongCandidates);
+        wrongCandidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
+        
+        // 그래도 부족하면 랜덤 채우기
+        while (wrongAnswers.size < 3) {
+             const randomWord = rangeWords[Math.floor(Math.random() * rangeWords.length)];
+             if (randomWord.word !== correctWordData.word) wrongAnswers.add(randomWord.word);
+        }
 
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers)]);
-        return { type: 'FILL_IN_THE_BLANK', question: { sentence_with_blank: sentenceWithBlank, word: correctWordData.word }, choices, answer: correctWordData.word };
+        return { 
+            type: 'FILL_IN_THE_BLANK', 
+            question: { sentence_with_blank: sentenceWithBlank, word: correctWordData.word }, // word는 정답 확인용
+            choices, 
+            answer: correctWordData.word,
+            correctWord: correctWordData.word
+        };
     },
-    async createDefinitionQuiz(correctWordData, allWordsData) {
+
+    async createDefinitionQuiz(correctWordData, rangeWords) {
+        // 정의(Definition) 가져오기 시도
         const definition = await api.fetchDefinition(correctWordData.word);
-        if (!definition) return null;
+        if (!definition) {
+            // 정의가 없으면 뜻 맞추기 퀴즈로 대체
+            return this.createMeaningQuiz(correctWordData, rangeWords);
+        }
 
         const wrongAnswers = new Set();
-        let candidates = allWordsData.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
-        utils.shuffleArray(candidates);
-        candidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
-        while (wrongAnswers.size < 3 && allWordsData.length > wrongAnswers.size + 1) {
-             const randomWord = allWordsData[Math.floor(Math.random() * allWordsData.length)];
-             if (randomWord.word !== correctWordData.word && !wrongAnswers.has(randomWord.word)) {
-                wrongAnswers.add(randomWord.word);
-            }
+        let wrongCandidates = rangeWords.filter(w => w.pos === correctWordData.pos && w.word !== correctWordData.word);
+        if (wrongCandidates.length < 3) wrongCandidates = rangeWords.filter(w => w.word !== correctWordData.word);
+
+        utils.shuffleArray(wrongCandidates);
+        wrongCandidates.slice(0, 3).forEach(w => wrongAnswers.add(w.word));
+        
+        while (wrongAnswers.size < 3) {
+             const randomWord = rangeWords[Math.floor(Math.random() * rangeWords.length)];
+             if (randomWord.word !== correctWordData.word) wrongAnswers.add(randomWord.word);
         }
-         if (wrongAnswers.size < 3) return null;
 
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers)]);
-        return { type: 'MULTIPLE_CHOICE_DEFINITION', question: { definition, word: correctWordData.word }, choices, answer: correctWordData.word };
+        return { 
+            type: 'MULTIPLE_CHOICE_DEFINITION', 
+            question: { definition, word: correctWordData.word }, 
+            choices, 
+            answer: correctWordData.word,
+            correctWord: correctWordData.word
+        };
+    },
+
+    renderQuiz(quizData) {
+        this.elements.choicesContainer.innerHTML = '';
+        
+        // 문제 표시
+        if (quizData.type === 'MULTIPLE_CHOICE_MEANING') {
+            this.elements.questionDisplay.innerHTML = `<h2 class="text-3xl font-bold text-gray-800">${quizData.question}</h2>`;
+        } else if (quizData.type === 'FILL_IN_THE_BLANK') {
+            this.elements.questionDisplay.innerHTML = `<p class="text-xl text-gray-700 leading-relaxed">"${quizData.question.sentence_with_blank}"</p>`;
+        } else if (quizData.type === 'MULTIPLE_CHOICE_DEFINITION') {
+            this.elements.questionDisplay.innerHTML = `<p class="text-lg text-gray-700 italic">"${quizData.question.definition}"</p>`;
+        }
+
+        // 보기(Choices) 표시
+        quizData.choices.forEach((choice, index) => {
+            const btn = document.createElement('button');
+            btn.className = "w-full text-left p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 flex items-center group relative";
+            btn.innerHTML = `
+                <span class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center mr-3 font-bold group-hover:bg-blue-200 group-hover:text-blue-700 transition-colors">${index + 1}</span>
+                <span class="text-lg text-gray-700 font-medium group-hover:text-gray-900">${choice}</span>
+            `;
+            btn.onclick = () => this.handleAnswer(choice, btn);
+            this.elements.choicesContainer.appendChild(btn);
+        });
+    },
+
+    handleAnswer(selectedChoice, btnElement) {
+        if (this.state.isProcessingAnswer) return;
+        this.state.isProcessingAnswer = true; // 중복 입력 차단
+
+        const isCorrect = selectedChoice === this.state.currentQuiz.answer;
+        const correctBtn = Array.from(this.elements.choicesContainer.children).find(b => b.textContent.includes(this.state.currentQuiz.answer));
+
+        // UI 피드백
+        if (isCorrect) {
+            btnElement.classList.add('bg-green-100', 'border-green-500');
+            btnElement.querySelector('span:first-child').classList.add('bg-green-200', 'text-green-700');
+            this.elements.resultMessage.textContent = "정답입니다! 🎉";
+            this.elements.resultMessage.classList.remove('hidden', 'text-red-500');
+            this.elements.resultMessage.classList.add('text-green-600');
+            correctBeep();
+        } else {
+            btnElement.classList.add('bg-red-100', 'border-red-500');
+            btnElement.querySelector('span:first-child').classList.add('bg-red-200', 'text-red-700');
+            if (correctBtn) {
+                correctBtn.classList.add('bg-green-100', 'border-green-500'); // 정답 알려주기
+                correctBtn.classList.add('animate-pulse');
+            }
+            this.elements.resultMessage.textContent = `오답입니다. 정답: ${this.state.currentQuiz.answer}`;
+            this.elements.resultMessage.classList.remove('hidden', 'text-green-600');
+            this.elements.resultMessage.classList.add('text-red-500');
+            incorrectBeep();
+        }
+
+        // 데이터 업데이트 (연습모드 아닐 때만)
+        if (!this.state.isPracticeMode) {
+            this.state.sessionAnsweredInSet++;
+            if (isCorrect) this.state.sessionCorrectInSet++;
+            else this.state.sessionMistakes.push(this.state.currentQuiz.correctWord);
+            
+            // 서버/로컬 저장
+            const targetWord = this.state.currentQuiz.correctWord;
+            api.updateWordStatus(targetWord, this.state.currentQuizType, isCorrect ? 'correct' : 'wrong');
+        }
+
+        // 다음 문제로 이동
+        setTimeout(() => {
+            this.displayNextQuiz();
+        }, 1500);
+    },
+
+    handleKeyDown(e) {
+        if (!this.state.mounted || this.elements.contentContainer.classList.contains('hidden')) return;
+        if (this.state.isProcessingAnswer) return;
+
+        const key = e.key;
+        const choices = this.elements.choicesContainer.children;
+        
+        if (['1', '2', '3', '4'].includes(key)) {
+            const index = parseInt(key) - 1;
+            if (choices[index]) {
+                choices[index].click();
+            }
+        }
     }
 };
