@@ -1,75 +1,51 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 
-/* =========================================
-   기본 설정 (Reset & Base)
-   ========================================= */
 body {
     font-family: 'Noto Sans KR', sans-serif;
-    -webkit-tap-highlight-color: transparent; /* 모바일 터치 하이라이트 제거 */
-    -webkit-user-select: none; /* 텍스트 선택 방지 (앱 같은 느낌) */
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    background-color: #f9fafb; /* bg-gray-50 */
-    overflow-x: hidden; /* 가로 스크롤 방지 */
+    -webkit-tap-highlight-color: transparent;
 }
 
-/* 입력 필드나 텍스트 영역에서는 선택 허용 */
-input, textarea {
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
-}
-
-/* =========================================
-   학습 카드 애니메이션 (Slide Up Effect)
-   ========================================= */
+/* 원본 학습 카드 스타일 */
 #learning-app-container {
     perspective: 1000px;
 }
 
 #learning-app-container .relative {
-    overflow: hidden; /* 카드가 둥근 모서리를 넘지 않도록 */
-    border-radius: 1rem; /* rounded-2xl 대응 */
-    transform: translateZ(0); /* 사파리 렌더링 최적화 */
+    overflow: hidden;
+    border-radius: 1rem;
+    transform: translateZ(0);
 }
 
-/* 카드 뒷면 (기본: 아래에 숨겨짐) */
 #learning-card-back {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    transform: translateY(100%); /* 아래로 내려가 있음 */
+    transform: translateY(100%);
     opacity: 0;
     transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease-in-out;
-    pointer-events: none; /* 숨겨져 있을 때 클릭 방지 */
+    pointer-events: none;
     display: flex;
     flex-direction: column;
-    background-color: white;
+    background-color: white; /* 명시적 배경 */
     z-index: 20;
 }
 
-/* 카드 뒷면 활성화 (위로 올라옴) */
 #learning-card-back.is-slid-up {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
 }
 
-/* 카드 앞면 높이 확보 */
 #learning-card-front {
-    min-height: 50vh; /* 모바일에서 충분한 높이 확보 */
+    min-height: 50vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 
-/* =========================================
-   TTS 버튼 회전 애니메이션 (3D Flip)
-   ========================================= */
+/* TTS 버튼 (원본 회전 효과 유지) */
 #tts-toggle-btn {
     transition: transform 0.6s, background-color 0.3s;
     transform-style: preserve-3d;
@@ -80,19 +56,16 @@ input, textarea {
 }
 
 #tts-toggle-text {
-    display: block;
-    transform: rotateY(0deg); /* 텍스트가 뒤집히지 않도록 내부 처리 필요시 보정 */
-    /* 현재 JS 로직상 버튼 자체가 뒤집히므로 텍스트 반전이 필요하다면 아래 코드 사용 */
-    /* backface-visibility: hidden; */
+    transform: rotateY(0deg);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
-/* =========================================
-   로딩 스피너 (Loader)
-   ========================================= */
+/* 로더 */
 .loader {
-    border: 4px solid #f3f3f3; /* Light grey */
+    border: 4px solid #f3f3f3;
     border-radius: 50%;
-    border-top: 4px solid #4F46E5; /* Indigo-600 */
+    border-top: 4px solid #3498db; /* 원본 색상 */
     width: 40px;
     height: 40px;
     animation: spin 1s linear infinite;
@@ -103,78 +76,25 @@ input, textarea {
     100% { transform: rotate(360deg); }
 }
 
-/* =========================================
-   상호작용 요소 (Interactive Words)
-   ========================================= */
+/* 인터랙티브 단어 (원본 스타일) */
 .interactive-word {
     cursor: pointer;
-    border-bottom: 1px dashed transparent;
-    transition: all 0.2s ease;
+    transition: color 0.2s;
 }
-
 .interactive-word:hover {
-    color: #2563EB; /* blue-600 */
-    border-bottom-color: #2563EB;
+    color: #2563EB;
 }
 
-.interactive-word:active {
-    color: #1E40AF; /* blue-800 */
-    transform: scale(0.95);
-}
-
-/* 예문 내 강조 구문 */
-.sentence-content-area strong {
-    font-weight: 700;
-    color: #4F46E5; /* indigo-600 */
-}
-
-/* =========================================
-   퀴즈 스타일
-   ========================================= */
+/* 퀴즈 빈칸 */
 .quiz-blank {
     display: inline-block;
-    min-width: 60px;
+    min-width: 50px;
+    border-bottom: 2px solid #374151;
     text-align: center;
-    border-bottom: 2px solid #374151; /* gray-700 */
-    color: transparent; /* 정답 숨기기 */
     margin: 0 4px;
-    vertical-align: bottom;
 }
 
-/* =========================================
-   툴팁 & 기타 UI
-   ========================================= */
+/* 툴팁 (원본 위치 로직을 위해 CSS 간소화) */
 #translation-tooltip {
-    pointer-events: none; /* 툴팁이 마우스 이벤트를 가리지 않도록 */
-    backdrop-filter: blur(4px);
-    background-color: rgba(17, 24, 39, 0.9); /* gray-900 + opacity */
-}
-
-/* 진행바 핸들 터치 영역 확대 */
-#progress-bar-handle::after {
-    content: '';
-    position: absolute;
-    top: -15px;
-    bottom: -15px;
-    left: -15px;
-    right: -15px;
-}
-
-/* 스크롤바 커스텀 (Webkit) */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f1f1; 
-}
-
-::-webkit-scrollbar-thumb {
-    background: #c7c7c7; 
-    border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8; 
+    z-index: 9999;
 }
