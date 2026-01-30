@@ -4,6 +4,7 @@ import { utils, imageDBCache } from './utils.js';
 import { ui } from './ui.js';
 
 export const learningMode = {
+    // 내부 상태 관리
     state: {
         currentIndex: 0,
         isMistakeMode: false,
@@ -13,10 +14,18 @@ export const learningMode = {
         touchStartX: 0,
         touchStartY: 0,
         isEditing: false, 
-        editingSide: null, 
+        editingSide: null,
+        mounted: false, // 리스너 중복 등록 방지용
     },
+    
+    // DOM 요소 캐싱
     elements: {},
+    
+    // 이벤트 핸들러 참조 저장소 (removeEventListener용)
+    handlers: {},
+
     init() {
+        // DOM 요소 연결 (한 번만 실행)
         this.elements = {
             startScreen: document.getElementById('learning-start-screen'),
             startInputContainer: document.getElementById('learning-start-input-container'),
@@ -59,91 +68,154 @@ export const learningMode = {
             deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
             deleteCancelBtn: document.getElementById('delete-cancel-btn'),
         };
-        this.bindEvents();
-    },
-    bindEvents() {
-        this.elements.startBtn.addEventListener('click', () => this.start());
-        this.elements.startWordInput.addEventListener('keydown', (e) => {
+
+        // 핸들러 함수 바인딩 (this 컨텍스트 유지)
+        this.handlers.start = () => this.start();
+        this.handlers.inputKeydown = (e) => {
             if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this.start(); }
-        });
-        this.elements.startWordInput.addEventListener('input', (e) => {
+        };
+        this.handlers.inputInput = (e) => {
             e.target.value = e.target.value.replace(/[^a-zA-Z\s'-]/g, (match) => {
                 if (match) window.dispatchEvent(new CustomEvent('showImeWarning'));
                 return '';
             });
-        });
-        this.elements.backToStartBtn.addEventListener('click', () => this.resetStartScreen());
-        this.elements.nextBtn.addEventListener('click', () => this.navigate(1));
-        this.elements.prevBtn.addEventListener('click', () => this.navigate(-1));
-        this.elements.sampleBtn.addEventListener('click', () => this.handleFlip());
-        this.elements.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
-
-        this.elements.wordDisplay.addEventListener('click', () => {
+        };
+        this.handlers.resetStartScreen = () => this.resetStartScreen();
+        this.handlers.next = () => this.navigate(1);
+        this.handlers.prev = () => this.navigate(-1);
+        this.handlers.flip = () => this.handleFlip();
+        this.handlers.toggleFavorite = () => this.toggleFavorite();
+        this.handlers.speakWord = () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
             if (word && !this.state.isEditing) { api.speak(word, 'word'); }
-        });
-        
-        const preventCardMenu = (e, side) => {
-            this.handleEditContextMenu(e, side); 
-            e.stopPropagation(); 
         };
-
-        this.elements.wordHeader.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
-        this.elements.meaningContainer.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
-        this.elements.explanationContainer.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
-
-        this.elements.cardBack.addEventListener('contextmenu', (e) => {
+        
+        // Context Menu Preventers
+        this.handlers.preventContextFront = (e) => { this.handleEditContextMenu(e, 'front'); e.stopPropagation(); };
+        this.handlers.preventContextBack = (e) => { 
             if(e.target.closest('button')) return; 
-            preventCardMenu(e, 'back');
-        });
+            this.handleEditContextMenu(e, 'back'); e.stopPropagation(); 
+        };
+        this.handlers.handleCardContext = (e) => this.handleCardContextMenu(e);
 
-        this.elements.learningModeContainer.addEventListener('contextmenu', (e) => this.handleCardContextMenu(e));
+        // Edit & Card Menu Actions
+        this.handlers.enterEdit = () => { this.enterEditMode(this.state.editingSide); ui.hideEditContextMenu(); };
+        this.handlers.createCard = () => { this.createNewCard(); ui.hideCardContextMenu(); };
+        this.handlers.confirmDelete = () => { ui.showDeleteConfirmModal(); ui.hideCardContextMenu(); };
+        this.handlers.doDelete = () => { this.deleteCurrentCard(); ui.hideDeleteConfirmModal(); };
+        this.handlers.cancelDelete = () => { ui.hideDeleteConfirmModal(); };
 
-        this.elements.editContextBtn.addEventListener('click', () => {
-            this.enterEditMode(this.state.editingSide);
-            ui.hideEditContextMenu();
-        });
-
-        if (this.elements.createCardBtn) {
-            this.elements.createCardBtn.addEventListener('click', () => {
-                this.createNewCard();
-                ui.hideCardContextMenu();
-            });
-        }
-        if (this.elements.deleteCardBtn) {
-            this.elements.deleteCardBtn.addEventListener('click', () => {
-                ui.showDeleteConfirmModal();
-                ui.hideCardContextMenu();
-            });
-        }
-
-        if (this.elements.deleteConfirmBtn) {
-            this.elements.deleteConfirmBtn.addEventListener('click', () => {
-                this.deleteCurrentCard();
-                ui.hideDeleteConfirmModal();
-            });
-        }
-        if (this.elements.deleteCancelBtn) {
-            this.elements.deleteCancelBtn.addEventListener('click', () => {
-                ui.hideDeleteConfirmModal();
-            });
-        }
-
-        document.addEventListener('click', (e) => {
+        // Global Listeners
+        this.handlers.globalClick = (e) => {
             if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
             if (!e.target.closest('#card-context-menu')) ui.hideCardContextMenu();
-        });
+        };
+        this.handlers.globalKeydown = (e) => this.handleKeyDown(e);
+        
+        // Touch Handlers
+        this.handlers.touchStart = (e) => this.handleTouchStart(e);
+        this.handlers.touchEnd = (e) => this.handleTouchEnd(e);
+        
+        // Progress Bar Handlers
+        this.handlers.progressMouseDown = (e) => this.handleProgressBarInteraction(e);
+        this.handlers.progressMouseMove = (e) => this.handleProgressBarInteraction(e);
+        this.handlers.progressMouseUp = (e) => this.handleProgressBarInteraction(e);
+        this.handlers.progressTouchStart = (e) => this.handleProgressBarInteraction(e);
+        this.handlers.progressTouchMove = (e) => this.handleProgressBarInteraction(e);
+        this.handlers.progressTouchEnd = (e) => this.handleProgressBarInteraction(e);
 
-        document.addEventListener('keydown', this.handleKeyDown.bind(this));
-        document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
-        document.addEventListener('touchend', this.handleTouchEnd.bind(this));
-        this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction.bind(this));
-        document.addEventListener('mousemove', this.handleProgressBarInteraction.bind(this));
-        document.addEventListener('mouseup', this.handleProgressBarInteraction.bind(this));
-        this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
-        document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
-        document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
+        // 정적 버튼(학습 시작 전 화면) 이벤트는 init에서 한 번만 바인딩해도 안전함
+        // 하지만 일관성을 위해 mount에서 처리하거나, 여기서 처리하되 중복 방지 필요.
+        // 여기서는 자주 바뀌지 않는 "시작 화면" 요소들은 init에서 하고, 
+        // "학습 화면" 및 "전역 키보드/터치"는 mount/unmount에서 관리.
+        
+        this.elements.startBtn.addEventListener('click', this.handlers.start);
+        this.elements.startWordInput.addEventListener('keydown', this.handlers.inputKeydown);
+        this.elements.startWordInput.addEventListener('input', this.handlers.inputInput);
+        this.elements.backToStartBtn.addEventListener('click', this.handlers.resetStartScreen);
     },
+
+    // [Lifecycle] 화면 진입 시 이벤트 등록
+    mount() {
+        if (this.state.mounted) return;
+
+        this.elements.nextBtn.addEventListener('click', this.handlers.next);
+        this.elements.prevBtn.addEventListener('click', this.handlers.prev);
+        this.elements.sampleBtn.addEventListener('click', this.handlers.flip);
+        this.elements.favoriteBtn.addEventListener('click', this.handlers.toggleFavorite);
+        this.elements.wordDisplay.addEventListener('click', this.handlers.speakWord);
+
+        // Context Menu
+        this.elements.wordHeader.addEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.meaningContainer.addEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.explanationContainer.addEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.cardBack.addEventListener('contextmenu', this.handlers.preventContextBack);
+        this.elements.learningModeContainer.addEventListener('contextmenu', this.handlers.handleCardContext);
+
+        // Menu Buttons
+        this.elements.editContextBtn.addEventListener('click', this.handlers.enterEdit);
+        if (this.elements.createCardBtn) this.elements.createCardBtn.addEventListener('click', this.handlers.createCard);
+        if (this.elements.deleteCardBtn) this.elements.deleteCardBtn.addEventListener('click', this.handlers.confirmDelete);
+        if (this.elements.deleteConfirmBtn) this.elements.deleteConfirmBtn.addEventListener('click', this.handlers.doDelete);
+        if (this.elements.deleteCancelBtn) this.elements.deleteCancelBtn.addEventListener('click', this.handlers.cancelDelete);
+
+        // Global
+        document.addEventListener('click', this.handlers.globalClick);
+        document.addEventListener('keydown', this.handlers.globalKeydown);
+        document.addEventListener('touchstart', this.handlers.touchStart, { passive: true });
+        document.addEventListener('touchend', this.handlers.touchEnd);
+
+        // Progress Bar
+        this.elements.progressBarTrack.addEventListener('mousedown', this.handlers.progressMouseDown);
+        document.addEventListener('mousemove', this.handlers.progressMouseMove);
+        document.addEventListener('mouseup', this.handlers.progressMouseUp);
+        this.elements.progressBarTrack.addEventListener('touchstart', this.handlers.progressTouchStart, { passive: false });
+        document.addEventListener('touchmove', this.handlers.progressTouchMove);
+        document.addEventListener('touchend', this.handlers.progressTouchEnd);
+
+        this.state.mounted = true;
+    },
+
+    // [Lifecycle] 화면 이탈 시 이벤트 제거 (메모리 누수 방지)
+    unmount() {
+        if (!this.state.mounted) return;
+
+        this.elements.nextBtn.removeEventListener('click', this.handlers.next);
+        this.elements.prevBtn.removeEventListener('click', this.handlers.prev);
+        this.elements.sampleBtn.removeEventListener('click', this.handlers.flip);
+        this.elements.favoriteBtn.removeEventListener('click', this.handlers.toggleFavorite);
+        this.elements.wordDisplay.removeEventListener('click', this.handlers.speakWord);
+
+        this.elements.wordHeader.removeEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.meaningContainer.removeEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.explanationContainer.removeEventListener('contextmenu', this.handlers.preventContextFront);
+        this.elements.cardBack.removeEventListener('contextmenu', this.handlers.preventContextBack);
+        this.elements.learningModeContainer.removeEventListener('contextmenu', this.handlers.handleCardContext);
+
+        this.elements.editContextBtn.removeEventListener('click', this.handlers.enterEdit);
+        if (this.elements.createCardBtn) this.elements.createCardBtn.removeEventListener('click', this.handlers.createCard);
+        if (this.elements.deleteCardBtn) this.elements.deleteCardBtn.removeEventListener('click', this.handlers.confirmDelete);
+        if (this.elements.deleteConfirmBtn) this.elements.deleteConfirmBtn.removeEventListener('click', this.handlers.doDelete);
+        if (this.elements.deleteCancelBtn) this.elements.deleteCancelBtn.removeEventListener('click', this.handlers.cancelDelete);
+
+        document.removeEventListener('click', this.handlers.globalClick);
+        document.removeEventListener('keydown', this.handlers.globalKeydown);
+        document.removeEventListener('touchstart', this.handlers.touchStart);
+        document.removeEventListener('touchend', this.handlers.touchEnd);
+
+        this.elements.progressBarTrack.removeEventListener('mousedown', this.handlers.progressMouseDown);
+        document.removeEventListener('mousemove', this.handlers.progressMouseMove);
+        document.removeEventListener('mouseup', this.handlers.progressMouseUp);
+        this.elements.progressBarTrack.removeEventListener('touchstart', this.handlers.progressTouchStart);
+        document.removeEventListener('touchmove', this.handlers.progressTouchMove);
+        document.removeEventListener('touchend', this.handlers.progressTouchEnd);
+
+        this.state.mounted = false;
+    },
+
+    // ================================================================
+    // Context Menu & Edit Mode
+    // ================================================================
 
     handleEditContextMenu(e, side) {
         if (this.state.isEditing) return; 
@@ -183,12 +255,8 @@ export const learningMode = {
             this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5" placeholder="설명">${currentExplanation}</textarea>`;
 
         } else {
-            let currentSample = "";
-            if (wordData.sample) {
-                currentSample = wordData.sample;
-            }
-
-            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample || ""}</textarea>`;
+            let currentSample = wordData.sample || "";
+            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
@@ -251,6 +319,7 @@ export const learningMode = {
 
                     await api.createWord(newCardData, afterWord);
                     
+                    // 로컬 업데이트
                     wordData.word = newWord;
                     wordData.pos = newPos || "";
                     wordData.meaning = newMeaning;
@@ -279,9 +348,7 @@ export const learningMode = {
                          return;
                      }
                      wordData.sample = newSampleText;
-                     // source 할당 제거됨
                 } else {
-                    // [수정] 무조건 sample 필드 업데이트 (Auto/Manual 구분 없음)
                     await api.updateWordDetails(wordData.word, { sample: newSampleText });
                     wordData.sample = newSampleText;
                 }
@@ -304,7 +371,6 @@ export const learningMode = {
             meaning: "",
             explanation: "",
             sample: "",
-            // sampleSource 제거됨
             isNew: true 
         };
         
@@ -314,6 +380,7 @@ export const learningMode = {
         this.state.currentIndex = insertIndex;
         this.displayWord(this.state.currentIndex, true);
         
+        // 새 카드 생성 시 즉시 편집 모드 진입
         setTimeout(() => {
             this.state.editingSide = 'front';
             this.enterEditMode('front');
@@ -352,11 +419,16 @@ export const learningMode = {
         }
     },
 
+    // ================================================================
+    // Navigation & Logic
+    // ================================================================
+
     async start() {
         this.state.isMistakeMode = false;
         this.state.isFavoriteMode = false;
         this.elements.startScreen.classList.add('hidden');
         this.elements.loader.classList.remove('hidden');
+        
         if (!state.isWordListReady) {
             this.elements.loaderText.textContent = "단어 목록 동기화 중...";
             try {
@@ -372,7 +444,6 @@ export const learningMode = {
 
         if (this.state.currentWordList.length === 0) { this.showError("학습할 단어가 없습니다."); return; }
 
-        // 검색어 없을 때: 기존 로직 (마지막 학습 위치로)
         if (!startWord) {
             try {
                 const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
@@ -385,9 +456,8 @@ export const learningMode = {
             return;
         }
 
+        // 검색 로직 (Fuzzy Search)
         const lowerCaseStartWord = startWord.toLowerCase();
-
-        // 1. 표제어 검색 (우선순위 분류)
         const exactMatches = [];
         const startsWithMatches = [];
         const includesMatches = [];
@@ -404,10 +474,6 @@ export const learningMode = {
             } else if (wordLower.includes(lowerCaseStartWord)) {
                 includesMatches.push(wordObj);
             } else {
-                // 엄격한 Fuzzy Logic 적용
-                // 1. 거리는 2 이하
-                // 2. 길이 차이도 2 이하
-                // 3. 거리 비율이 전체 길이의 40% 미만 (짧은 단어 오탐 방지)
                 const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower);
                 const lenDiff = Math.abs(wordLower.length - lowerCaseStartWord.length);
                 if (dist <= 2 && lenDiff <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
@@ -417,18 +483,15 @@ export const learningMode = {
             }
         });
 
-        // Fuzzy 결과는 거리 순 정렬
         fuzzyMatches.sort((a, b) => a.distance - b.distance);
 
-        // 결과 통합
         const vocabSuggestions = [
             ...exactMatches,
             ...startsWithMatches,
             ...includesMatches,
             ...fuzzyMatches
-        ].slice(0, 50); // 결과는 최대 50개까지 표시
+        ].slice(0, 50);
 
-        // 2. 설명 검색 (기존 로직 유지)
         const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
         const explanationMatches = this.state.currentWordList
             .map((item, index) => ({ word: item.word, index }))
@@ -439,7 +502,6 @@ export const learningMode = {
                 return searchRegex.test(cleanedExplanation);
             });
 
-        // 3. 결과 표시
         let title = `<strong>'${startWord}'</strong> 검색 결과`;
         if (vocabSuggestions.length === 0 && explanationMatches.length === 0) {
             title = `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
@@ -452,7 +514,11 @@ export const learningMode = {
         this.elements.loader.querySelector('.loader').style.display = 'none';
         this.elements.loaderText.innerHTML = `<p class="text-red-500 font-bold">오류 발생</p><p class="text-sm text-gray-600 mt-2 break-all">${message}</p>`;
     },
+
     launchApp() {
+        // [Lifecycle] 앱 실행 시 이벤트 리스너 등록
+        this.mount();
+
         this.elements.startScreen.classList.add('hidden');
         this.elements.loader.classList.add('hidden');
         this.elements.appContainer.classList.remove('hidden');
@@ -460,7 +526,11 @@ export const learningMode = {
         document.getElementById('progress-bar-container').classList.remove('hidden');
         this.displayWord(this.state.currentIndex);
     },
+
     reset() {
+        // [Lifecycle] 앱 종료 시 이벤트 리스너 제거
+        this.unmount();
+
         this.elements.startScreen.classList.add('hidden');
         this.elements.appContainer.classList.add('hidden');
         this.elements.loader.classList.add('hidden');
@@ -468,12 +538,14 @@ export const learningMode = {
         document.getElementById('progress-bar-container').classList.add('hidden');
         this.resetStartScreen();
     },
+
     resetStartScreen() {
         this.elements.startInputContainer.classList.remove('hidden');
         this.elements.suggestionsContainer.classList.add('hidden');
         this.elements.startWordInput.value = '';
         this.elements.startWordInput.focus();
     },
+
     displaySuggestions(vocabSuggestions, explanationSuggestions, title) {
         this.elements.loader.classList.add('hidden');
         this.elements.startScreen.classList.remove('hidden');
@@ -501,6 +573,7 @@ export const learningMode = {
         populateList(this.elements.suggestionsExplanationList, explanationSuggestions);
         this.elements.suggestionsContainer.classList.remove('hidden');
     },
+
     async displayWord(index, silent = false) {
         this.state.isEditing = false;
         
@@ -534,6 +607,7 @@ export const learningMode = {
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
+
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -549,6 +623,7 @@ export const learningMode = {
             wordDisplay.style.fontSize = `${currentFontSize}px`;
         }
     },
+
     navigate(direction) {
         if (this.state.isEditing) return;
 
@@ -568,6 +643,7 @@ export const learningMode = {
             navigateAction();
         }
     },
+
     async navigateBackToBack(direction) {
         if (this.state.isEditing) return;
 
@@ -630,13 +706,15 @@ export const learningMode = {
             this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
         }
     },
+
     startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
         this.state.isFavoriteMode = false;
-        if (!state.isWordListReady) {}
+        
         const wordMap = new Map(state.wordList.map(wordObj => [wordObj.word, wordObj]));
         this.state.currentWordList = mistakeWords.map(word => wordMap.get(word)).filter(Boolean);
         this.state.currentIndex = 0;
+        
         if (this.state.currentWordList.length === 0) {
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "오답 노트에 단어가 없습니다.", isError: true } }));
             window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
@@ -644,9 +722,11 @@ export const learningMode = {
         }
         this.launchApp();
     },
+
     async startFavoriteMode() {
         this.state.isMistakeMode = false;
         this.state.isFavoriteMode = true;
+        
         if (!state.isWordListReady) { await api.loadWordList(); await api.loadUserProgress(); }
         const favoriteWords = utils.getFavoriteWords();
         if(favoriteWords.length === 0) {
@@ -659,6 +739,7 @@ export const learningMode = {
         this.state.currentIndex = 0;
         this.launchApp();
     },
+
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         if (this.state.isEditing) return;
@@ -675,12 +756,18 @@ export const learningMode = {
         } else if (e.key.toLowerCase() === 'z') { e.preventDefault(); this.navigateBackToBack(-1); }
         else if (e.key.toLowerCase() === 'x') { e.preventDefault(); this.navigateBackToBack(1); }
     },
+
+    // ================================================================
+    // Touch & Swipe
+    // ================================================================
+
     handleTouchStart(e) {
          if (this.elements.appContainer.classList.contains('hidden') || e.target.closest('button, a, input, [onclick], #progress-bar-track')) return;
          if (this.state.isEditing) return; 
         this.state.touchStartX = e.touches[0].clientX;
         this.state.touchStartY = e.touches[0].clientY;
     },
+
     handleTouchEnd(e) {
         if (this.elements.appContainer.classList.contains('hidden') || this.state.touchStartX === 0 || e.target.closest('button, a, input, [onclick], #progress-bar-track')) {
              this.state.touchStartX = this.state.touchStartY = 0;
@@ -697,6 +784,11 @@ export const learningMode = {
         } 
         this.state.touchStartX = this.state.touchStartY = 0;
     },
+
+    // ================================================================
+    // Progress Bar
+    // ================================================================
+
     updateProgressBar(index) {
         const total = this.state.currentWordList.length;
         if (total <= 1) {
@@ -716,6 +808,7 @@ export const learningMode = {
             this.elements.progressBarNumber.style.left = `${percentage}%`;
         }
     },
+
     handleProgressBarInteraction(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         if (this.state.isEditing) return;
@@ -752,6 +845,11 @@ export const learningMode = {
                 break;
         }
     },
+
+    // ================================================================
+    // Favorites & AI
+    // ================================================================
+
     async toggleFavorite() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
@@ -770,10 +868,12 @@ export const learningMode = {
             this.displayWord(this.state.currentIndex);
         }
     },
+
     updateFavoriteIcon(isFavorite) {
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
         this.elements.favoriteIcon.classList.toggle('text-white', !isFavorite);
     },
+
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
         if (!section) {
@@ -791,6 +891,7 @@ export const learningMode = {
             this.renderInitialGenButton(section, wordData);
         }
     },
+
     renderInitialGenButton(container, wordData) {
         const btn = document.createElement('button');
         btn.className = 'text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-full transition-colors font-semibold flex items-center justify-center mx-auto gap-2 shadow-sm';
@@ -812,6 +913,7 @@ export const learningMode = {
         };
         container.appendChild(btn);
     },
+
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const p = document.createElement('p');
         p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; 
