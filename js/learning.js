@@ -57,8 +57,8 @@ export const learningMode = {
             deleteCardBtn: document.getElementById('delete-card-btn'),
             deleteConfirmModal: document.getElementById('delete-confirm-modal'),
             deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
-            deleteCancelBtn: document.getElementById('delete-confirm-btn'), // Note: In original code, it was delete-cancel-btn for event listener. Kept structure.
-            deleteCancelBtnReal: document.getElementById('delete-cancel-btn'), // Fixed mapping for clarity
+            deleteCancelBtn: document.getElementById('delete-confirm-btn'),
+            deleteCancelBtnReal: document.getElementById('delete-cancel-btn'),
         };
         this.bindEvents();
     },
@@ -79,11 +79,31 @@ export const learningMode = {
         this.elements.sampleBtn.addEventListener('click', () => this.handleFlip());
         this.elements.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
 
+        // [기존] 클릭 시 발음 재생
         this.elements.wordDisplay.addEventListener('click', () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
             if (word && !this.state.isEditing) { api.speak(word, 'word'); }
         });
+
+        // [수정] 앞면 표제어 우클릭 시 사전 검색 메뉴 표시
+        this.elements.wordDisplay.addEventListener('contextmenu', (e) => {
+            if (this.state.isEditing) return;
+            e.preventDefault();
+            e.stopPropagation(); // 상위(wordHeader)의 편집 메뉴 이벤트 차단
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) ui.showWordContextMenu(e, word);
+        });
+
+        // [수정] 뒷면 제목 우클릭 시 사전 검색 메뉴 표시
+        this.elements.backTitle.addEventListener('contextmenu', (e) => {
+            if (this.state.isEditing) return;
+            e.preventDefault();
+            e.stopPropagation(); // 상위(cardBack)의 편집 메뉴 이벤트 차단
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) ui.showWordContextMenu(e, word);
+        });
         
+        // 카드 배경 우클릭 시 편집 메뉴 표시 (단, 사전 검색 대상이 아닐 때)
         const preventCardMenu = (e, side) => {
             this.handleEditContextMenu(e, side); 
             e.stopPropagation(); 
@@ -148,7 +168,7 @@ export const learningMode = {
 
     handleEditContextMenu(e, side) {
         if (this.state.isEditing) return; 
-        if (e.target.classList.contains('interactive-word')) return;
+        if (e.target.classList.contains('interactive-word')) return; // span 단어 클릭 시 편집 메뉴 안 뜨게
         e.preventDefault();
         this.state.editingSide = side; 
         ui.showEditContextMenu(e);
@@ -281,7 +301,6 @@ export const learningMode = {
                      }
                      wordData.sample = newSampleText;
                 } else {
-                    // [수정] 무조건 sample 필드 업데이트 (Auto/Manual 구분 없음)
                     await api.updateWordDetails(wordData.word, { sample: newSampleText });
                     wordData.sample = newSampleText;
                 }
@@ -371,7 +390,6 @@ export const learningMode = {
 
         if (this.state.currentWordList.length === 0) { this.showError("학습할 단어가 없습니다."); return; }
 
-        // 검색어 없을 때: 기존 로직 (마지막 학습 위치로)
         if (!startWord) {
             try {
                 const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
@@ -386,7 +404,6 @@ export const learningMode = {
 
         const lowerCaseStartWord = startWord.toLowerCase();
 
-        // 1. 표제어 검색 (우선순위 분류 및 [최적화] Early Exit 적용)
         const exactMatches = [];
         const startsWithMatches = [];
         const includesMatches = [];
@@ -404,7 +421,6 @@ export const learningMode = {
             } else if (wordLower.includes(lowerCaseStartWord)) {
                 includesMatches.push(wordObj);
             } else {
-                // [최적화] 길이 차이가 2 이상 나면 무거운 거리 계산을 건너뜀
                 if (Math.abs(wordLower.length - lowerCaseStartWord.length) > 2) continue;
 
                 const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower);
@@ -415,18 +431,15 @@ export const learningMode = {
             }
         }
 
-        // Fuzzy 결과는 거리 순 정렬
         fuzzyMatches.sort((a, b) => a.distance - b.distance);
 
-        // 결과 통합
         const vocabSuggestions = [
             ...exactMatches,
             ...startsWithMatches,
             ...includesMatches,
             ...fuzzyMatches
-        ].slice(0, 50); // 결과는 최대 50개까지 표시
+        ].slice(0, 50);
 
-        // 2. 설명 검색 (기존 로직 유지)
         const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
         const explanationMatches = this.state.currentWordList
             .map((item, index) => ({ word: item.word, index }))
@@ -437,7 +450,6 @@ export const learningMode = {
                 return searchRegex.test(cleanedExplanation);
             });
 
-        // 3. 결과 표시
         let title = `<strong>'${startWord}'</strong> 검색 결과`;
         if (vocabSuggestions.length === 0 && explanationMatches.length === 0) {
             title = `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
@@ -783,6 +795,8 @@ export const learningMode = {
         if (wordData.AISample && wordData.AISample.en) {
             const sentences = wordData.AISample.en.split('\n').filter(s => s.trim() !== '');
             sentences.forEach((sent, index) => {
+                this.renderAIContentRow(section, wordData, sent, index, allSentences); // 수정: allSentences -> sentences (이 함수 내부에서 allSentences 사용 시 주의)
+                // 아래 수정: renderAIContentRow 호출 시 sentences 배열 전체 전달
                 this.renderAIContentRow(section, wordData, sent, index, sentences);
             });
         } else {
