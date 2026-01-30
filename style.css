@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+body {
+    font-family: 'Noto Sans KR', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+/* ... (기존 스타일 모두 유지) ... */
+.loader {
+    border: 4px solid #f3f3f3;
+    border-radius: 50%;
+    border-top: 4px solid #3498db;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+#tts-toggle-btn {
+    transition: transform 0.6s, background-color 0.3s;
+    transform-style: preserve-3d;
+}
+#tts-toggle-btn.is-flipped {
+    transform: rotateY(180deg);
+}
+#tts-toggle-text {
+    transform: rotateY(0deg);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+#tts-toggle-btn.is-flipped #tts-toggle-text {
+    transform: rotateY(-180deg);
+}
+.choice-item:hover { transform: scale(1.02); }
+.choice-item.submitting { background-color: #e2e8f0; }
+.correct { background-color: #28a745 !important; color: white !important; transform: scale(1.05); border-color: #28a745; }
+.incorrect { background-color: #dc3545 !important; color: white !important; border-color: #dc3545; }
+.disabled { pointer-events: none; opacity: 0.7; }
+
+.interactive-word {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.interactive-word:hover {
+    background-color: #dbeafe;
+    border-radius: 0.25rem;
+    cursor: pointer;
+}
+
+#word-display {
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.pronunciation-inline {
+    font-size: 60%;
+    opacity: 0.8;
+    font-weight: normal;
+    margin-left: 0.75rem;
+    vertical-align: middle;
+}
+
+#learning-app-container .relative {
+    overflow: hidden;
+    border-radius: 1rem;
+}
+#learning-card-back {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateY(100%);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease-in-out;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+}
+#learning-card-back.is-slid-up {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#learning-card-front {
+    min-height: 45vh;
+}
+
+.quiz-blank {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+#progress-bar-handle:active {
+    cursor: grabbing;
+    transform: scale(1.2) translateY(-10%);
+}
+
+#translation-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 15px;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #1f2937 transparent;
+}
+
+#app-wrapper.hidden {
+    display: none;
+}
+
+#favorite-icon {
+    transition: color 0.2s, fill 0.2s;
+}
+
+#favorite-icon.fill-current {
+    fill: currentColor;
+}
+
+#range-input-modal input[type="number"]::-webkit-outer-spin-button,
+#range-input-modal input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+#range-input-modal input[type="number"] {
+    -moz-appearance: textfield;
+}
