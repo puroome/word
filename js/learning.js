@@ -279,15 +279,11 @@ export const learningMode = {
                          return;
                      }
                      wordData.sample = newSampleText;
-                     wordData.sampleSource = 'manual';
+                     // source 할당 제거됨
                 } else {
-                    if (wordData.sampleSource === 'ai') {
-                        await api.updateWordDetails(wordData.word, { autoSample: newSampleText });
-                        wordData.sample = newSampleText;
-                    } else {
-                        await api.updateWordDetails(wordData.word, { sample: newSampleText });
-                        wordData.sample = newSampleText;
-                    }
+                    // [수정] 무조건 sample 필드 업데이트 (Auto/Manual 구분 없음)
+                    await api.updateWordDetails(wordData.word, { sample: newSampleText });
+                    wordData.sample = newSampleText;
                 }
             }
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
@@ -308,7 +304,7 @@ export const learningMode = {
             meaning: "",
             explanation: "",
             sample: "",
-            sampleSource: "manual",
+            // sampleSource 제거됨
             isNew: true 
         };
         
