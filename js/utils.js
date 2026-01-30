@@ -1,7 +1,10 @@
 import { state } from './config.js';
 
-// --- General Utils ---
+// ================================================================
+// 1. 일반 유틸리티 (계산, 포맷팅, 셔플)
+// ================================================================
 export const utils = {
+    // 레벤슈타인 거리 계산 (검색 기능용 fuzzy match)
     levenshteinDistance(a = '', b = '') {
         const track = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
         for (let i = 0; i <= a.length; i += 1) track[0][i] = i;
@@ -14,6 +17,8 @@ export const utils = {
         }
         return track[b.length][a.length];
     },
+
+    // 피셔-예이츠 셔플 (퀴즈 보기 섞기)
     shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -21,207 +26,264 @@ export const utils = {
         }
         return array;
     },
+
+    // 초 -> MM:SS 포맷팅
     formatSeconds(totalSeconds) {
-        if (!totalSeconds || totalSeconds < 60) return `0분`;
-        const d = Math.floor(totalSeconds / 86400);
-        const h = Math.floor((totalSeconds % 86400) / 3600);
-        const m = Math.floor((totalSeconds % 3600) / 60);
-        let result = '';
-        if (d > 0) result += `${d}일 `;
-        if (h > 0) result += `${h}시간 `;
-        if (m > 0) result += `${m}분`;
-        return result.trim() || '0분';
+        if (!totalSeconds || totalSeconds < 60) return `${totalSeconds || 0}초`;
+        const m = Math.floor(totalSeconds / 60);
+        const s = totalSeconds % 60;
+        return `${m}분 ${s}초`;
     },
-    getWordStatus(word) {
-        let localStatus = {};
+
+    // 로컬 스토리지에 진행 상황 저장 (동기화 대기열)
+    addProgressUpdateToLocalSync(word, type, value) {
         try {
             const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const unsynced = JSON.parse(localStorage.getItem(key) || '{}');
-            if (unsynced[word]) localStatus = unsynced[word];
-        } catch(e) { console.warn("Error reading local progress:", e); }
-
-        const progress = { ...(state.currentProgress[word] || {}), ...localStatus };
-        if (Object.keys(progress).length === 0) return 'unseen';
-
-        const statuses = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION'].map(type => progress[type] || 'unseen');
-        if (statuses.includes('incorrect')) return 'review';
-        if (statuses.every(s => s === 'correct')) return 'learned';
-        if (statuses.some(s => s === 'correct')) return 'learning';
-        return 'unseen';
+            const updates = JSON.parse(localStorage.getItem(key) || '{}');
+            if (!updates[word]) updates[word] = {};
+            updates[word][type] = value;
+            updates[word].timestamp = Date.now();
+            localStorage.setItem(key, JSON.stringify(updates));
+            
+            // 메인 스레드에 동기화 요청 이벤트 발송
+            window.dispatchEvent(new Event('syncRequest'));
+        } catch (e) {
+            console.error("로컬 진행상황 저장 실패:", e);
+        }
     },
-    isFavorite(word) {
-        let isFav = state.currentProgress[word]?.favorite || false;
-        try {
-            const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const unsynced = JSON.parse(localStorage.getItem(key) || '{}');
-            if (unsynced[word] && unsynced[word].favorite !== undefined) {
-                isFav = unsynced[word].favorite;
-            }
-        } catch (e) { console.warn("Error reading local favorite status:", e); }
-        return isFav;
-    },
+
+    // 즐겨찾기 목록 가져오기
     getFavoriteWords() {
-        let localUpdates = {};
-        try {
-            const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            localUpdates = JSON.parse(localStorage.getItem(key) || '{}');
-        } catch (e) { console.warn("Error reading local favorites:", e); }
-
-        const allProgress = state.currentProgress;
-        const combinedKeys = new Set([...Object.keys(allProgress), ...Object.keys(localUpdates)]);
-        const favoriteWords = [];
-        combinedKeys.forEach(word => {
-            const serverState = allProgress[word] || {};
-            const localState = localUpdates[word] || {};
-            const combinedState = {
-                 ...serverState,
-                 favorite: localState.favorite !== undefined ? localState.favorite : serverState.favorite,
-                 favoritedAt: localState.favoritedAt !== undefined ? localState.favoritedAt : serverState.favoritedAt
-             };
-            if (combinedState.favorite === true) {
-                 favoriteWords.push({ word: word, time: combinedState.favoritedAt || 0 });
-            }
+        if (!state.userId) return [];
+        return Object.keys(state.currentProgress || {}).filter(word => {
+            return state.currentProgress[word] && state.currentProgress[word].favorite === true;
         });
-        return favoriteWords.sort((a, b) => b.time - a.time).map(item => item.word);
     },
-    addProgressUpdateToLocalSync(word, key, value) {
-        try {
-            const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const unsynced = JSON.parse(localStorage.getItem(localKey) || '{}');
-            if (!unsynced[word]) unsynced[word] = {};
-            unsynced[word][key] = value;
-            localStorage.setItem(localKey, JSON.stringify(unsynced));
-        } catch (e) { console.error("Error adding progress update to localStorage sync", e); }
+
+    // 단어 상태 확인 (unknown, review, correct)
+    getWordStatus(word) {
+        if (!state.userId || !state.currentProgress[word]) return 'unknown';
+        const p = state.currentProgress[word];
+        
+        // 최근 3번의 퀴즈 결과 확인 (간소화된 로직)
+        // 실제로는 Firestore 구조에 따라 다르지만, 여기서는 로컬 state 기준으로 판단
+        if (p['MULTIPLE_CHOICE_MEANING'] === 'correct' && 
+            p['FILL_IN_THE_BLANK'] === 'correct') {
+            return 'correct';
+        }
+        if (p['MULTIPLE_CHOICE_MEANING'] === 'wrong' || p['FILL_IN_THE_BLANK'] === 'wrong') {
+            return 'review';
+        }
+        return 'unknown';
+    },
+
+    isFavorite(word) {
+        if (!state.userId || !state.currentProgress[word]) return false;
+        return !!state.currentProgress[word].favorite;
     }
 };
 
-// --- Caches ---
+// ================================================================
+// 2. 효과음 (AudioContext Oscillator)
+// ================================================================
+
+// 퀴즈 정답 (딩동댕)
+export const correctBeep = () => {
+    if (!state.audioContext) return;
+    if (state.audioContext.state === 'suspended') state.audioContext.resume().catch(() => {});
+
+    const ctx = state.audioContext;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sine';
+    // '도' -> '미' (빠르게)
+    osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+    osc.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+};
+
+// 퀴즈 오답 (띠~)
+export const incorrectBeep = () => {
+    if (!state.audioContext) return;
+    if (state.audioContext.state === 'suspended') state.audioContext.resume().catch(() => {});
+
+    const ctx = state.audioContext;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sawtooth'; // 조금 거친 소리
+    osc.frequency.setValueAtTime(196.00, ctx.currentTime); // G3
+    osc.frequency.linearRampToValueAtTime(185.00, ctx.currentTime + 0.3); // Pitch down
+
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+};
+
+
+// ================================================================
+// 3. 캐시 시스템 (IndexedDB Wrapper)
+// ================================================================
+
+// 오디오 파일 캐싱 (TTS)
 export const audioCache = {
-    db: null, dbName: 'ttsAudioCacheDB', storeName: 'audioStore',
-    init() {
+    dbName: 'tts_audio_cache',
+    storeName: 'audios',
+    db: null,
+
+    async init() {
         return new Promise((resolve, reject) => {
-            if (!('indexedDB' in window)) { console.warn('IndexedDB not supported'); return resolve(); }
             const request = indexedDB.open(this.dbName, 1);
-            request.onupgradeneeded = event => { const db = event.target.result; if (!db.objectStoreNames.contains(this.storeName)) { db.createObjectStore(this.storeName); } };
-            request.onsuccess = event => { this.db = event.target.result; resolve(); };
-            request.onerror = event => { reject(event.target.error); };
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                }
+            };
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                resolve();
+            };
+            request.onerror = (event) => {
+                console.error("AudioDB Error:", event);
+                reject(event);
+            };
         });
     },
-    getAudio(key) {
+
+    async saveAudio(key, arrayBuffer) {
+        if (!this.db) await this.init();
         return new Promise((resolve, reject) => {
-            if (!this.db) return resolve(null);
+            const transaction = this.db.transaction([this.storeName], 'readwrite');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.put(arrayBuffer, key);
+            request.onsuccess = () => resolve();
+            request.onerror = (e) => reject(e);
+        });
+    },
+
+    async getAudio(key) {
+        if (!this.db) await this.init();
+        return new Promise((resolve, reject) => {
             const transaction = this.db.transaction([this.storeName], 'readonly');
             const store = transaction.objectStore(this.storeName);
             const request = store.get(key);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = (e) => reject(e.target.error);
+            request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = (e) => reject(e);
         });
-    },
-    saveAudio(key, data) {
-        if (!this.db) return;
-        try { this.db.transaction([this.storeName], 'readwrite').objectStore(this.storeName).put(data, key); } catch(e){}
     }
 };
 
+// 번역 텍스트 캐싱
 export const translationCache = {
-    db: null, dbName: 'translationCacheDB', storeName: 'translations',
-    init() {
-         return new Promise((resolve) => {
-            if (!('indexedDB' in window)) return resolve();
+    dbName: 'translation_cache',
+    storeName: 'texts',
+    db: null,
+
+    async init() {
+        return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, 1);
-            request.onupgradeneeded = e => { if(!e.target.result.objectStoreNames.contains(this.storeName)) e.target.result.createObjectStore(this.storeName); };
-            request.onsuccess = e => { this.db = e.target.result; resolve(); };
-            request.onerror = () => resolve(); 
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                }
+            };
+            request.onsuccess = (event) => {
+                this.db = event.target.result;
+                resolve();
+            };
+            request.onerror = (event) => reject(event);
         });
     },
-    get(key) { 
+
+    async save(key, text) {
+        if (!this.db) await this.init();
+        const transaction = this.db.transaction([this.storeName], 'readwrite');
+        transaction.objectStore(this.storeName).put(text, key);
+    },
+
+    async get(key) {
+        if (!this.db) await this.init();
         return new Promise((resolve) => {
-            if (!this.db) return resolve(null);
-            const r = this.db.transaction([this.storeName], 'readonly').objectStore(this.storeName).get(key);
-            r.onsuccess = () => resolve(r.result);
-            r.onerror = () => resolve(null);
+            const request = this.db.transaction([this.storeName], 'readonly').objectStore(this.storeName).get(key);
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = () => resolve(null);
         });
-    },
-    save(key, data) {
-        if(this.db) try { this.db.transaction([this.storeName], 'readwrite').objectStore(this.storeName).put(data, key); } catch(e){}
     }
 };
 
+// 이미지 캐싱 (고양이 이미지 등)
 export const imageDBCache = {
-    db: null, dbName: 'imageCacheDB', storeName: 'imageStore',
-    init() {
+    dbName: 'image_cache_db',
+    storeName: 'images',
+    db: null,
+
+    async init() {
         return new Promise((resolve) => {
-            if (!('indexedDB' in window)) return resolve();
             const request = indexedDB.open(this.dbName, 1);
-            request.onupgradeneeded = e => e.target.result.createObjectStore(this.storeName);
-            request.onsuccess = e => { this.db = e.target.result; resolve(); };
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName);
+                }
+            };
+            request.onsuccess = (e) => {
+                this.db = e.target.result;
+                resolve();
+            };
             request.onerror = () => resolve();
         });
     },
+
     async loadImage(url) {
-        if (!this.db || !url) return url;
-        const cached = await new Promise(r => {
-             const req = this.db.transaction([this.storeName]).objectStore(this.storeName).get(url);
-             req.onsuccess = () => r(req.result);
-             req.onerror = () => r(null);
+        if (!this.db) await this.init();
+        
+        // 1. 캐시 확인
+        const cachedBlob = await new Promise(resolve => {
+            const tx = this.db.transaction([this.storeName], 'readonly');
+            const req = tx.objectStore(this.storeName).get(url);
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = () => resolve(null);
         });
-        if (cached) return URL.createObjectURL(cached);
+
+        if (cachedBlob) {
+            return URL.createObjectURL(cachedBlob);
+        }
+
+        // 2. 없으면 네트워크 요청
         try {
-            const res = await fetch(url);
-            if (!res.ok) return url;
-            const blob = await res.blob();
-            this.db.transaction([this.storeName], 'readwrite').objectStore(this.storeName).put(blob, url);
+            const response = await fetch(url);
+            const blob = await response.blob();
+            
+            // 3. 캐시 저장
+            const tx = this.db.transaction([this.storeName], 'readwrite');
+            tx.objectStore(this.storeName).put(blob, url);
+            
             return URL.createObjectURL(blob);
-        } catch (e) { return url; }
+        } catch (e) {
+            return url; // 실패 시 원본 URL 반환
+        }
     }
 };
 
-// --- Audio Effects ---
-export function playSingleBeep({ frequency, duration = 0.1, type = 'sine', gain = 0.3, endFrequency }) {
-    if (!state.audioContext) return;
-    if (state.audioContext.state === 'suspended') state.audioContext.resume();
-    const osc = state.audioContext.createOscillator();
-    const gNode = state.audioContext.createGain();
-    const now = state.audioContext.currentTime;
-    osc.type = type;
-    osc.frequency.setValueAtTime(frequency, now);
-    if (endFrequency) osc.frequency.linearRampToValueAtTime(endFrequency, now + duration);
-    gNode.gain.setValueAtTime(0, now);
-    gNode.gain.linearRampToValueAtTime(gain, now + 0.01);
-    gNode.gain.exponentialRampToValueAtTime(0.0001, now + duration + 0.01);
-    osc.connect(gNode);
-    gNode.connect(state.audioContext.destination);
-    osc.start(now);
-    osc.stop(now + duration + 0.01);
-}
-
-export function playSequence(soundDefinition) {
-    if (soundDefinition.sequence && Array.isArray(soundDefinition.sequence)) {
-        soundDefinition.sequence.forEach(note => {
-            if (note.delay) setTimeout(() => playSingleBeep(note), note.delay);
-            else playSingleBeep(note);
-        });
-    } else {
-        playSingleBeep(soundDefinition);
-    }
-}
-
-export const correctBeep = {
-    name: '또로롱 (물방울)',
-    sequence: [
-        { frequency: 523, duration: 0.07, type: 'triangle', gain: 0.25 },
-        { delay: 80, frequency: 659, duration: 0.07, type: 'triangle', gain: 0.25 },
-        { delay: 160, frequency: 783, duration: 0.07, type: 'triangle', gain: 0.25 }
-    ]
-};
-
-export const incorrectBeep = {
-    name: '삐빅 (경고)',
-    sequence: [
-        { frequency: 400, duration: 0.07, type: 'square', gain: 0.15 },
-        { delay: 90, frequency: 400, duration: 0.07, type: 'square', gain: 0.15 }
-    ]
-};
-
-// --- Non Interactive Words Set ---
-export const nonInteractiveWords = new Set(['a', 'an', 'the', 'i', 'me', 'my', 'mine', 'you', 'your', 'yours', 'he', 'him', 'his', 'she', 'her', 'hers', 'it', 'its', 'we', 'us', 'our', 'ours', 'they', 'them', 'their', 'theirs', 'this', 'that', 'these', 'those', 'myself', 'yourself', 'himself', 'herself', 'itself', 'ourselves', 'yourselves', 'something', 'anybody', 'anyone', 'anything', 'nobody', 'no one', 'nothing', 'everybody', 'everyone', 'everything', 'all', 'any', 'both', 'each', 'either', 'every', 'few', 'little', 'many', 'much', 'neither', 'none', 'one', 'other', 'several', 'some', 'about', 'above', 'across', 'after', 'against', 'along', 'among', 'around', 'at', 'before', 'behind', 'below', 'beneath', 'beside', 'between', 'beyond', 'by', 'down', 'during', 'for', 'from', 'in', 'inside', 'into', 'like', 'near', 'of', 'off', 'on', 'onto', 'out', 'outside', 'over', 'past', 'since', 'through', 'throughout', 'to', 'toward', 'under', 'underneath', 'until', 'unto', 'up', 'upon', 'with', 'within', 'without', 'and', 'but', 'or', 'nor', 'for', 'yet', 'so', 'after', 'although', 'as', 'because', 'before', 'if', 'once', 'since', 'than', 'that', 'though', 'till', 'unless', 'until', 'when', 'whenever', 'where', 'whereas', 'wherever', 'whether', 'while', 'that', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'what', 'whatever', 'whichever', 'whoever', 'whomever', 'who', 'whom', 'whose', 'what', 'which', 'when', 'where', 'why', 'how', 'be', 'am', 'is', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'done', 'can', 'could', 'may', 'might', 'must', 'shall', 'should', 'will', 'would', 'ought', 'not', 'very', 'too', 'so', 'just', 'well', 'often', 'always', 'never', 'sometimes', 'here', 'there', 'now', 'then', 'again', 'also', 'ever', 'even', 'how', 'quite', 'rather', 'soon', 'still', 'more', 'most', 'less', 'least', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'then', 'there', 'here', "don't", "didn't", "can't", "couldn't", "she's", "he's", "i'm", "you're", "they're", "we're", "it's", "that's"]);
+// 인터랙티브 클릭 제외 단어 목록 (전치사, 관사 등)
+export const nonInteractiveWords = new Set([
+    'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 
+    'is', 'are', 'was', 'were', 'be', 'been', 'and', 'but', 'or', 'so', 
+    'it', 'this', 'that', 'i', 'you', 'he', 'she', 'we', 'they', 'my', 'your'
+]);
