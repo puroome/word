@@ -10,6 +10,28 @@ export const api = {
         database = realtimeDbInstance;
     },
 
+    // [최적화] 시트 통신용 공통 메서드
+    async sendToSheet(action, params = {}) {
+        if (!config.SCRIPT_URL) return;
+        try {
+            const url = new URL(config.SCRIPT_URL);
+            url.searchParams.append('action', action);
+            for (const key in params) {
+                if (params[key] !== undefined && params[key] !== null) {
+                    url.searchParams.append(key, params[key]);
+                }
+            }
+            const response = await fetch(url.toString());
+            const data = await response.json();
+            if (!data.success) console.warn(`시트 작업(${action}) 실패:`, data.message);
+            else console.log(`✅ 시트 작업(${action}) 성공`);
+            return data;
+        } catch (e) {
+            console.error(`시트 통신 에러(${action}):`, e);
+            throw e; // 필요 시 호출자에게 에러 전파
+        }
+    },
+
     async loadWordList(force = false) {
         if (force) {
             localStorage.removeItem('wordListCache');
@@ -140,16 +162,9 @@ export const api = {
 
         if (!config.SCRIPT_URL) return "번역 스크립트 URL이 설정되지 않았습니다.";
 
-        const url = new URL(config.SCRIPT_URL);
-        url.searchParams.append('action', 'translate');
-        url.searchParams.append('text', text);
-
         try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-
-            if (data.success) {
+            const data = await this.sendToSheet('translate', { text });
+            if (data && data.success) {
                 translationCache.save(text, data.translatedText);
                 return data.translatedText;
             } else {
@@ -323,20 +338,11 @@ export const api = {
 
     // AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'save_ai_sample');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('ai_text', fullEnText); 
-            
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 저장 실패:", d.message);
-                    else console.log("✅ 시트 저장 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // [최적화] sendToSheet 사용
+        this.sendToSheet('save_ai_sample', {
+            word: wordData.word,
+            ai_text: fullEnText
+        });
 
         const aiSampleObj = { en: fullEnText, ko: "" };
 
@@ -367,30 +373,18 @@ export const api = {
         }
     },
 
-    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
+    // [수정] 단어 정보 수정
     async updateWordDetails(originalWord, updateData) {
-        // 1. Google Sheets 저장 (백엔드)
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('original_word', originalWord);
-            
-            if (updateData.word !== undefined) scriptUrl.searchParams.append('word', updateData.word);
-            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
-            if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
-            if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
-            
-            // sample 수정 시 무조건 manual_sample 파라미터 사용 (앱스스크립트에서 매핑됨)
-            if (updateData.sample !== undefined) scriptUrl.searchParams.append('manual_sample', updateData.sample);
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 수정 실패:", d.message);
-                    else console.log("✅ 시트 수정 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // [최적화] sendToSheet 사용
+        const params = {
+            original_word: originalWord,
+            word: updateData.word,
+            pos: updateData.pos,
+            meaning: updateData.meaning,
+            explanation: updateData.explanation,
+            manual_sample: updateData.sample // 앱스스크립트 매개변수 매핑
+        };
+        this.sendToSheet('update_word_data', params);
 
         // 2. 로컬 메모리 & 캐시 업데이트 (프론트엔드)
         const updateLocalList = (list) => {
@@ -406,7 +400,6 @@ export const api = {
                 // Sample 수정
                 if (updateData.sample !== undefined) {
                      targetWord.sample = updateData.sample;
-                     // Source 업데이트 로직 제거됨
                 }
              }
         };
@@ -425,25 +418,17 @@ export const api = {
         }
     },
 
-    // [수정] 새 단어 생성 (Source 초기화 제거)
+    // [수정] 새 단어 생성
     async createWord(wordData, afterWord) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('pos', wordData.pos || "");
-            scriptUrl.searchParams.append('meaning', wordData.meaning || "");
-            scriptUrl.searchParams.append('explanation', wordData.explanation || "");
-            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord);
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 생성 실패:", d.message);
-                    else console.log("✅ 시트 생성 성공 (삽입)");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // [최적화] sendToSheet 사용
+        const params = {
+            word: wordData.word,
+            pos: wordData.pos || "",
+            meaning: wordData.meaning || "",
+            explanation: wordData.explanation || "",
+            after_word: afterWord
+        };
+        this.sendToSheet('create_word', params);
 
         // 로컬 데이터에 중간 삽입
         let insertIndex = state.wordList.length;
@@ -469,7 +454,6 @@ export const api = {
             explanation: wordData.explanation || "",
             sample: "",
             AISample: null
-            // sampleSource 제거됨
         };
         
         state.wordList.splice(insertIndex, 0, localNewWordObj);
@@ -509,19 +493,8 @@ export const api = {
     },
 
     async deleteWord(word) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'delete_word');
-            scriptUrl.searchParams.append('word', word);
-            
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if(!d.success) console.warn("시트 삭제 실패:", d.message);
-                    else console.log("✅ 시트 삭제 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        // [최적화] sendToSheet 사용
+        this.sendToSheet('delete_word', { word: word });
 
         state.wordList = state.wordList.filter(w => w.word !== word);
 
