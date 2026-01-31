@@ -536,21 +536,56 @@ export const api = {
         // 여기서 또 push를 하면 카드가 2개가 되어버립니다. (중복 생성 원인 해결)
         
         /* // 기존에 있었을 이 코드를 삭제하거나 주석 처리합니다.
-        const newWordObj = { ...cardData, index: state.wordList.length };
-        state.wordList.push(newWordObj); 
-        */
+        // 1. 중간값 Index 계산 로직 (순서 유지 핵심)
+        let newIndex = Date.now(); // 안전장치용 기본값
+        
+        // 현재 리스트를 index 순서로 정렬 보장
+        state.wordList.sort((a, b) => a.index - b.index);
+        
+        if (afterWord) {
+            const prevArrayIdx = state.wordList.findIndex(w => w.word === afterWord);
+            if (prevArrayIdx !== -1) {
+                const prevVal = Number(state.wordList[prevArrayIdx].index) || 0;
+                
+                // 다음 단어가 있는지 확인
+                if (prevArrayIdx < state.wordList.length - 1) {
+                    const nextVal = Number(state.wordList[prevArrayIdx + 1].index) || (prevVal + 2);
+                    newIndex = (prevVal + nextVal) / 2; // ★ 핵심: 중간값(소수점) 부여
+                } else {
+                    newIndex = prevVal + 1; // 맨 뒤라면 +1
+                }
+            }
+        } else if (state.wordList.length > 0) {
+             // afterWord 없이 그냥 추가하는 경우 맨 뒤로
+             const lastVal = Number(state.wordList[state.wordList.length - 1].index) || 0;
+             newIndex = lastVal + 1;
+        }
 
-        // Firebase 등 다른 DB 동기화가 필요하다면 여기서 처리
+        const newWordObj = {
+            word, pos, meaning,
+            sample: manual_sample,
+            explanation,
+            AISample: null,
+            index: newIndex 
+        };
+
+        state.wordList.push(newWordObj);
+        state.wordList.sort((a, b) => a.index - b.index); // 화면 즉시 반영을 위해 재정렬
+
+        // 2. ★ 로컬 스토리지(캐시) 즉시 업데이트 (새로고침 시 사라짐 방지)
+        try {
+            localStorage.setItem('wordListCache', JSON.stringify({
+                timestamp: Date.now(),
+                words: state.wordList
+            }));
+        } catch (e) { console.warn("Cache update error", e); }
+
+        // 3. Firebase 저장
         if (database) {
             const { ref, update } = window.firebaseSDK;
-            const safeKey = cardData.word.replace(/[.#$\[\]\/]/g, '_');
+            const safeKey = word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
-            updates[`/vocabulary/${safeKey}`] = {
-                ...cardData,
-                sample: cardData.manual_sample || cardData.sample || "", // Firebase에도 예문 저장
-                AISample: null,
-                index: Date.now() // 정렬을 위한 임시 인덱스
-            };
+            updates[`/vocabulary/${safeKey}`] = newWordObj;
             update(ref(database), updates).catch(e => console.warn(e));
         }
     },
