@@ -329,7 +329,6 @@ export const api = {
         }
     },
     
-// [재수정] 예문 개수 로직 (단일 뜻 1개, 다의어 최대 5개)
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -428,7 +427,7 @@ export const api = {
         }
     },
 
-// [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
+    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
     async updateWordDetails(originalWord, updateData) {
         // 1. Google Sheets 저장 (백엔드)
         if (config.SCRIPT_URL) {
@@ -442,7 +441,6 @@ export const api = {
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
             
             // [핵심 Fix] sample 또는 manual_sample 키가 들어오면 manual_sample 파라미터로 전송
-            // learning.js에서 manual_sample로 보내는 경우를 대비하여 OR 연산(||) 추가
             if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
                 scriptUrl.searchParams.append('manual_sample', updateData.manual_sample || updateData.sample);
             }
@@ -490,39 +488,38 @@ export const api = {
         if (typeof database !== 'undefined' && database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = originalWord.replace(/[.#$\[\]\/]/g, '_');
-            // updateData를 그대로 활용하되 manual_sample을 sample로 매핑
             const firebaseUpdates = { ...updateData };
             if (firebaseUpdates.manual_sample) {
                 firebaseUpdates.sample = firebaseUpdates.manual_sample;
                 delete firebaseUpdates.manual_sample;
             }
-            // word 키가 바뀌는 경우는 복잡하므로 여기서는 필드 업데이트만 수행
             if (!updateData.word || updateData.word === originalWord) {
                  update(ref(database, `/vocabulary/${safeKey}`), firebaseUpdates).catch(e => console.warn(e));
             }
         }
     },
 
-// [수정 1] 새 단어 생성 (예문 전송 추가 & 중복 생성 방지)
+    // [최종 수정] 새 단어 생성 (캐시 업데이트 + 중간값 순서 적용 + 중복 방지)
     async createWord(cardData, afterWord = null) {
-        // 1. 서버로 보낼 URL 파라미터 구성
+        // [변수 준비] cardData 객체에서 필요한 값 추출
+        const { word, pos, meaning, explanation } = cardData;
+        const manual_sample = cardData.manual_sample || cardData.sample || "";
+
+        // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheets)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || "");
-            scriptUrl.searchParams.append('meaning', cardData.meaning || "");
-            scriptUrl.searchParams.append('explanation', cardData.explanation || "");
-            
-            // [핵심 Fix] 예문 데이터(manual_sample)를 서버로 전송!
-            // 이걸 안 보내서 시트의 ManualSample 열이 비어있었던 것입니다.
-            scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
+            scriptUrl.searchParams.append('word', word);
+            scriptUrl.searchParams.append('pos', pos || "");
+            scriptUrl.searchParams.append('meaning', meaning || "");
+            scriptUrl.searchParams.append('explanation', explanation || "");
+            scriptUrl.searchParams.append('manual_sample', manual_sample); 
 
             if (afterWord) {
                 scriptUrl.searchParams.append('after_word', afterWord);
             }
 
-            // 비동기 전송 (결과 기다리지 않음)
+            // 비동기 전송
             fetch(scriptUrl.toString())
                 .then(r => r.json())
                 .then(d => {
@@ -531,12 +528,7 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // [핵심 Fix 2] 로컬 state.wordList에 push하는 코드 삭제!
-        // learning.js에서 이미 임시 카드를 만들어서 리스트에 넣고 내용을 채웠기 때문에,
-        // 여기서 또 push를 하면 카드가 2개가 되어버립니다. (중복 생성 원인 해결)
-        
-        /* // 기존에 있었을 이 코드를 삭제하거나 주석 처리합니다.
-        // 1. 중간값 Index 계산 로직 (순서 유지 핵심)
+        // 2. 중간값 Index 계산 로직 (순서 유지 핵심)
         let newIndex = Date.now(); // 안전장치용 기본값
         
         // 현재 리스트를 index 순서로 정렬 보장
@@ -561,6 +553,7 @@ export const api = {
              newIndex = lastVal + 1;
         }
 
+        // 3. 새 단어 객체 생성
         const newWordObj = {
             word, pos, meaning,
             sample: manual_sample,
@@ -569,10 +562,11 @@ export const api = {
             index: newIndex 
         };
 
+        // 4. State 업데이트
         state.wordList.push(newWordObj);
         state.wordList.sort((a, b) => a.index - b.index); // 화면 즉시 반영을 위해 재정렬
 
-        // 2. ★ 로컬 스토리지(캐시) 즉시 업데이트 (새로고침 시 사라짐 방지)
+        // 5. ★ 로컬 스토리지(캐시) 즉시 업데이트 (새로고침 시 사라짐 방지)
         try {
             localStorage.setItem('wordListCache', JSON.stringify({
                 timestamp: Date.now(),
@@ -580,7 +574,7 @@ export const api = {
             }));
         } catch (e) { console.warn("Cache update error", e); }
 
-        // 3. Firebase 저장
+        // 6. Firebase 저장
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = word.replace(/[.#$\[\]\/]/g, '_');
