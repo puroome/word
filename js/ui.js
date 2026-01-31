@@ -92,18 +92,20 @@ displaySentences(sentences, containerElement) {
 
         (sentences || []).filter(s => s && s.trim()).forEach((sentence, index) => {
             const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer flex items-baseline'; // flex와 items-baseline 추가 (이모지와 텍스트 정렬)
+            // [수정] flex, items-baseline 제거 (AI 문장 스타일과 동일하게 변경)
+            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer'; 
 
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
-                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); // 번역 시 앞의 이모지는 제외하고 보냄
+                // 번역 시 이모지 제거 (정규식 범위)
+                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); 
                 if (state.activeTranslationTarget !== p) return;
                 this.showTranslationTooltip(translatedText, event);
             };
 
             p.onclick = (e) => {
                 if (e.target.closest('.sentence-content-area .interactive-word')) return;
-                // TTS 재생 시 이모지는 읽지 않도록 텍스트만 추출
+                // TTS 재생 시 이모지 제거
                 api.speak(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''), 'sample');
                 showTranslation(e);
             };
@@ -128,11 +130,11 @@ displaySentences(sentences, containerElement) {
                 this.hideTranslationTooltip();
             });
 
-            // 2. 이모지 요소 생성 및 추가
+            // 2. 이모지 요소 생성
             const emojiSpan = document.createElement('span');
-            // index % emojiList.length : 문장이 이모지 개수보다 많으면 다시 처음 이모지(쥐)부터 시작
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
-            emojiSpan.className = 'mr-2 select-none text-xl flex-shrink-0'; // 우측 여백, 드래그 방지, 줄바꿈 방지
+            // [수정] float-left 추가 (텍스트가 이모지 아래로 흐르도록 함)
+            emojiSpan.className = 'float-left mr-2 select-none text-xl'; 
             p.appendChild(emojiSpan);
 
             const sentenceContent = document.createElement('span');
@@ -161,6 +163,7 @@ displaySentences(sentences, containerElement) {
             containerElement.appendChild(p);
         });
     },
+    
     showTranslationTooltip(text, event) {
         const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
