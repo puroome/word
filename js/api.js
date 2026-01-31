@@ -499,9 +499,9 @@ export const api = {
         }
     },
 
-    // [최종 수정] 새 단어 생성 (캐시 업데이트 + 중간값 순서 적용 + 중복 방지)
+    // [최종 수정] 새 단어 생성 (중복 방지 및 위치 보정 로직 적용)
     async createWord(cardData, afterWord = null) {
-        // [변수 준비] cardData 객체에서 필요한 값 추출
+        // [변수 준비]
         const { word, pos, meaning, explanation } = cardData;
         const manual_sample = cardData.manual_sample || cardData.sample || "";
 
@@ -528,32 +528,30 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 중간값 Index 계산 로직 (순서 유지 핵심)
-        let newIndex = Date.now(); // 안전장치용 기본값
-        
+        // 2. 중간값 Index 계산 로직
         // 현재 리스트를 index 순서로 정렬 보장
         state.wordList.sort((a, b) => a.index - b.index);
+        
+        let newIndex = Date.now(); // 기본값
         
         if (afterWord) {
             const prevArrayIdx = state.wordList.findIndex(w => w.word === afterWord);
             if (prevArrayIdx !== -1) {
                 const prevVal = Number(state.wordList[prevArrayIdx].index) || 0;
                 
-                // 다음 단어가 있는지 확인
                 if (prevArrayIdx < state.wordList.length - 1) {
                     const nextVal = Number(state.wordList[prevArrayIdx + 1].index) || (prevVal + 2);
-                    newIndex = (prevVal + nextVal) / 2; // ★ 핵심: 중간값(소수점) 부여
+                    newIndex = (prevVal + nextVal) / 2; // 중간값 부여
                 } else {
-                    newIndex = prevVal + 1; // 맨 뒤라면 +1
+                    newIndex = prevVal + 1;
                 }
             }
         } else if (state.wordList.length > 0) {
-             // afterWord 없이 그냥 추가하는 경우 맨 뒤로
              const lastVal = Number(state.wordList[state.wordList.length - 1].index) || 0;
              newIndex = lastVal + 1;
         }
 
-        // 3. 새 단어 객체 생성
+        // 3. 새 단어 객체 구성
         const newWordObj = {
             word, pos, meaning,
             sample: manual_sample,
@@ -562,16 +560,27 @@ export const api = {
             index: newIndex 
         };
 
-        // 4. State 업데이트
-        state.wordList.push(newWordObj);
-        state.wordList.sort((a, b) => a.index - b.index); // 화면 즉시 반영을 위해 재정렬
+        // 4. [핵심 수정] 중복 방지 로직 (Upsert)
+        // 이미 리스트에 같은 단어가 있다면(learning.js가 추가한 임시 카드 등) 덮어쓴다.
+        const existingIndex = state.wordList.findIndex(w => w.word === word);
+        
+        if (existingIndex !== -1) {
+            // 기존 카드가 있으면 내용과 위치를 업데이트 (덮어쓰기)
+            state.wordList[existingIndex] = newWordObj;
+        } else {
+            // 없으면 새로 추가
+            state.wordList.push(newWordObj);
+        }
 
-        // 5. ★ 로컬 스토리지(캐시) 즉시 업데이트 (새로고침 시 사라짐 방지)
+        // 5. 정렬 및 로컬 스토리지 즉시 저장
+        state.wordList.sort((a, b) => a.index - b.index); 
+
         try {
             localStorage.setItem('wordListCache', JSON.stringify({
                 timestamp: Date.now(),
                 words: state.wordList
             }));
+            // console.log("✅ 로컬 캐시 저장 완료:", newWordObj);
         } catch (e) { console.warn("Cache update error", e); }
 
         // 6. Firebase 저장
