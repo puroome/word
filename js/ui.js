@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
 
 export const ui = {
-    // ... (createInteractiveFragment, renderExplanationText, displaySentences, showTranslationTooltip, hideTranslationTooltip, showWordContextMenu, hideWordContextMenu, showEditContextMenu, hideEditContextMenu 기존 유지) ...
+    // ... (createInteractiveFragment, renderExplanationText 기존 유지) ...
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
@@ -84,18 +84,27 @@ export const ui = {
             }
         });
     },
-displaySentences(sentences, containerElement) {
+
+    // [수정됨] 빈 줄(Spacer) 처리 로직 추가
+    displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
         
-        // 이모지 리스트
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
-        (sentences || []).filter(s => s && s.trim()).forEach((sentence, index) => {
-            const p = document.createElement('p');
+        // [변경 1] .filter(s => s && s.trim()) 제거 -> 빈 줄도 순회하도록 변경
+        (sentences || []).forEach((sentence, index) => {
+            
+            // [변경 2] 빈 줄인지 확인하여 '투명 공간(Spacer)' 생성
+            if (!sentence || !sentence.trim()) {
+                const spacer = document.createElement('div');
+                spacer.className = 'h-6 w-full'; // 높이 1.5rem (약 한 줄 높이) 만큼 공간 차지
+                // spacer에는 클릭 이벤트나 TTS 기능을 넣지 않음 -> 안전함
+                containerElement.appendChild(spacer);
+                return; // 여기서 이번 루프 종료
+            }
 
-            // 🔥 [중요] flex 관련 클래스가 없어야 합니다! relative와 group만 있어야 합니다.
-            // 기존: ... cursor-pointer flex items-baseline ... (X)
-            // 수정: ... cursor-pointer relative group ... (O)
+            // --- 아래는 기존 '문장 카드' 생성 로직 (내용이 있을 때만 실행됨) ---
+            const p = document.createElement('p');
             p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
 
             const showTranslation = async (event) => {
@@ -131,7 +140,6 @@ displaySentences(sentences, containerElement) {
                 this.hideTranslationTooltip();
             });
 
-            // 🔥 [중요] float-left가 있어야 글자가 감싸집니다.
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
             emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
