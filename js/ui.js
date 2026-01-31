@@ -1,7 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
-import { learningMode } from './learning.js'; // [필수] 화면 갱신을 위해 유지
 
 export const ui = {
     // [신규] 모든 팝업/메뉴 닫기 (새 메뉴 열기 전 청소용)
@@ -175,6 +174,8 @@ export const ui = {
     },
     
     showTranslationTooltip(text, event) {
+        // 툴팁은 다른 메뉴 닫기와 별개로 동작할 수도 있지만, 깔끔함을 위해 일단 닫지 않거나 필요시 hideAllMenus에 포함 가능
+        // 여기서는 유지
         const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
@@ -199,9 +200,9 @@ export const ui = {
         document.getElementById('translation-tooltip').classList.add('hidden');
     },
 
-    // [수정] 사전 메뉴 표시
+    // [수정] 사전 메뉴 표시 (기존 메뉴 닫기 추가)
     showWordContextMenu(event, word, options = {}) {
-        this.hideAllMenus(); 
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
 
         event.preventDefault();
         const menu = document.getElementById('word-context-menu');
@@ -250,9 +251,9 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
 
-    // [수정] 편집 메뉴 표시
+    // [수정] 편집 메뉴 표시 (기존 메뉴 닫기 추가)
     showEditContextMenu(event) {
-        this.hideAllMenus(); 
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
 
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
@@ -279,64 +280,12 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [최종 수정] 카드 메뉴 - 기존 메뉴 유지 & 삭제 로직 개선
+    // [수정] 카드 메뉴 표시 (기존 메뉴 닫기 추가)
     showCardContextMenu(event) {
-        this.hideAllMenus();
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
 
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
-
-        // 🔥 중요: innerHTML 초기화 코드 삭제! (기존 버튼 보존)
-        // 대신 기존에 제가 추가했던 deleteBtn이 혹시 있다면 중복 방지를 위해 지워줌
-        const oldDeleteBtn = menu.querySelector('#dynamic-delete-btn');
-        if(oldDeleteBtn) oldDeleteBtn.remove();
-
-        // 현재 카드의 단어 정보 가져오기
-        const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
-        
-        // 삭제 버튼 생성 및 추가
-        const deleteBtn = document.createElement('div');
-        deleteBtn.id = 'dynamic-delete-btn'; // 중복 방지용 ID
-        deleteBtn.className = 'p-3 hover:bg-gray-100 cursor-pointer text-red-600 flex items-center';
-        deleteBtn.innerHTML = '<span class="material-icons text-sm mr-2">delete</span>삭제';
-        
-        deleteBtn.onclick = async () => {
-            if (!confirm(`'${currentWord.word}' 단어를 정말 삭제하시겠습니까?`)) return;
-
-            // (1) 메뉴 닫기
-            this.hideAllMenus();
-            
-            // (2) 서버 및 데이터 삭제 요청
-            await api.deleteWord(currentWord.word);
-
-            // (3) [핵심] 현재 학습 화면(UI) 리스트에서 해당 단어를 '쏙' 빼기
-            // splice를 사용하여 현재 인덱스의 요소를 정확히 제거
-            learningMode.state.currentWordList.splice(learningMode.state.currentIndex, 1);
-
-            // (4) 인덱스 조정 (마지막 카드를 지웠을 때 에러 방지)
-            if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
-                learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
-            }
-
-            // (5) 화면 즉시 갱신
-            if (learningMode.state.currentWordList.length === 0) {
-                alert("모든 단어가 삭제되었습니다.");
-                location.reload(); 
-            } else {
-                alert("삭제되었습니다."); 
-                
-                // 🔥 카드 뒷면이 열려있다면 닫아주기 (CSS 클래스 제거)
-                const cardBack = document.getElementById('learning-card-back');
-                if (cardBack) cardBack.classList.remove('is-slid-up');
-                
-                // 다음 카드 그리기
-                learningMode.renderCard(); 
-            }
-        };
-        
-        menu.appendChild(deleteBtn);
-
-        // 메뉴 위치 지정 (기존 로직 유지)
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
