@@ -19,9 +19,10 @@ export const api = {
         if (!state.isWordListReady) {
             try {
                 const cachedData = localStorage.getItem('wordListCache');
-                if (cachedData) {
+        if (cachedData) {
                     const { timestamp, words } = JSON.parse(cachedData);
-                    state.wordList = words.sort((a, b) => a.index - b.index);
+                    // [Fix] 문자가 섞여 있어도 숫자로 변환하여 정확히 정렬
+                    state.wordList = words.sort((a, b) => Number(a.index) - Number(b.index));
                     state.isWordListReady = true;
                     state.lastCacheTimestamp = timestamp;
                 }
@@ -39,7 +40,8 @@ export const api = {
             const data = snapshot.val();
             if (!data) throw new Error("Firebase에 단어 데이터가 없습니다.");
 
-            const wordsArray = Object.values(data).sort((a, b) => a.index - b.index);
+            // [Fix] 숫자로 강제 변환하여 정렬 (위치 꼬임 방지)
+            const wordsArray = Object.values(data).sort((a, b) => Number(a.index) - Number(b.index));
 
             state.wordList = wordsArray;
             state.isWordListReady = true;
@@ -535,11 +537,12 @@ export const api = {
         if (afterWord) {
             targetIndex = state.wordList.findIndex(w => w.word === afterWord);
             if (targetIndex !== -1) {
-                const prevIndex = state.wordList[targetIndex].index;
+                // [Fix] 무조건 숫자로 변환해서 계산 (문자열 더하기 방지)
+                const prevIndex = Number(state.wordList[targetIndex].index);
                 // 다음 단어가 있으면 그 사이값, 없으면 +1
                 const nextItem = state.wordList[targetIndex + 1];
                 if (nextItem) {
-                    newIndex = (prevIndex + nextItem.index) / 2;
+                    newIndex = (prevIndex + Number(nextItem.index)) / 2;
                 } else {
                     newIndex = prevIndex + 1;
                 }
