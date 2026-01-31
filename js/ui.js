@@ -3,7 +3,14 @@ import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
 
 export const ui = {
-    // ... (createInteractiveFragment, renderExplanationText 기존 유지) ...
+    // [신규] 모든 팝업/메뉴 닫기 (새 메뉴 열기 전 청소용)
+    hideAllMenus() {
+        this.hideWordContextMenu();
+        this.hideEditContextMenu();
+        this.hideCardContextMenu();
+        this.hideTranslationTooltip();
+    },
+
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
@@ -85,25 +92,19 @@ export const ui = {
         });
     },
 
-    // [수정됨] 빈 줄(Spacer) 처리 로직 추가
     displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
-        
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
-        // [변경 1] .filter(s => s && s.trim()) 제거 -> 빈 줄도 순회하도록 변경
         (sentences || []).forEach((sentence, index) => {
-            
-            // [변경 2] 빈 줄인지 확인하여 '투명 공간(Spacer)' 생성
+            // 빈 줄(Spacer) 처리
             if (!sentence || !sentence.trim()) {
                 const spacer = document.createElement('div');
-                spacer.className = 'h-6 w-full'; // 높이 1.5rem (약 한 줄 높이) 만큼 공간 차지
-                // spacer에는 클릭 이벤트나 TTS 기능을 넣지 않음 -> 안전함
+                spacer.className = 'h-6 w-full'; 
                 containerElement.appendChild(spacer);
-                return; // 여기서 이번 루프 종료
+                return; 
             }
 
-            // --- 아래는 기존 '문장 카드' 생성 로직 (내용이 있을 때만 실행됨) ---
             const p = document.createElement('p');
             p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
 
@@ -173,6 +174,8 @@ export const ui = {
     },
     
     showTranslationTooltip(text, event) {
+        // 툴팁은 다른 메뉴 닫기와 별개로 동작할 수도 있지만, 깔끔함을 위해 일단 닫지 않거나 필요시 hideAllMenus에 포함 가능
+        // 여기서는 유지
         const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
@@ -196,7 +199,11 @@ export const ui = {
     hideTranslationTooltip() {
         document.getElementById('translation-tooltip').classList.add('hidden');
     },
+
+    // [수정] 사전 메뉴 표시 (기존 메뉴 닫기 추가)
     showWordContextMenu(event, word, options = {}) {
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+
         event.preventDefault();
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
@@ -243,7 +250,11 @@ export const ui = {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
+
+    // [수정] 편집 메뉴 표시 (기존 메뉴 닫기 추가)
     showEditContextMenu(event) {
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
         const touch = event.touches ? event.touches[0] : null;
@@ -269,8 +280,10 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [신규] 카드 컨텍스트 메뉴 표시
+    // [수정] 카드 메뉴 표시 (기존 메뉴 닫기 추가)
     showCardContextMenu(event) {
+        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
         const touch = event.touches ? event.touches[0] : null;
@@ -296,7 +309,6 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [신규] 삭제 모달 제어
     showDeleteConfirmModal() {
         document.getElementById('delete-confirm-modal').classList.remove('hidden');
     },
