@@ -586,23 +586,21 @@ export const api = {
         }
     },
 
-    async deleteWord(word) {
-        // 1. Google Sheet 삭제 요청 (await로 확실히 기다림)
+        async deleteWord(word) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'delete_word');
             scriptUrl.searchParams.append('word', word);
             
-            try {
-                // 삭제가 서버에 반영될 때까지 기다립니다.
-                await fetch(scriptUrl.toString());
-                console.log("✅ 시트 삭제 요청 완료");
-            } catch (e) {
-                console.error("시트 통신 에러:", e);
-            }
+            fetch(scriptUrl.toString())
+                .then(r => r.json())
+                .then(d => {
+                    if(!d.success) console.warn("시트 삭제 실패:", d.message);
+                    else console.log("✅ 시트 삭제 성공");
+                })
+                .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 로컬 데이터 및 캐시 삭제 (화면 깜빡임 방지용 선행 작업)
         state.wordList = state.wordList.filter(w => w.word !== word);
 
         try {
@@ -614,18 +612,11 @@ export const api = {
             }
         } catch (e) {}
 
-        // 3. Firebase 삭제
         if (database) {
             const { ref, remove } = window.firebaseSDK;
             const safeKey = word.replace(/[.#$\[\]\/]/g, '_');
             const wordRef = ref(database, `/vocabulary/${safeKey}`);
-            // Firebase 삭제도 기다려 주는 것이 안전함
-            await remove(wordRef).catch(e => console.error(e));
+            remove(wordRef).catch(e => console.warn(e));
         }
-
-        // 4. [핵심] 메시지 출력 후 브라우저 새로고침
-        // alert창의 '확인'을 누르면 페이지가 새로고침 됩니다.
-        alert("삭제되었습니다."); 
-        location.reload(); 
     }
-    };
+};
