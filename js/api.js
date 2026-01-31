@@ -329,35 +329,32 @@ export const api = {
         }
     },
     
-// [재수정] 모든 항목(동의어, 반의어 포함)에 한글 뜻 필수 표기
+// [재수정] 예문 개수 로직 (단일 뜻 1개, 다의어 최대 5개)
     async fetchWordInfoFromAI(word) {
-        // config.js의 키가 있다면 그것을 사용하고, 없다면 아래 하드코딩된 키 사용
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 프롬프트: 모든 카테고리에 한글 뜻 병기 필수 요청
         const prompt = `
             Analyze the English word: "${word}"
 
             Output pure JSON with three fields:
             1. "meaning": The most common Korean meaning(s).
             2. "explanation": 
-               - Generate a structured text with the following KOREAN headers exactly: [동의어], [반의어], [파생어], [용례]
-               - CRITICAL FORMAT RULE for ALL categories: 
-                 Every single item MUST follow the format: "English Item (Specific Korean Meaning)".
-               - Examples:
-                 [동의어] Happy (행복한), Joyful (즐거운)
-                 [반의어] Sad (슬픈)
-                 [용례] Run a business (회사를 경영하다)
-               - Use line breaks (\\n) between categories.
-               - If a category has no content, omit that line.
-            3. "samples": An array of English example sentences (1 to 5 sentences).
-               - Priority 1: Different parts of speech.
-               - Priority 2: Different meanings.
-               - If only 1 usage exists, provide 1 sentence. Max 5.
+               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례].
+               - FORMAT RULES:
+                 Rule 1: Use the format "English Word : Korean Meaning" (No parentheses, use colon).
+                 Rule 2: English items for [동의어]/[반의어] must also have Korean meanings.
+                 Rule 3: Insert an empty line between categories.
+                 Rule 4: If a category is empty, omit it.
+            
+            3. "samples": An array of English example sentences.
+               - QUANTITY LOGIC (Strictly Follow):
+                 Case A: If the word has only ONE common meaning/usage -> Generate EXACTLY 1 sentence.
+                 Case B: If the word has DISTINCT meanings (e.g., Noun vs Verb, or totally different definitions) -> Generate 1 sentence per distinct meaning.
+                 Max Limit: Up to 5 sentences total.
                - No translations.
 
             Do not include Markdown code blocks. Just the JSON string.
