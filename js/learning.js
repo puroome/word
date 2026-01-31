@@ -167,7 +167,7 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-// [유지/확인] 편집 모드 진입 (AI 데이터 주입 로직 포함)
+// [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
     async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -214,19 +214,46 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                            if (aiData.meaning) meaningInput.value = aiData.meaning;
-                            if (aiData.explanation) explanationInput.value = aiData.explanation;
+                            // [수정 포인트 1] 뜻 (Meaning) - 기존 값이 있으면 줄바꿈 후 추가
+                            if (aiData.meaning) {
+                                const original = meaningInput.value.trim();
+                                if (original) {
+                                    // 기존 내용과 겹치지 않을 때만 추가
+                                    if (!original.includes(aiData.meaning)) {
+                                        meaningInput.value = original + "\n" + aiData.meaning;
+                                    }
+                                } else {
+                                    meaningInput.value = aiData.meaning;
+                                }
+                            }
 
+                            // [수정 포인트 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
+                            if (aiData.explanation) {
+                                const original = explanationInput.value.trim();
+                                if (original) {
+                                    explanationInput.value = original + "\n\n" + aiData.explanation;
+                                } else {
+                                    explanationInput.value = aiData.explanation;
+                                }
+                            }
+
+                            // [수정 포인트 3] 예문 (Samples) - 기존 예문 뒤에 추가
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
-                                const sampleText = aiData.samples.join('\n');
+                                const newSampleText = aiData.samples.join('\n');
+                                const originalSample = wordData.sample || "";
                                 
-                                // [핵심] 메모리에 저장 (저장 버튼 누를 때 이 값이 사용됨)
-                                wordData.sample = sampleText; 
-                                wordData.manualSample = sampleText;
+                                if (originalSample.trim()) {
+                                    wordData.sample = originalSample.trim() + "\n\n" + newSampleText;
+                                } else {
+                                    wordData.sample = newSampleText;
+                                }
+                                
+                                // 동기화용 필드도 업데이트
+                                wordData.manualSample = wordData.sample;
 
-                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보 입력 완료! (예문 ${aiData.samples.length}개 생성됨)` } }));
+                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
                             } else {
-                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 입력 완료 (예문 없음)" } }));
+                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료 (예문 없음)" } }));
                             }
 
                         } catch (e) {
@@ -241,6 +268,7 @@ export const learningMode = {
             }, 0);
 
         } else {
+            // 뒷면 편집 모드
             let currentSample = wordData.sample || "";
             this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
@@ -250,7 +278,6 @@ export const learningMode = {
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
-
 async saveAndExitEditMode() {
         // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
