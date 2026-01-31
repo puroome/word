@@ -167,10 +167,9 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-// [수정됨] 편집 모드 (예문 데이터 강제 주입 로직 추가)
+// [유지/확인] 편집 모드 진입 (AI 데이터 주입 로직 포함)
     async enterEditMode(side) {
         this.state.isEditing = true;
-        // 현재 편집 중인 단어 데이터 참조
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
         if (side === 'front') {
@@ -178,7 +177,6 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            // UI: 입력창 + AI 버튼
             this.elements.wordDisplay.innerHTML = `
                 <div class="flex flex-col gap-2">
                     <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
@@ -192,9 +190,8 @@ export const learningMode = {
             this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
             
             const currentExplanation = wordData.explanation || "";
-            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5" placeholder="[동의어], [반의어], [파생어], [용례]...">${currentExplanation}</textarea>`;
+            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="8" placeholder="[동의어]\nEnglish : Korean\n\n[파생어]\nEnglish : Korean">${currentExplanation}</textarea>`;
 
-            // 버튼 로직
             setTimeout(() => {
                 const autoBtn = document.getElementById('auto-fill-btn');
                 const wordInput = document.getElementById('edit-word-input');
@@ -217,22 +214,17 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                            // 1. 뜻 채우기
                             if (aiData.meaning) meaningInput.value = aiData.meaning;
-                            // 2. 설명 채우기 ([동의어] 등 포함된 텍스트)
                             if (aiData.explanation) explanationInput.value = aiData.explanation;
 
-                            // 3. 예문 데이터 강력 주입
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const sampleText = aiData.samples.join('\n');
                                 
-                                // [중요] 메모리 상의 데이터 직접 수정
+                                // [핵심] 메모리에 저장 (저장 버튼 누를 때 이 값이 사용됨)
                                 wordData.sample = sampleText; 
-                                
-                                // 혹시 ManualSample 필드가 따로 관리된다면 거기도 주입 (안전장치)
                                 wordData.manualSample = sampleText;
 
-                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보 입력 완료! (예문 ${aiData.samples.length}개 생성됨 - 저장 후 뒤집어보세요)` } }));
+                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보 입력 완료! (예문 ${aiData.samples.length}개 생성됨)` } }));
                             } else {
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 입력 완료 (예문 없음)" } }));
                             }
@@ -249,15 +241,8 @@ export const learningMode = {
             }, 0);
 
         } else {
-            // [뒷면 편집 모드]
-            // 여기서는 wordData.sample에 저장된 값이 있으면 그것을 textarea에 보여줍니다.
-            let currentSample = "";
-            if (wordData.sample) {
-                currentSample = wordData.sample;
-            }
-
-            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample || ""}</textarea>`;
-             
+            let currentSample = wordData.sample || "";
+            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
