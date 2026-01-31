@@ -1,7 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
-import { learningMode } from './learning.js'; // [필수] 화면 갱신을 위해 추가
+import { learningMode } from './learning.js'; // [추가] 카드 갱신(renderCard)을 위해 필수
 
 export const ui = {
     // [신규] 모든 팝업/메뉴 닫기 (새 메뉴 열기 전 청소용)
@@ -175,6 +175,8 @@ export const ui = {
     },
     
     showTranslationTooltip(text, event) {
+        // 툴팁은 다른 메뉴 닫기와 별개로 동작할 수도 있지만, 깔끔함을 위해 일단 닫지 않거나 필요시 hideAllMenus에 포함 가능
+        // 여기서는 유지
         const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
@@ -279,65 +281,76 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [최종 교정] 카드 메뉴 - 원본 디자인 100% 유지 + 삭제 로직만 이식
+    // [이식 완료] 수정된 showCardContextMenu 적용 (새로고침 없는 삭제 기능 포함)
     showCardContextMenu(event) {
         this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
 
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
 
-        // [중요] innerHTML 초기화 절대 하지 않음! (기존 버튼 보존)
+        // [핵심] 현재 카드의 단어 정보 가져오기 (learning.js의 상태 이용)
+        const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
         
-        // --- 여기서부터 삭제 기능 이식 ---
-        // 기존 메뉴 안에 있는 '삭제' 버튼을 찾아서 클릭 기능만 바꿉니다.
-        const menuItems = Array.from(menu.querySelectorAll('div, span')); // div나 span 중에서 찾기
-        const deleteBtn = menuItems.find(item => item.textContent && item.textContent.includes('삭제'));
+        // 메뉴 내부 초기화 후 버튼 동적 생성
+        menu.innerHTML = '';
 
-        if (deleteBtn) {
-            // 기존 이벤트 제거를 위해 노드 복제 (깔끔하게 초기화)하거나 onclick 덮어쓰기
-            // 여기서는 onclick을 바로 덮어씁니다.
-            deleteBtn.onclick = async (e) => {
-                e.preventDefault(); // 혹시 모를 기본 동작 방지
-                
-                // 현재 카드 정보 가져오기
-                const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
-                if (!currentWord) return;
+        if (currentWord) {
+            // 1. 수정 버튼
+            const editBtn = document.createElement('div');
+            editBtn.className = 'p-3 hover:bg-gray-100 cursor-pointer flex items-center';
+            editBtn.innerHTML = '<span class="material-icons text-sm mr-2">edit</span>수정';
+            editBtn.onclick = () => {
+                this.hideAllMenus();
+                if(learningMode.openEditModal) learningMode.openEditModal(currentWord);
+            };
+            menu.appendChild(editBtn);
 
+            // 2. 추가 버튼
+            const addBtn = document.createElement('div');
+            addBtn.className = 'p-3 hover:bg-gray-100 cursor-pointer flex items-center';
+            addBtn.innerHTML = '<span class="material-icons text-sm mr-2">add</span>이 뒤에 단어 추가';
+            addBtn.onclick = () => {
+                this.hideAllMenus();
+                if(learningMode.openAddModal) learningMode.openAddModal(currentWord.word);
+            };
+            menu.appendChild(addBtn);
+
+            // 3. 삭제 버튼 [여기가 원하시던 핵심 기능입니다]
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'p-3 hover:bg-gray-100 cursor-pointer text-red-600 flex items-center';
+            deleteBtn.innerHTML = '<span class="material-icons text-sm mr-2">delete</span>삭제';
+            
+            deleteBtn.onclick = async () => {
                 if (!confirm(`'${currentWord.word}' 단어를 정말 삭제하시겠습니까?`)) return;
 
-                // 1. 메뉴 닫기
+                // (1) 메뉴 닫기
                 this.hideAllMenus();
                 
-                // 2. 서버 및 데이터 삭제 요청
+                // (2) 서버 및 데이터 삭제 요청
                 await api.deleteWord(currentWord.word);
 
-                // 3. [핵심] 리스트에서 단어 쏙 빼기
-                learningMode.state.currentWordList.splice(learningMode.state.currentIndex, 1);
+                // (3) [핵심] 현재 학습 화면(UI) 리스트에서 해당 단어를 '쏙' 빼기
+                const currentList = learningMode.state.currentWordList;
+                learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
 
-                // 4. 인덱스 조정
+                // (4) 인덱스 조정 (마지막 카드를 지웠을 때 에러 방지)
                 if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
                     learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
                 }
 
-                // 5. 화면 갱신 (자동 넘김)
+                // (5) 화면 즉시 갱신 (새로고침 없이 다음 카드 렌더링)
                 if (learningMode.state.currentWordList.length === 0) {
                     alert("모든 단어가 삭제되었습니다.");
-                    location.reload(); 
+                    location.reload(); // 단어가 하나도 없으면 새로고침
                 } else {
                     alert("삭제되었습니다."); 
-                    
-                    // 카드 뒷면 닫기
-                    const cardBack = document.getElementById('learning-card-back');
-                    if (cardBack) cardBack.classList.remove('is-slid-up');
-                    
-                    // 다음 카드 그리기
-                    learningMode.renderCard(); 
+                    learningMode.renderCard(); // 여기가 마법! 다음 카드를 바로 그려줍니다.
                 }
             };
+            menu.appendChild(deleteBtn);
         }
-        // --- 삭제 기능 이식 끝 ---
 
-        // 메뉴 위치 지정 (원본 코드 유지)
+        // 메뉴 위치 지정 (기존 로직 유지)
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
