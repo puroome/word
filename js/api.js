@@ -329,7 +329,7 @@ export const api = {
         }
     },
     
-// [추가] AI에게 단어 정보(뜻, 설명, 예문)를 한 번에 요청하는 함수
+// [재수정] 모든 항목(동의어, 반의어 포함)에 한글 뜻 필수 표기
     async fetchWordInfoFromAI(word) {
         // config.js의 키가 있다면 그것을 사용하고, 없다면 아래 하드코딩된 키 사용
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
@@ -338,21 +338,27 @@ export const api = {
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 프롬프트: 뜻, 설명, 그리고 상황별 예문(최대 5개) 요청
+        // 프롬프트: 모든 카테고리에 한글 뜻 병기 필수 요청
         const prompt = `
             Analyze the English word: "${word}"
 
             Output pure JSON with three fields:
-            1. "meaning": The most common Korean meaning(s) (e.g., "사랑, 애정").
-            2. "explanation": A structured text including [Synonyms], [Antonyms], [Derivatives], [Idioms].
-            3. "samples": An array of English example sentences.
-               - LOGIC for "samples" count (Max 5):
-                 1. First, check if the word has multiple parts of speech (e.g., Noun vs Verb). Create sentences for each POS.
-                 2. Second, if it has multiple distinct meanings within a POS, create sentences for those.
-                 3. If the word has ONLY 1 common meaning/usage, provide ONLY 1 sentence.
-                 4. Maximum total sentences: 5.
-               - Do not translate sentences.
-               - Sentences should be natural and helpful for learning.
+            1. "meaning": The most common Korean meaning(s).
+            2. "explanation": 
+               - Generate a structured text with the following KOREAN headers exactly: [동의어], [반의어], [파생어], [용례]
+               - CRITICAL FORMAT RULE for ALL categories: 
+                 Every single item MUST follow the format: "English Item (Specific Korean Meaning)".
+               - Examples:
+                 [동의어] Happy (행복한), Joyful (즐거운)
+                 [반의어] Sad (슬픈)
+                 [용례] Run a business (회사를 경영하다)
+               - Use line breaks (\\n) between categories.
+               - If a category has no content, omit that line.
+            3. "samples": An array of English example sentences (1 to 5 sentences).
+               - Priority 1: Different parts of speech.
+               - Priority 2: Different meanings.
+               - If only 1 usage exists, provide 1 sentence. Max 5.
+               - No translations.
 
             Do not include Markdown code blocks. Just the JSON string.
         `;
@@ -369,7 +375,6 @@ export const api = {
             const data = await response.json();
             const textResponse = data.candidates[0].content.parts[0].text;
             
-            // JSON 파싱 (마크다운 기호 제거 후 파싱)
             const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
 
             return cleanJson;
