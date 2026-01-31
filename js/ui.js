@@ -353,13 +353,4 @@ export const ui = {
         const menu = document.getElementById('card-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-    
-    // 이 함수들은 main.js에서 호출할 수도 있어서 에러 방지용으로 남겨두되, 내용은 비워도 되지만 
-    // 혹시 몰라 원본 형태는 유지합니다. (하지만 위에서 cloneNode로 이벤트를 끊어서 실행될 일은 없습니다)
-    showDeleteConfirmModal() {
-        document.getElementById('delete-confirm-modal').classList.remove('hidden');
-    },
-    hideDeleteConfirmModal() {
-        document.getElementById('delete-confirm-modal').classList.add('hidden');
-    }
 };
