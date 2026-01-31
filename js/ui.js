@@ -301,33 +301,84 @@ export const ui = {
             deleteBtn = newDeleteBtn; // 참조 변수 업데이트
 
             // 4. 이제 깨끗해진 버튼에 "우리가 원하는 동작(1번째 창)"만 붙입니다.
-            deleteBtn.onclick = async () => {
-                // (1) 1번째 첨부 이미지 스타일의 기본 확인창 띄우기
-                if (!confirm(`'${currentWord.word}' 단어를 정말 삭제하시겠습니까?`)) return;
-
+            deleteBtn.onclick = () => {
                 this.hideAllMenus();
+
+                // 1. 예쁜 팝업창이 없으면 자동으로 만들기 (CSS + HTML 자동 주입)
+                if (!document.getElementById('nice-alert-modal')) {
+                    const style = document.createElement('style');
+                    style.innerHTML = `
+                        .nice-modal-overlay { position: fixed; inset:0; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:9999; backdrop-filter: blur(2px); }
+                        .nice-modal-box { background: white; padding: 24px; border-radius: 16px; width: 85%; max-width: 300px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out; }
+                        .nice-modal-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 8px; color: #1f2937; }
+                        .nice-modal-desc { color: #4b5563; margin-bottom: 20px; line-height: 1.5; font-size: 1rem; }
+                        .nice-modal-btns { display: flex; gap: 10px; }
+                        .nice-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.1s; font-size: 1rem; }
+                        .nice-btn:active { transform: scale(0.96); }
+                        .nice-btn-cancel { background: #f3f4f6; color: #4b5563; }
+                        .nice-btn-del { background: #ef4444; color: white; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+                        @keyframes popIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
+                    `;
+                    document.head.appendChild(style);
+
+                    const html = `
+                        <div id="nice-alert-modal" class="nice-modal-overlay" style="display:none">
+                            <div class="nice-modal-box">
+                                <div class="nice-modal-title">🗑️ 카드 삭제</div>
+                                <div id="nice-msg" class="nice-modal-desc"></div>
+                                <div class="nice-modal-btns">
+                                    <button id="nice-cancel" class="nice-btn nice-btn-cancel">취소</button>
+                                    <button id="nice-confirm" class="nice-btn nice-btn-del">삭제</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    document.body.insertAdjacentHTML('beforeend', html);
+                }
+
+                // 2. 팝업창 띄우기
+                const modal = document.getElementById('nice-alert-modal');
+                const msgEl = document.getElementById('nice-msg');
+                const confirmBtn = document.getElementById('nice-confirm');
+                const cancelBtn = document.getElementById('nice-cancel');
+
+                // 메시지 설정 (현재 단어 이름 넣기)
+                msgEl.innerHTML = `'<b>${currentWord.word}</b>' 단어를<br>정말 삭제하시겠습니까?`;
+                modal.style.display = 'flex';
+
+                // 기존 이벤트 제거를 위해 버튼 재생성 (중복 클릭 방지)
+                const newConfirm = confirmBtn.cloneNode(true);
+                const newCancel = cancelBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+                cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+                // [취소] 버튼 클릭 시
+                newCancel.onclick = () => { modal.style.display = 'none'; };
                 
-                // (2) 서버 데이터 삭제
-                await api.deleteWord(currentWord.word);
+                // [삭제] 버튼 클릭 시 (실제 삭제 로직)
+                newConfirm.onclick = async () => {
+                    modal.style.display = 'none'; // 창 닫기
+                    
+                    // (1) 서버 데이터 삭제
+                    await api.deleteWord(currentWord.word);
 
-                // (3) 리스트 갱신 (새로고침 방지)
-                const currentList = learningMode.state.currentWordList;
-                learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
+                    // (2) 리스트 갱신
+                    const currentList = learningMode.state.currentWordList;
+                    learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
 
-                // (4) 인덱스 조정 (현재 카드가 삭제되었으므로 인덱스가 넘어가지 않도록 주의하거나, 마지막 카드인 경우 처리)
-                if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
-                    learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
-                }
+                    // (3) 인덱스 조정 (마지막 카드였을 경우 앞 카드로)
+                    if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
+                        learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
+                    }
 
-                // (5) 화면 즉시 갱신
-                if (learningMode.state.currentWordList.length === 0) {
-                    alert("모든 단어가 삭제되었습니다.");
-                    location.reload(); 
-                } else {
-                    // alert("삭제되었습니다."); // 알림 제거
-                    // [수정] renderCard() 대신 올바른 메서드인 displayWord() 사용
-                    learningMode.displayWord(learningMode.state.currentIndex, true); 
-                }
+                    // (4) 화면 즉시 갱신 (다음 카드로 이동)
+                    if (learningMode.state.currentWordList.length === 0) {
+                        alert("모든 단어가 삭제되었습니다.");
+                        location.reload(); 
+                    } else {
+                        // 바로 다음 단어 보여주기
+                        learningMode.displayWord(learningMode.state.currentIndex, true); 
+                    }
+                };
             };
         }
 
