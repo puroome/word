@@ -87,12 +87,15 @@ export const ui = {
 displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
         
-        // 1. 이모지 리스트 정의
+        // 이모지 리스트
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
         (sentences || []).filter(s => s && s.trim()).forEach((sentence, index) => {
             const p = document.createElement('p');
-            // [수정] flex 관련 클래스를 제거하고, AI 예문과 동일하게 relative group 사용
+
+            // 🔥 [중요] flex 관련 클래스가 없어야 합니다! relative와 group만 있어야 합니다.
+            // 기존: ... cursor-pointer flex items-baseline ... (X)
+            // 수정: ... cursor-pointer relative group ... (O)
             p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
 
             const showTranslation = async (event) => {
@@ -128,10 +131,9 @@ displaySentences(sentences, containerElement) {
                 this.hideTranslationTooltip();
             });
 
-            // 2. 이모지 요소 생성
+            // 🔥 [중요] float-left가 있어야 글자가 감싸집니다.
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
-            // [수정] AI 예문처럼 float-left를 사용하여 텍스트가 자연스럽게 감싸도록 변경
             emojiSpan.className = 'float-left mr-2 select-none text-xl'; 
             p.appendChild(emojiSpan);
 
