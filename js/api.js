@@ -499,17 +499,20 @@ export const api = {
         }
     },
 
-    // [최종 수정] 새 단어 생성 (중복 방지 및 위치 보정 로직 적용)
+    // [최종 수정] 새 단어 생성 (강제 중복 제거 후 삽입 방식)
     async createWord(cardData, afterWord = null) {
         // [변수 준비]
         const { word, pos, meaning, explanation } = cardData;
         const manual_sample = cardData.manual_sample || cardData.sample || "";
+        
+        // 공백 제거 등 안전한 비교를 위한 키
+        const targetWord = word.trim();
 
         // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheets)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', word);
+            scriptUrl.searchParams.append('word', targetWord);
             scriptUrl.searchParams.append('pos', pos || "");
             scriptUrl.searchParams.append('meaning', meaning || "");
             scriptUrl.searchParams.append('explanation', explanation || "");
@@ -528,8 +531,11 @@ export const api = {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 중간값 Index 계산 로직
-        // 현재 리스트를 index 순서로 정렬 보장
+        // 2. [핵심 수정] 기존에 같은 단어가 있다면 무조건 삭제 (Clean Slate 전략)
+        // learning.js가 만든 임시 카드나, 혹시 모를 중복 데이터를 리스트에서 아예 빼버립니다.
+        state.wordList = state.wordList.filter(w => w.word.trim() !== targetWord);
+
+        // 3. 중간값 Index 계산 로직 (깨끗해진 리스트 기준)
         state.wordList.sort((a, b) => a.index - b.index);
         
         let newIndex = Date.now(); // 기본값
@@ -551,28 +557,21 @@ export const api = {
              newIndex = lastVal + 1;
         }
 
-        // 3. 새 단어 객체 구성
+        // 4. 새 단어 객체 생성
         const newWordObj = {
-            word, pos, meaning,
+            word: targetWord, // trim된 단어 사용
+            pos, 
+            meaning,
             sample: manual_sample,
             explanation,
             AISample: null,
             index: newIndex 
         };
 
-        // 4. [핵심 수정] 중복 방지 로직 (Upsert)
-        // 이미 리스트에 같은 단어가 있다면(learning.js가 추가한 임시 카드 등) 덮어쓴다.
-        const existingIndex = state.wordList.findIndex(w => w.word === word);
+        // 5. 리스트에 추가 (Push)
+        state.wordList.push(newWordObj);
         
-        if (existingIndex !== -1) {
-            // 기존 카드가 있으면 내용과 위치를 업데이트 (덮어쓰기)
-            state.wordList[existingIndex] = newWordObj;
-        } else {
-            // 없으면 새로 추가
-            state.wordList.push(newWordObj);
-        }
-
-        // 5. 정렬 및 로컬 스토리지 즉시 저장
+        // 6. 재정렬 및 로컬 스토리지 저장
         state.wordList.sort((a, b) => a.index - b.index); 
 
         try {
@@ -580,13 +579,12 @@ export const api = {
                 timestamp: Date.now(),
                 words: state.wordList
             }));
-            // console.log("✅ 로컬 캐시 저장 완료:", newWordObj);
         } catch (e) { console.warn("Cache update error", e); }
 
-        // 6. Firebase 저장
+        // 7. Firebase 저장 (덮어쓰기)
         if (database) {
             const { ref, update } = window.firebaseSDK;
-            const safeKey = word.replace(/[.#$\[\]\/]/g, '_');
+            const safeKey = targetWord.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
             updates[`/vocabulary/${safeKey}`] = newWordObj;
             update(ref(database), updates).catch(e => console.warn(e));
