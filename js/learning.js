@@ -824,7 +824,6 @@ export const learningMode = {
         const botBtn = document.createElement('button');
         botBtn.className = "float-left mr-2 text-base focus:outline-none transition-transform hover:scale-110"; 
         botBtn.innerHTML = "🤖";
-        botBtn.title = "이 예문만 다시 만들기";
         botBtn.onclick = async (e) => {
             e.stopPropagation(); 
             botBtn.innerHTML = `<span class="animate-spin text-xs inline-block">⏳</span>`;
