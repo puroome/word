@@ -503,9 +503,9 @@ export const api = {
         }
     },
 
-// [수정 1] 새 단어 생성 (예문 전송 추가 & 중복 생성 방지)
+// [수정 1] 새 단어 생성 (즉시 반영: Optimistic Update 적용)
     async createWord(cardData, afterWord = null) {
-        // 1. 서버로 보낼 URL 파라미터 구성
+        // 1. 서버 전송 (Google Sheets) - 비동기로 실행
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
@@ -513,44 +513,68 @@ export const api = {
             scriptUrl.searchParams.append('pos', cardData.pos || "");
             scriptUrl.searchParams.append('meaning', cardData.meaning || "");
             scriptUrl.searchParams.append('explanation', cardData.explanation || "");
-            
-            // [핵심 Fix] 예문 데이터(manual_sample)를 서버로 전송!
-            // 이걸 안 보내서 시트의 ManualSample 열이 비어있었던 것입니다.
             scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
 
             if (afterWord) {
                 scriptUrl.searchParams.append('after_word', afterWord);
             }
 
-            // 비동기 전송 (결과 기다리지 않음)
             fetch(scriptUrl.toString())
                 .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 생성 실패:", d.message);
-                })
+                .then(d => { if (!d.success) console.warn("시트 생성 실패:", d.message); })
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // [핵심 Fix 2] 로컬 state.wordList에 push하는 코드 삭제!
-        // learning.js에서 이미 임시 카드를 만들어서 리스트에 넣고 내용을 채웠기 때문에,
-        // 여기서 또 push를 하면 카드가 2개가 되어버립니다. (중복 생성 원인 해결)
+        // 2. [앱 내부 반영] state.wordList 및 LocalStorage 즉시 업데이트
+        // 서버 응답을 기다리지 않고 로컬 데이터를 먼저 수정하여 사용자가 바로 볼 수 있게 함
         
-        /* // 기존에 있었을 이 코드를 삭제하거나 주석 처리합니다.
-        const newWordObj = { ...cardData, index: state.wordList.length };
-        state.wordList.push(newWordObj); 
-        */
+        const newWordObj = {
+            ...cardData,
+            sample: cardData.manual_sample || cardData.sample || "",
+            AISample: null,
+            index: Date.now() // 임시 인덱스 (나중에 서버 동기화시 보정됨)
+        };
 
-        // Firebase 등 다른 DB 동기화가 필요하다면 여기서 처리
+        // (1) 현재 메모리(State)에 추가
+        if (afterWord) {
+            const targetIndex = state.wordList.findIndex(w => w.word === afterWord);
+            if (targetIndex !== -1) {
+                state.wordList.splice(targetIndex + 1, 0, newWordObj);
+            } else {
+                state.wordList.push(newWordObj);
+            }
+        } else {
+            state.wordList.push(newWordObj);
+        }
+
+        // (2) 로컬 캐시(LocalStorage)에 추가 (새로고침 해도 유지되도록)
+        try {
+            const cachedData = localStorage.getItem('wordListCache');
+            if (cachedData) {
+                const parsedCache = JSON.parse(cachedData);
+                // State와 동일한 로직으로 캐시 배열에도 추가
+                if (afterWord) {
+                    const targetIndex = parsedCache.words.findIndex(w => w.word === afterWord);
+                    if (targetIndex !== -1) {
+                        parsedCache.words.splice(targetIndex + 1, 0, newWordObj);
+                    } else {
+                        parsedCache.words.push(newWordObj);
+                    }
+                } else {
+                    parsedCache.words.push(newWordObj);
+                }
+                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            }
+        } catch (e) {
+            console.error("로컬 캐시 추가 실패:", e);
+        }
+
+        // 3. Firebase 업데이트
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = cardData.word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
-            updates[`/vocabulary/${safeKey}`] = {
-                ...cardData,
-                sample: cardData.manual_sample || cardData.sample || "", // Firebase에도 예문 저장
-                AISample: null,
-                index: Date.now() // 정렬을 위한 임시 인덱스
-            };
+            updates[`/vocabulary/${safeKey}`] = newWordObj;
             update(ref(database), updates).catch(e => console.warn(e));
         }
     },
