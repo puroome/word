@@ -428,7 +428,7 @@ export const api = {
         }
     },
 
-    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
+// [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
     async updateWordDetails(originalWord, updateData) {
         // 1. Google Sheets 저장 (백엔드)
         if (config.SCRIPT_URL) {
@@ -441,8 +441,11 @@ export const api = {
             if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
             
-            // sample 수정 시 무조건 manual_sample 파라미터 사용 (앱스스크립트에서 매핑됨)
-            if (updateData.sample !== undefined) scriptUrl.searchParams.append('manual_sample', updateData.sample);
+            // [핵심 Fix] sample 또는 manual_sample 키가 들어오면 manual_sample 파라미터로 전송
+            // learning.js에서 manual_sample로 보내는 경우를 대비하여 OR 연산(||) 추가
+            if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
+                scriptUrl.searchParams.append('manual_sample', updateData.manual_sample || updateData.sample);
+            }
 
             fetch(scriptUrl.toString())
                 .then(r => r.json())
@@ -464,11 +467,9 @@ export const api = {
                 if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
                 if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
                 
-                // Sample 수정
-                if (updateData.sample !== undefined) {
-                     targetWord.sample = updateData.sample;
-                     // Source 업데이트 로직 제거됨
-                }
+                // [핵심 Fix] Sample 수정 (manual_sample도 반영)
+                if (updateData.sample !== undefined) targetWord.sample = updateData.sample;
+                if (updateData.manual_sample !== undefined) targetWord.sample = updateData.manual_sample;
              }
         };
 
@@ -484,87 +485,72 @@ export const api = {
         } catch (e) {
             console.error("캐시 업데이트 오류:", e);
         }
+        
+        // 3. Firebase 업데이트 (혹시 모를 동기화 누락 방지)
+        if (typeof database !== 'undefined' && database) {
+            const { ref, update } = window.firebaseSDK;
+            const safeKey = originalWord.replace(/[.#$\[\]\/]/g, '_');
+            // updateData를 그대로 활용하되 manual_sample을 sample로 매핑
+            const firebaseUpdates = { ...updateData };
+            if (firebaseUpdates.manual_sample) {
+                firebaseUpdates.sample = firebaseUpdates.manual_sample;
+                delete firebaseUpdates.manual_sample;
+            }
+            // word 키가 바뀌는 경우는 복잡하므로 여기서는 필드 업데이트만 수행
+            if (!updateData.word || updateData.word === originalWord) {
+                 update(ref(database, `/vocabulary/${safeKey}`), firebaseUpdates).catch(e => console.warn(e));
+            }
+        }
     },
 
-    // [수정] 새 단어 생성 (Source 초기화 제거)
-    async createWord(wordData, afterWord) {
+// [수정 1] 새 단어 생성 (예문 전송 추가 & 중복 생성 방지)
+    async createWord(cardData, afterWord = null) {
+        // 1. 서버로 보낼 URL 파라미터 구성
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('pos', wordData.pos || "");
-            scriptUrl.searchParams.append('meaning', wordData.meaning || "");
-            scriptUrl.searchParams.append('explanation', wordData.explanation || "");
-            if (afterWord) scriptUrl.searchParams.append('after_word', afterWord);
+            scriptUrl.searchParams.append('word', cardData.word);
+            scriptUrl.searchParams.append('pos', cardData.pos || "");
+            scriptUrl.searchParams.append('meaning', cardData.meaning || "");
+            scriptUrl.searchParams.append('explanation', cardData.explanation || "");
+            
+            // [핵심 Fix] 예문 데이터(manual_sample)를 서버로 전송!
+            // 이걸 안 보내서 시트의 ManualSample 열이 비어있었던 것입니다.
+            scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
 
+            if (afterWord) {
+                scriptUrl.searchParams.append('after_word', afterWord);
+            }
+
+            // 비동기 전송 (결과 기다리지 않음)
             fetch(scriptUrl.toString())
                 .then(r => r.json())
                 .then(d => {
-                    if(!d.success) console.warn("시트 생성 실패:", d.message);
-                    else console.log("✅ 시트 생성 성공 (삽입)");
+                    if (!d.success) console.warn("시트 생성 실패:", d.message);
                 })
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 로컬 데이터에 중간 삽입
-        let insertIndex = state.wordList.length;
-        let prevIndexVal = 0;
-
-        if (afterWord) {
-            const idx = state.wordList.findIndex(w => w.word === afterWord);
-            if (idx !== -1) {
-                insertIndex = idx + 1;
-                prevIndexVal = state.wordList[idx].index;
-            } else if (state.wordList.length > 0) {
-                prevIndexVal = Math.max(...state.wordList.map(w => w.index));
-            }
-        } else if (state.wordList.length > 0) {
-            prevIndexVal = Math.max(...state.wordList.map(w => w.index));
-        }
-
-        const localNewWordObj = {
-            index: prevIndexVal + 1,
-            word: wordData.word,
-            pos: wordData.pos || "",
-            meaning: wordData.meaning || "",
-            explanation: wordData.explanation || "",
-            sample: "",
-            AISample: null
-            // sampleSource 제거됨
-        };
+        // [핵심 Fix 2] 로컬 state.wordList에 push하는 코드 삭제!
+        // learning.js에서 이미 임시 카드를 만들어서 리스트에 넣고 내용을 채웠기 때문에,
+        // 여기서 또 push를 하면 카드가 2개가 되어버립니다. (중복 생성 원인 해결)
         
-        state.wordList.splice(insertIndex, 0, localNewWordObj);
-        
-        for (let i = insertIndex + 1; i < state.wordList.length; i++) {
-             state.wordList[i].index += 1;
-        }
+        /* // 기존에 있었을 이 코드를 삭제하거나 주석 처리합니다.
+        const newWordObj = { ...cardData, index: state.wordList.length };
+        state.wordList.push(newWordObj); 
+        */
 
-         try {
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                let cacheInsertIdx = parsedCache.words.length;
-                if (afterWord) {
-                    const cIdx = parsedCache.words.findIndex(w => w.word === afterWord);
-                    if (cIdx !== -1) cacheInsertIdx = cIdx + 1;
-                }
-                parsedCache.words.splice(cacheInsertIdx, 0, localNewWordObj);
-                for(let i = cacheInsertIdx + 1; i < parsedCache.words.length; i++) {
-                    parsedCache.words[i].index += 1;
-                }
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-            }
-        } catch (e) {}
-
-        // Firebase 저장 (Index 포함)
+        // Firebase 등 다른 DB 동기화가 필요하다면 여기서 처리
         if (database) {
             const { ref, update } = window.firebaseSDK;
-            const safeKey = wordData.word.replace(/[.#$\[\]\/]/g, '_');
-            const firebasePayload = { ...localNewWordObj };
-            delete firebasePayload.isNew; 
-
+            const safeKey = cardData.word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
-            updates[`/vocabulary/${safeKey}`] = firebasePayload;
+            updates[`/vocabulary/${safeKey}`] = {
+                ...cardData,
+                sample: cardData.manual_sample || cardData.sample || "", // Firebase에도 예문 저장
+                AISample: null,
+                index: Date.now() // 정렬을 위한 임시 인덱스
+            };
             update(ref(database), updates).catch(e => console.warn(e));
         }
     },
