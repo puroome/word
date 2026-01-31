@@ -627,4 +627,4 @@ export const api = {
         // alert창의 '확인'을 누르면 페이지가 새로고침 됩니다.
         alert("삭제되었습니다."); 
         location.reload(); 
-    },
+    };
