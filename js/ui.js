@@ -1,6 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
+import { learningMode } from './learning.js'; // [필수] 화면 갱신을 위해 추가
 
 export const ui = {
     // [신규] 모든 팝업/메뉴 닫기 (새 메뉴 열기 전 청소용)
@@ -174,8 +175,6 @@ export const ui = {
     },
     
     showTranslationTooltip(text, event) {
-        // 툴팁은 다른 메뉴 닫기와 별개로 동작할 수도 있지만, 깔끔함을 위해 일단 닫지 않거나 필요시 hideAllMenus에 포함 가능
-        // 여기서는 유지
         const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
@@ -200,9 +199,9 @@ export const ui = {
         document.getElementById('translation-tooltip').classList.add('hidden');
     },
 
-    // [수정] 사전 메뉴 표시 (기존 메뉴 닫기 추가)
+    // [수정] 사전 메뉴 표시
     showWordContextMenu(event, word, options = {}) {
-        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+        this.hideAllMenus(); 
 
         event.preventDefault();
         const menu = document.getElementById('word-context-menu');
@@ -251,9 +250,9 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
 
-    // [수정] 편집 메뉴 표시 (기존 메뉴 닫기 추가)
+    // [수정] 편집 메뉴 표시
     showEditContextMenu(event) {
-        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+        this.hideAllMenus(); 
 
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
@@ -280,12 +279,57 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [수정] 카드 메뉴 표시 (기존 메뉴 닫기 추가)
+    // [최종 수정] 카드 메뉴 표시 (기존 HTML 유지 + 삭제 기능 업그레이드)
     showCardContextMenu(event) {
-        this.hideAllMenus(); // 🔥 기존 메뉴 모두 닫기
+        this.hideAllMenus(); 
 
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
+
+        // [핵심 로직] 메뉴 내부의 '삭제' 버튼을 찾아서 클릭 이벤트를 덮어씌움
+        // innerHTML을 건드리지 않으므로 '수정', '추가' 등 다른 버튼은 원래대로 잘 작동함
+        const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
+        
+        // 메뉴 안의 div들 중에서 '삭제'라는 글자가 포함된 버튼을 찾음
+        const menuItems = Array.from(menu.querySelectorAll('div'));
+        const deleteBtn = menuItems.find(item => item.textContent.includes('삭제'));
+
+        if (deleteBtn && currentWord) {
+            deleteBtn.onclick = async () => {
+                if (!confirm(`'${currentWord.word}' 단어를 정말 삭제하시겠습니까?`)) return;
+
+                // 1. 메뉴 닫기
+                this.hideAllMenus();
+                
+                // 2. 서버 및 데이터 삭제 요청
+                await api.deleteWord(currentWord.word);
+
+                // 3. 현재 학습 리스트에서 단어 제외
+                learningMode.state.currentWordList.splice(learningMode.state.currentIndex, 1);
+
+                // 4. 인덱스 조정
+                if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
+                    learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
+                }
+
+                // 5. 화면 갱신 (새로고침 없이)
+                if (learningMode.state.currentWordList.length === 0) {
+                    alert("모든 단어가 삭제되었습니다.");
+                    location.reload(); 
+                } else {
+                    alert("삭제되었습니다."); 
+                    
+                    // 카드 뒷면 닫기 (CSS 클래스 제거)
+                    const cardBack = document.getElementById('learning-card-back');
+                    if (cardBack) cardBack.classList.remove('is-slid-up');
+                    
+                    // 다음 카드 그리기
+                    learningMode.renderCard(); 
+                }
+            };
+        }
+
+        // --- 위치 잡는 기존 코드 (그대로 유지) ---
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
@@ -304,6 +348,7 @@ export const ui = {
             menu.style.top = `${finalY}px`;
         });
     },
+    
     hideCardContextMenu() {
         const menu = document.getElementById('card-context-menu');
         if (menu) menu.classList.add('hidden');
