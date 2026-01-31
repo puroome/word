@@ -503,9 +503,9 @@ export const api = {
         }
     },
 
-// [수정 1] 새 단어 생성 (즉시 반영: Optimistic Update 적용)
-async createWord(cardData, afterWord = null) {
-        // [1] 서버 전송 (Google Sheets) - 비동기로 실행 (결과 기다리지 않음)
+// [수정 완료] 새 단어 생성 (중간값 인덱스 적용 + 즉시 반영)
+    async createWord(cardData, afterWord = null) {
+        // 1. 서버 전송 (Google Sheets) - 비동기로 실행 (결과 기다리지 않음)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
@@ -520,63 +520,62 @@ async createWord(cardData, afterWord = null) {
                 scriptUrl.searchParams.append('after_word', afterWord);
             }
 
-            // 서버로 요청만 보내고 응답은 기다리지 않음 (Optimistic Update)
             fetch(scriptUrl.toString())
                 .then(r => r.json())
                 .then(d => { if (!d.success) console.warn("시트 생성 실패:", d.message); })
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // [2] 앱 내부 즉시 반영 (낙관적 업데이트)
-        // 핵심: 올바른 위치에 넣기 위해 '중간값 인덱스' 계산
-        let tempIndex;
+        // 2. [앱 내부 반영] 올바른 위치(Index) 계산 및 즉시 삽입
+        
+        let newIndex = 0;
         let targetIndex = -1;
 
-        // 2-1. 기준 단어(afterWord) 위치 찾기
+        // (A) 삽입할 위치와 인덱스 계산 (소수점 인덱스 활용)
         if (afterWord) {
             targetIndex = state.wordList.findIndex(w => w.word === afterWord);
-        }
-
-        // 2-2. 임시 인덱스 계산 (사이 파고들기)
-        if (targetIndex !== -1) {
-            const prevItem = state.wordList[targetIndex];
-            const nextItem = state.wordList[targetIndex + 1];
-            
-            if (nextItem) {
-                // 앞뒤 단어가 모두 있으면 그 사이 값 (예: 10과 11 사이 -> 10.5)
-                tempIndex = (prevItem.index + nextItem.index) / 2;
+            if (targetIndex !== -1) {
+                const prevIndex = state.wordList[targetIndex].index;
+                // 다음 단어가 있으면 그 사이값, 없으면 +1
+                const nextItem = state.wordList[targetIndex + 1];
+                if (nextItem) {
+                    newIndex = (prevIndex + nextItem.index) / 2;
+                } else {
+                    newIndex = prevIndex + 1;
+                }
             } else {
-                // 맨 마지막 단어 뒤라면 + 1000
-                tempIndex = prevItem.index + 1000;
+                // afterWord를 못 찾은 경우 맨 뒤로
+                const lastItem = state.wordList[state.wordList.length - 1];
+                newIndex = lastItem ? lastItem.index + 1 : 0;
             }
         } else {
-            // 기준 단어가 없거나 못 찾았으면 맨 뒤에 추가
+            // 맨 뒤 추가
             const lastItem = state.wordList[state.wordList.length - 1];
-            tempIndex = lastItem ? (lastItem.index + 1000) : Date.now();
+            newIndex = lastItem ? lastItem.index + 1 : 0;
         }
 
+        // (B) 새 단어 객체 생성
         const newWordObj = {
             ...cardData,
             sample: cardData.manual_sample || cardData.sample || "",
             AISample: null,
-            index: tempIndex // 계산된 중간값 인덱스 사용
+            index: newIndex // 계산된 중간값 인덱스 (예: 5.5)
         };
 
-        // [3] 메모리(State)에 즉시 추가
+        // (C) 현재 메모리(State)에 끼워 넣기
         if (targetIndex !== -1) {
             state.wordList.splice(targetIndex + 1, 0, newWordObj);
         } else {
             state.wordList.push(newWordObj);
         }
 
-        // [4] 로컬 캐시(LocalStorage)에도 즉시 추가 (새로고침 대비)
+        // (D) 로컬 캐시(LocalStorage)에도 똑같이 끼워 넣기
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
-                // State와 동일한 로직으로 캐시 배열에도 끼워넣기
-                if (targetIndex !== -1) {
-                    // 캐시 데이터 내에서도 기준 단어 위치를 다시 찾아야 안전함
+                // State와 동일한 로직으로 위치 찾아 삽입
+                if (afterWord) {
                     const cacheTargetIndex = parsedCache.words.findIndex(w => w.word === afterWord);
                     if (cacheTargetIndex !== -1) {
                         parsedCache.words.splice(cacheTargetIndex + 1, 0, newWordObj);
@@ -592,16 +591,17 @@ async createWord(cardData, afterWord = null) {
             console.error("로컬 캐시 추가 실패:", e);
         }
 
-        // [5] Firebase 실시간 DB에도 임시 반영
+        // (E) Firebase 업데이트 (Realtime DB)
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = cardData.word.replace(/[.#$\[\]\/]/g, '_');
             const updates = {};
+            // Firebase에도 계산된 위치(newIndex)로 저장 -> 다른 기기에서도 올바른 순서로 보임
             updates[`/vocabulary/${safeKey}`] = newWordObj;
             update(ref(database), updates).catch(e => console.warn(e));
         }
     },
-
+    
     async deleteWord(word) {
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
