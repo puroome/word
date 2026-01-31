@@ -134,7 +134,7 @@ displaySentences(sentences, containerElement) {
             // 🔥 [중요] float-left가 있어야 글자가 감싸집니다.
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
-            emojiSpan.className = 'float-left mr-2 select-none text-xl'; 
+            emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
             p.appendChild(emojiSpan);
 
             const sentenceContent = document.createElement('span');
