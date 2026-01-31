@@ -314,7 +314,7 @@ export const ui = {
                 const currentList = learningMode.state.currentWordList;
                 learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
 
-                // (4) 인덱스 조정
+                // (4) 인덱스 조정 (현재 카드가 삭제되었으므로 인덱스가 넘어가지 않도록 주의하거나, 마지막 카드인 경우 처리)
                 if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
                     learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
                 }
@@ -324,8 +324,9 @@ export const ui = {
                     alert("모든 단어가 삭제되었습니다.");
                     location.reload(); 
                 } else {
-                    alert("삭제되었습니다."); 
-                    learningMode.renderCard(); // 다음 카드 그리기
+                    // alert("삭제되었습니다."); // 알림 제거
+                    // [수정] renderCard() 대신 올바른 메서드인 displayWord() 사용
+                    learningMode.displayWord(learningMode.state.currentIndex, true); 
                 }
             };
         }
