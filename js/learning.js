@@ -251,7 +251,7 @@ export const learningMode = {
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 
-    async saveAndExitEditMode() {
+async saveAndExitEditMode() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
 
@@ -264,6 +264,9 @@ export const learningMode = {
                 const rawWordValue = wordInput.value.trim();
                 const newMeaning = meaningInput.value;
                 const newExplanation = explanationInput.value;
+
+                // [중요] AI가 생성해둔 예문이 있다면 가져오기 (없으면 기존 값 유지)
+                const newSample = wordData.sample || "";
 
                 const match = rawWordValue.match(/^(.*?)\s*\[(.*?)\]$/);
                 let newWord = rawWordValue;
@@ -295,7 +298,8 @@ export const learningMode = {
                         word: newWord,
                         pos: newPos || "",
                         meaning: newMeaning,
-                        explanation: newExplanation
+                        explanation: newExplanation,
+                        sample: newSample // [추가] 새 단어 생성 시 예문도 함께 저장
                     };
                     
                     let afterWord = null;
@@ -309,20 +313,31 @@ export const learningMode = {
                     wordData.pos = newPos || "";
                     wordData.meaning = newMeaning;
                     wordData.explanation = newExplanation;
+                    wordData.sample = newSample; // 메모리 확정
                     delete wordData.isNew;
                     
                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
 
                 } else {
+                    // [수정] 기존 단어 업데이트 시에도 sample 필드 포함
                     await api.updateWordDetails(wordData.word, {
                         word: newWord,
                         pos: newPos,
                         meaning: newMeaning,
-                        explanation: newExplanation
+                        explanation: newExplanation,
+                        sample: newSample 
                     });
+                    
+                    // 메모리 업데이트
+                    wordData.word = newWord;
+                    if (newPos !== undefined) wordData.pos = newPos;
+                    wordData.meaning = newMeaning;
+                    wordData.explanation = newExplanation;
+                    wordData.sample = newSample;
                 }
             }
         } else { 
+            // 뒷면(예문) 편집 모드 저장 로직
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
                 const newSampleText = sampleInput.value;
@@ -333,9 +348,7 @@ export const learningMode = {
                          return;
                      }
                      wordData.sample = newSampleText;
-                     // source 할당 제거됨
                 } else {
-                    // [수정] 무조건 sample 필드 업데이트 (Auto/Manual 구분 없음)
                     await api.updateWordDetails(wordData.word, { sample: newSampleText });
                     wordData.sample = newSampleText;
                 }
