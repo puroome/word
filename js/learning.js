@@ -214,20 +214,20 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                            // [수정 포인트 1] 뜻 (Meaning) - 기존 값이 있으면 줄바꿈 후 추가
+                        // [수정 1] 뜻 (Meaning) - 기존 값이 있으면 두 줄 띄우고 추가
                             if (aiData.meaning) {
                                 const original = meaningInput.value.trim();
                                 if (original) {
-                                    // 기존 내용과 겹치지 않을 때만 추가
+                                    // 중복되지 않을 때만 추가
                                     if (!original.includes(aiData.meaning)) {
-                                        meaningInput.value = original + "\n" + aiData.meaning;
+                                        meaningInput.value = original + "\n\n" + aiData.meaning;
                                     }
                                 } else {
                                     meaningInput.value = aiData.meaning;
                                 }
                             }
 
-                            // [수정 포인트 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
+                            // [수정 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
                             if (aiData.explanation) {
                                 const original = explanationInput.value.trim();
                                 if (original) {
@@ -237,7 +237,7 @@ export const learningMode = {
                                 }
                             }
 
-                            // [수정 포인트 3] 예문 (Samples) - 기존 예문 뒤에 추가
+                            // [수정 3] 예문 (Samples) - 기존 예문 뒤에 두 줄 띄우고 추가
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
@@ -248,7 +248,7 @@ export const learningMode = {
                                     wordData.sample = newSampleText;
                                 }
                                 
-                                // 동기화용 필드도 업데이트
+                                // 동기화용 필드 업데이트
                                 wordData.manualSample = wordData.sample;
 
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
