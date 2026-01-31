@@ -167,6 +167,7 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
+// [교체] 편집 모드 진입 함수 (AI 자동완성 버튼 기능 포함)
     async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -174,25 +175,93 @@ export const learningMode = {
         if (side === 'front') {
             const currentPos = wordData.pos || "";
             const currentWord = wordData.word || "";
+            // 표제어와 품사 표시
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            this.elements.wordDisplay.innerHTML = `<input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">`;
+            // [UI 수정] 입력창 아래에 'AI 자동 완성' 버튼 추가
+            this.elements.wordDisplay.innerHTML = `
+                <div class="flex flex-col gap-2">
+                    <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
+                    <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
+                        🪄 AI 자동 완성
+                    </button>
+                </div>
+            `;
+            
             const currentMeaning = wordData.meaning || "";
             this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
+            
             const currentExplanation = wordData.explanation || "";
-            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5" placeholder="설명">${currentExplanation}</textarea>`;
+            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="5" placeholder="설명 (동의어, 반의어, 숙어 등)">${currentExplanation}</textarea>`;
+
+            // [로직 추가] 버튼 클릭 시 AI 호출 및 데이터 채우기
+            setTimeout(() => {
+                const autoBtn = document.getElementById('auto-fill-btn');
+                const wordInput = document.getElementById('edit-word-input');
+                const meaningInput = document.getElementById('edit-meaning-input');
+                const explanationInput = document.getElementById('edit-explanation-input');
+
+                if (autoBtn) {
+                    autoBtn.onclick = async () => {
+                        let targetWord = wordInput.value.trim();
+                        // 입력값에서 [POS] 부분 제거하고 단어만 추출
+                        targetWord = targetWord.replace(/\s*\[.*?\]$/, '');
+
+                        if (!targetWord) {
+                            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "단어를 먼저 입력하세요.", isError: true } }));
+                            return;
+                        }
+
+                        // 로딩 표시
+                        autoBtn.disabled = true;
+                        autoBtn.innerHTML = `<span class="animate-spin inline-block">⏳</span> 분석 중...`;
+
+                        try {
+                            // API 호출
+                            const aiData = await api.fetchWordInfoFromAI(targetWord);
+                            
+                            // 1. 뜻 채우기
+                            if (aiData.meaning) meaningInput.value = aiData.meaning;
+                            // 2. 설명(동의어 등) 채우기
+                            if (aiData.explanation) explanationInput.value = aiData.explanation;
+
+                            // 3. 예문 데이터 자동 업데이트 (보이지 않아도 데이터에 저장됨)
+                            if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
+                                const sampleText = aiData.samples.join('\n');
+                                wordData.sample = sampleText; // 메모리 상의 데이터 업데이트
+                                
+                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보 입력 완료! (예문 ${aiData.samples.length}개 생성됨)` } }));
+                            } else {
+                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 입력 완료 (예문 없음)" } }));
+                            }
+
+                        } catch (e) {
+                            console.error(e);
+                            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "AI 요청 실패", isError: true } }));
+                        } finally {
+                            // 버튼 복구
+                            autoBtn.disabled = false;
+                            autoBtn.innerHTML = `🪄 AI 자동 완성`;
+                        }
+                    };
+                }
+            }, 0);
 
         } else {
+            // 뒷면(예문) 편집 모드: 기존 로직 유지
             let currentSample = "";
             if (wordData.sample) {
                 currentSample = wordData.sample;
             }
 
             this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample || ""}</textarea>`;
+             
+             // 편집 중에는 AI 생성 버튼 숨김
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
 
+        // 편집 아이콘 변경
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
