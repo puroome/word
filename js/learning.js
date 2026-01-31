@@ -88,7 +88,22 @@ export const learningMode = {
             e.stopPropagation(); 
         };
 
-        this.elements.wordHeader.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
+        // [수정] 표제어 영역 우클릭 시 동작 분기
+        this.elements.wordHeader.addEventListener('contextmenu', (e) => {
+            // 1. 글자(word-display) 위에서 클릭했으면 -> 사전 팝업 (Explanation과 동일하게)
+            if (e.target.closest('#word-display')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const word = this.state.currentWordList[this.state.currentIndex]?.word;
+                if (word) {
+                    ui.showWordContextMenu(e, word);
+                }
+            } 
+            // 2. 글자 밖의 빈 헤더 공간을 클릭했으면 -> 편집 메뉴 (기존 기능 유지)
+            else {
+                preventCardMenu(e, 'front');
+            }
+        });
         this.elements.meaningContainer.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
         this.elements.explanationContainer.addEventListener('contextmenu', (e) => preventCardMenu(e, 'front'));
 
