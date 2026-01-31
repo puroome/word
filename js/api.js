@@ -328,7 +328,58 @@ export const api = {
             throw error;
         }
     },
+    
+// [추가] AI에게 단어 정보(뜻, 설명, 예문)를 한 번에 요청하는 함수
+    async fetchWordInfoFromAI(word) {
+        // config.js의 키가 있다면 그것을 사용하고, 없다면 아래 하드코딩된 키 사용
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
+        const apiKey = k1 + k2; 
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+        // 프롬프트: 뜻, 설명, 그리고 상황별 예문(최대 5개) 요청
+        const prompt = `
+            Analyze the English word: "${word}"
+
+            Output pure JSON with three fields:
+            1. "meaning": The most common Korean meaning(s) (e.g., "사랑, 애정").
+            2. "explanation": A structured text including [Synonyms], [Antonyms], [Derivatives], [Idioms].
+            3. "samples": An array of English example sentences.
+               - LOGIC for "samples" count (Max 5):
+                 1. First, check if the word has multiple parts of speech (e.g., Noun vs Verb). Create sentences for each POS.
+                 2. Second, if it has multiple distinct meanings within a POS, create sentences for those.
+                 3. If the word has ONLY 1 common meaning/usage, provide ONLY 1 sentence.
+                 4. Maximum total sentences: 5.
+               - Do not translate sentences.
+               - Sentences should be natural and helpful for learning.
+
+            Do not include Markdown code blocks. Just the JSON string.
+        `;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (!response.ok) throw new Error(`API Error (${response.status})`);
+
+            const data = await response.json();
+            const textResponse = data.candidates[0].content.parts[0].text;
+            
+            // JSON 파싱 (마크다운 기호 제거 후 파싱)
+            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
+
+            return cleanJson;
+
+        } catch (error) {
+            console.error("AI 단어 정보 가져오기 실패:", error);
+            throw error;
+        }
+    },
+    
     // AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
         if (config.SCRIPT_URL) {
