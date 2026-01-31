@@ -310,11 +310,11 @@ export const ui = {
                 // (2) 서버 데이터 삭제
                 await api.deleteWord(currentWord.word);
 
-                // (3) 리스트 갱신 (새로고침 방지)
+                // (3) 리스트 갱신
                 const currentList = learningMode.state.currentWordList;
                 learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
 
-                // (4) 인덱스 조정
+                // (4) 인덱스 조정 (현재 카드가 사라지면 인덱스는 자연스럽게 다음 카드를 가리키게 됨)
                 if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
                     learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
                 }
@@ -324,8 +324,12 @@ export const ui = {
                     alert("모든 단어가 삭제되었습니다.");
                     location.reload(); 
                 } else {
-                    alert("삭제되었습니다."); 
-                    learningMode.renderCard(); // 다음 카드 그리기
+                    // alert("삭제되었습니다."); // 불필요한 알림 제거
+                    // [수정] renderCard()는 없는 함수이므로 displayWord()로 변경
+                    learningMode.displayWord(learningMode.state.currentIndex);
+                    
+                    // (선택사항) 토스트 메시지로 조용히 알림
+                    window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "카드가 삭제되었습니다." } }));
                 }
             };
         }
