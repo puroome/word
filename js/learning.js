@@ -294,7 +294,7 @@ export const learningMode = {
         this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
     },
 async saveAndExitEditMode() {
-        // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
+        // 현재 편집 중인 카드 객체
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
 
@@ -307,8 +307,6 @@ async saveAndExitEditMode() {
                 const rawWordValue = wordInput.value.trim();
                 const newMeaning = meaningInput.value;
                 const newExplanation = explanationInput.value;
-                
-                // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
 
                 const match = rawWordValue.match(/^(.*?)\s*\[(.*?)\]$/);
@@ -328,7 +326,7 @@ async saveAndExitEditMode() {
                      return;
                 }
 
-                // 중복 체크 (자기 자신 제외)
+                // 중복 체크
                 if (newWord !== wordData.word) {
                     const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWord.toLowerCase() && w !== wordData);
                     if (isDuplicate) {
@@ -344,31 +342,30 @@ async saveAndExitEditMode() {
                         pos: newPos || "",
                         meaning: newMeaning,
                         explanation: newExplanation,
-                        manual_sample: newSample // 예문 포함 전송
+                        manual_sample: newSample
                     };
                     
                     let afterWord = null;
                     if (this.state.currentIndex > 0) {
-                        // 바로 앞 단어 찾기 (A단어)
                         afterWord = this.state.currentWordList[this.state.currentIndex - 1].word;
                     }
 
-                    // API 호출 (서버에 저장)
-                    await api.createWord(newCardData, afterWord);
+                    // [Fix] await 제거 -> 서버 응답 기다리지 않고 즉시 화면 전환
+                    api.createWord(newCardData, afterWord);
                     
-                    // [UI 데이터 갱신] 임시 카드를 정식 데이터로 확정 (새 카드를 추가하는 게 아님!)
+                    // [UI 데이터 갱신]
                     wordData.word = newWord;
                     wordData.pos = newPos || "";
                     wordData.meaning = newMeaning;
                     wordData.explanation = newExplanation;
-                    wordData.sample = newSample; // 예문 확정
-                    delete wordData.isNew; // 이제 더 이상 임시 카드가 아님
+                    wordData.sample = newSample;
+                    delete wordData.isNew;
                     
                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
 
                 } else {
-                    // 기존 단어 수정 로직
-                    await api.updateWordDetails(wordData.word, {
+                    // [Fix] await 제거 -> 서버 응답 기다리지 않고 즉시 화면 전환
+                    api.updateWordDetails(wordData.word, {
                         word: newWord,
                         pos: newPos,
                         meaning: newMeaning,
@@ -395,7 +392,8 @@ async saveAndExitEditMode() {
                      }
                      wordData.sample = newSampleText;
                 } else {
-                    await api.updateWordDetails(wordData.word, { manual_sample: newSampleText });
+                    // [Fix] await 제거 -> 서버 응답 기다리지 않고 즉시 화면 전환
+                    api.updateWordDetails(wordData.word, { manual_sample: newSampleText });
                     wordData.sample = newSampleText;
                 }
             }
@@ -403,7 +401,7 @@ async saveAndExitEditMode() {
              if(aiSection) aiSection.style.display = 'block';
         }
 
-        // 편집 모드 종료
+        // 편집 모드 종료 (이제 즉시 실행됨)
         this.state.isEditing = false;
         this.state.editingSide = null;
         
