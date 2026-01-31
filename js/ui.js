@@ -1,7 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords } from './utils.js';
-import { learningMode } from './learning.js'; // [필수] 로직 이식을 위해 추가
+import { learningMode } from './learning.js'; 
 
 export const ui = {
     // [신규] 모든 팝업/메뉴 닫기
@@ -279,54 +279,58 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [이식 완료] 껍데기(UI)는 원본 그대로 + 알맹이(삭제 로직)만 이식
+    // [중복 메시지 제거 및 삭제 기능 수정 완료]
     showCardContextMenu(event) {
-        this.hideAllMenus(); // 메뉴 닫기 (원본)
+        this.hideAllMenus(); // 메뉴 닫기
 
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
 
-        // 1. 현재 카드 데이터 가져오기 (수정 코드의 핵심)
+        // 1. 현재 카드 데이터 가져오기
         const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
 
-        // 2. HTML에 있는 삭제 버튼 찾기 
-        // 주의: HTML 파일에 있는 삭제 버튼의 id가 'delete-card-btn'이어야 합니다. 
-        // (만약 다르다면 HTML의 id를 확인 후 아래 괄호 안을 수정해주세요)
-        const deleteBtn = document.getElementById('delete-card-btn');
+        // 2. HTML에 있는 삭제 버튼 찾기 (ID: delete-card-btn)
+        let deleteBtn = document.getElementById('delete-card-btn');
 
-        // 3. 버튼이 있으면, 수정 코드의 "삭제 로직"을 그대로 덮어쓰기
+        // 3. 버튼이 있고 단어도 있다면?
         if (deleteBtn && currentWord) {
+            // [핵심] 기존 버튼을 복제해서 교체합니다.
+            // 이렇게 하면 기존 코드(main.js 등)에서 붙여놓은 '빨간 모달(2번째 창)' 이벤트가 싹 사라집니다.
+            const newDeleteBtn = deleteBtn.cloneNode(true);
+            deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
+            deleteBtn = newDeleteBtn; // 참조 변수 업데이트
+
+            // 4. 이제 깨끗해진 버튼에 "우리가 원하는 동작(1번째 창)"만 붙입니다.
             deleteBtn.onclick = async () => {
-                // --- 아래 내용은 수정 코드의 로직 복사본입니다 ---
+                // (1) 1번째 첨부 이미지 스타일의 기본 확인창 띄우기
                 if (!confirm(`'${currentWord.word}' 단어를 정말 삭제하시겠습니까?`)) return;
 
                 this.hideAllMenus();
                 
-                // 서버 삭제
+                // (2) 서버 데이터 삭제
                 await api.deleteWord(currentWord.word);
 
-                // 리스트 갱신 (새로고침 방지)
+                // (3) 리스트 갱신 (새로고침 방지)
                 const currentList = learningMode.state.currentWordList;
                 learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
 
-                // 인덱스 조정
+                // (4) 인덱스 조정
                 if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
                     learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
                 }
 
-                // 화면 갱신
+                // (5) 화면 즉시 갱신
                 if (learningMode.state.currentWordList.length === 0) {
                     alert("모든 단어가 삭제되었습니다.");
                     location.reload(); 
                 } else {
                     alert("삭제되었습니다."); 
-                    learningMode.renderCard(); // 다음 카드 렌더링
+                    learningMode.renderCard(); // 다음 카드 그리기
                 }
-                // --- 로직 끝 ---
             };
         }
 
-        // 메뉴 위치 지정 (원본 코드 그대로)
+        // 메뉴 위치 지정 (원본 UI 코드 그대로)
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
@@ -350,6 +354,8 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
+    // 이 함수들은 main.js에서 호출할 수도 있어서 에러 방지용으로 남겨두되, 내용은 비워도 되지만 
+    // 혹시 몰라 원본 형태는 유지합니다. (하지만 위에서 cloneNode로 이벤트를 끊어서 실행될 일은 없습니다)
     showDeleteConfirmModal() {
         document.getElementById('delete-confirm-modal').classList.remove('hidden');
     },
