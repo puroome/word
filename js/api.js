@@ -355,8 +355,8 @@ export const api = {
     
 // [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
     async fetchWordInfoFromAI(word) {
-        const k1 = "AIzaSyAdXvE2SkyEbPmU";
-        const k2 = "XtLUeVi7f-niGpXUu_0";
+        const k1 = "AIzaSyBDRkZl1hzVqMqX";
+        const k2 = "FyIcBym1Is36p2to000";
         const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
