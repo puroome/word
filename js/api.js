@@ -137,21 +137,30 @@ export const api = {
     // [수정됨] 무료 번역 (Gemini 2.5 Flash 사용)
     // 기존 구글 스크립트 대신 AI에게 번역 요청 (무료)
     // ==========================================================================
-    async translate(text) {
+async translate(text) {
+        // [추가됨 1] "번역중..." 알림창 생성
+        const toast = document.createElement('div');
+        toast.innerText = "⏳ 번역중...";
+        toast.style.cssText = "position:fixed; bottom:15%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:white; padding:12px 24px; border-radius:25px; z-index:9999; font-size:14px;";
+        document.body.appendChild(toast);
+
+        // [추가됨 2] 알림창 끄기 함수
+        const removeToast = () => { if(toast.parentNode) toast.remove(); };
+
         // 1. 캐시 확인
         try {
             const cached = await translationCache.get(text);
-            if (cached) return cached;
+            if (cached) {
+                removeToast(); // [추가됨] 캐시에 있으면 즉시 끔
+                return cached;
+            }
         } catch (e) { console.warn("Translation cache read error:", e); }
 
-        // 2. Gemini API 호출 (품질 좋은 2.5 Flash 모델 유지)
+        // 2. Gemini API 설정 (기존 코드 유지)
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
-        
-        // 사용자님이 원하시는 2.5 모델 사용
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
         const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
 
         try {
@@ -166,7 +175,9 @@ export const api = {
             const data = await response.json();
             const translatedText = data.candidates[0].content.parts[0].text.trim();
 
-            // 3. 결과 캐싱 및 반환
+            removeToast(); // [추가됨] 번역 성공 시 끔
+
+            // 3. 결과 저장 및 반환
             if (translatedText) {
                 translationCache.save(text, translatedText);
                 return translatedText;
@@ -174,6 +185,7 @@ export const api = {
                 throw new Error("번역 결과 없음");
             }
         } catch (error) {
+            removeToast(); // [추가됨] 에러 발생 시 끔
             console.error("Translation API error:", error);
             return "번역 오류";
         }
