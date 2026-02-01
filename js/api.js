@@ -1,9 +1,15 @@
 import { config, state } from './config.js';
-// audioCache import는 유지하되 사용하지 않음 (에러 방지)
-import { utils } from './utils.js';
+// utils가 로드되지 않아도 앱이 멈추지 않도록 처리
+let utils = {};
+try {
+    const utilsModule = await import('./utils.js');
+    utils = utilsModule.utils;
+} catch (e) {
+    console.warn("Utils load skipped");
+}
 
-let db = null; // Firestore
-let database = null; // Realtime DB
+let db = null; 
+let database = null; 
 
 export const api = {
     // 1. 초기화
@@ -13,22 +19,26 @@ export const api = {
         console.log("✅ API Initialized");
     },
 
-    // 2. 단어장 관리 (핵심 기능)
+    // ==========================================================================
+    // [핵심 1] 단어장 로드 (앱이 켜질 때 가장 중요)
+    // ==========================================================================
     async loadWordList(force = false) {
-        // 강제 로드 시 캐시 초기화
+        // 1. 강제 로드면 캐시 삭제
         if (force) {
             try { localStorage.removeItem('wordListCache'); } catch(e){}
             state.isWordListReady = false;
         }
 
-        // 이미 로드되어 있으면 패스
-        if (state.isWordListReady && !force) return;
+        // 2. 이미 로드되었으면 종료 (안전하게 배열 반환)
+        if (state.isWordListReady && !force) {
+            return state.wordList || [];
+        }
 
-        // Firebase SDK가 아직 없으면 안전하게 리턴 (앱 멈춤 방지)
+        // 3. Firebase 준비 안 됐으면 빈 배열 반환 (여기서 undefined를 주면 main.js가 멈춤)
         if (!window.firebaseSDK) {
-            console.warn("Firebase SDK not ready yet. Skipping load.");
+            console.warn("Firebase SDK not ready.");
             state.wordList = state.wordList || [];
-            return;
+            return []; 
         }
 
         const { ref, get } = window.firebaseSDK;
@@ -40,123 +50,123 @@ export const api = {
             if (!data) {
                 state.wordList = [];
             } else {
-                // 데이터 배열 변환
                 state.wordList = Object.values(data).sort((a, b) => a.index - b.index);
             }
             
             state.isWordListReady = true;
             state.lastCacheTimestamp = Date.now();
 
-            // 로컬 캐시 저장
             localStorage.setItem('wordListCache', JSON.stringify({
                 timestamp: state.lastCacheTimestamp,
                 words: state.wordList
             }));
 
+            return state.wordList;
+
         } catch (error) {
             console.error("데이터 로드 실패 (기본값 사용):", error);
-            // 에러가 나도 빈 배열로 설정하여 앱이 멈추지 않게 함
             state.wordList = state.wordList || [];
-            state.isWordListReady = true;
+            return []; // 에러 나도 빈 배열 반환
         }
     },
 
-    async saveWord(wordData) {
-        if (!state.userId) return alert("로그인이 필요합니다.");
-        
-        const { ref, update } = window.firebaseSDK;
-        const safeKey = wordData.word.replace(/[.#$[\]/]/g, '_');
-        
-        const updates = {};
-        updates[`/vocabulary/${safeKey}`] = {
-            ...wordData,
-            updatedAt: Date.now(),
-            index: wordData.index || Date.now()
-        };
-
-        try {
-            await update(ref(database), updates);
-            
-            // 상태 업데이트
-            const existingIndex = state.wordList.findIndex(w => w.word === wordData.word);
-            if (existingIndex !== -1) {
-                state.wordList[existingIndex] = { ...state.wordList[existingIndex], ...wordData };
-            } else {
-                state.wordList.push(wordData);
-            }
-            // 캐시 업데이트
-            localStorage.setItem('wordListCache', JSON.stringify({
-                timestamp: Date.now(),
-                words: state.wordList
-            }));
-        } catch (error) {
-            console.error("저장 실패:", error);
-            throw error;
-        }
-    },
-
-    async deleteWord(word) {
-        // GAS 연동 (에러 무시)
-        if (config.SCRIPT_URL) {
-            try {
-                const url = new URL(config.SCRIPT_URL);
-                url.searchParams.append('action', 'delete_word');
-                url.searchParams.append('word', word);
-                fetch(url.toString()).catch(() => {});
-            } catch(e) {}
-        }
-        
-        // Firebase 삭제
-        if (database) {
-            const { ref, remove } = window.firebaseSDK;
-            const safeKey = word.replace(/[.#$[\]/]/g, '_');
-            remove(ref(database, `/vocabulary/${safeKey}`)).catch(() => {});
-        }
-
-        // 로컬 상태 업데이트
-        state.wordList = state.wordList.filter(w => w.word !== word);
-        try {
-            const cached = JSON.parse(localStorage.getItem('wordListCache') || '{}');
-            if (cached.words) {
-                cached.words = cached.words.filter(w => w.word !== word);
-                localStorage.setItem('wordListCache', JSON.stringify(cached));
-            }
-        } catch(e) {}
-    },
-
-    // 3. 통계 및 사용자 설정 (main.js 에러 방지용 필수 함수들)
+    // ==========================================================================
+    // [핵심 2] 설정 및 통계 (main.js가 없으면 에러 내는 함수들)
+    // ==========================================================================
     
-    // [중요] 앱 시작 시 호출되는 함수. 없으면 앱이 멈춤.
+    // [중요] 설정값이 undefined면 main.js가 초기 화면을 못 그림
+    async loadUserSettings() {
+        return { 
+            theme: 'light', 
+            lastMode: 'dashboard',
+            voiceType: 'US',
+            dailyGoal: 10
+        };
+    },
+    
+    async saveUserSettings(settings) { return true; },
+
+    // [중요] 이 함수가 없어서 처음에 에러가 났었음
     async updateStudyTime(seconds) {
         if (!state.userId || !seconds) return;
         try {
+            if (!window.firebaseSDK) return;
             const { ref, get, update } = window.firebaseSDK;
             const userRef = ref(database, `/studyTime/${state.userId}`);
             const snapshot = await get(userRef);
             const current = snapshot.val() || 0;
             await update(ref(database), { [`/studyTime/${state.userId}`]: current + seconds });
         } catch (e) {
-            console.warn("학습 시간 업데이트 실패 (무시됨)", e);
+            console.warn("통계 저장 실패 (무시됨)");
         }
     },
 
     async loadStudyTime() {
         if (!state.userId) return 0;
         try {
+            if (!window.firebaseSDK) return 0;
             const { ref, get } = window.firebaseSDK;
             const snapshot = await get(ref(database, `/studyTime/${state.userId}`));
             return snapshot.val() || 0;
         } catch (e) { return 0; }
     },
 
+    // 오프라인 동기화 호출 대응
+    async syncData() { return true; },
+    async checkUserStatus() { return true; },
+    async logActivity() { return true; },
+
+    // ==========================================================================
+    // [기능] 단어 저장/삭제
+    // ==========================================================================
+    async saveWord(wordData) {
+        if (!state.userId) return alert("로그인이 필요합니다.");
+        const { ref, update } = window.firebaseSDK;
+        const safeKey = wordData.word.replace(/[.#$[\]/]/g, '_');
+        
+        try {
+            await update(ref(database), {
+                [`/vocabulary/${safeKey}`]: {
+                    ...wordData, updatedAt: Date.now(), index: wordData.index || Date.now()
+                }
+            });
+            // 로컬 동기화
+            const idx = state.wordList.findIndex(w => w.word === wordData.word);
+            if (idx !== -1) state.wordList[idx] = { ...state.wordList[idx], ...wordData };
+            else state.wordList.push(wordData);
+            
+            localStorage.setItem('wordListCache', JSON.stringify({
+                timestamp: Date.now(), words: state.wordList
+            }));
+        } catch (e) { console.error(e); throw e; }
+    },
+
+    async deleteWord(word) {
+        if (config.SCRIPT_URL) {
+            try { fetch(`${config.SCRIPT_URL}?action=delete_word&word=${word}`).catch(()=>{}); } catch(e){}
+        }
+        if (database) {
+            const { ref, remove } = window.firebaseSDK;
+            const safeKey = word.replace(/[.#$[\]/]/g, '_');
+            remove(ref(database, `/vocabulary/${safeKey}`)).catch(()=>{});
+        }
+        state.wordList = state.wordList.filter(w => w.word !== word);
+        try {
+            const c = JSON.parse(localStorage.getItem('wordListCache')||'{}');
+            if(c.words) {
+                c.words = c.words.filter(w => w.word !== word);
+                localStorage.setItem('wordListCache', JSON.stringify(c));
+            }
+        } catch(e){}
+    },
+
+    // 퀴즈 기록 (dashboard.js 대응)
     async saveQuizResult(type, correct) {
         if (!state.userId) return;
         try {
             const { ref, push } = window.firebaseSDK;
-            await push(ref(database, `/quizHistory/${state.userId}`), {
-                type, correct, timestamp: Date.now()
-            });
-        } catch (e) {}
+            await push(ref(database, `/quizHistory/${state.userId}`), { type, correct, timestamp: Date.now() });
+        } catch(e){}
     },
 
     async loadQuizHistory() {
@@ -166,39 +176,26 @@ export const api = {
             const q = query(ref(database, `/quizHistory/${state.userId}`), limitToLast(500));
             const snapshot = await get(q);
             return snapshot.val() || {};
-        } catch (e) { return {}; }
+        } catch(e) { return {}; }
     },
 
-    // [중요] 설정 로드 함수가 없거나 실패하면 main.js가 초기 화면을 못 찾을 수 있음
-    async loadUserSettings() {
-        // 빈 객체라도 반환해야 main.js가 'undefined' 에러를 안 냄
-        return { theme: 'light', lastMode: 'dashboard' };
-    },
-    
-    async saveUserSettings(settings) {
-        return true;
-    },
-
-    async syncData() {
-        return true;
-    },
-
-    // 4. 무료 AI 기능 (Gemini 1.5 Flash + Browser TTS)
+    // ==========================================================================
+    // [무료 AI] Gemini 1.5 Flash + Browser TTS
+    // ==========================================================================
 
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${k1+k2}`;
         
-        // 타동사 처리 및 문맥 괄호 적용 프롬프트
         const prompt = `
             Act as a linguistics expert for US high school students.
             Analyze: "${word}"
             Output pure JSON (no markdown):
             {
-              "meaning": ["Most common Korean meanings. If Transitive(Vt), start with '~을/를' or use '~(Context)Particle' format like '~(돈)을 모금하다'"],
-              "explanation": "Headers: [동의어], [반의어], [파생어], [용례], [심화]. Rule: Synonyms group by meaning. Usage focuses on collocations. Root words in [심화].",
-              "samples": ["English sentence 1", "English sentence 2"]
+              "meaning": ["Meanings. If Transitive(Vt), use '~(Context)Particle Verb' format (e.g., '~(돈)을 모금하다')"],
+              "explanation": "Headers: [동의어], [반의어], [파생어], [용례], [심화]. Rule: Synonyms group by meaning. Root words in [심화].",
+              "samples": ["Example sentence 1", "Example sentence 2"]
             }
         `;
 
@@ -213,16 +210,16 @@ export const api = {
             return JSON.parse(text.replace(/```json|```/g, '').trim());
         } catch (e) {
             console.error("AI Error:", e);
-            throw e; // 에러 발생 시 UI에서 처리하도록 던짐
+            throw e; 
         }
     },
 
-    // quiz.js 호환용
+    // quiz.js 호환
     async fetchDefinition(word) {
         return this.fetchWordInfoFromAI(word);
     },
 
-    // 브라우저 TTS (무료)
+    // Browser TTS (무료)
     speak(text, type = 'word') {
         return new Promise((resolve) => {
             if (!text || !window.speechSynthesis) return resolve();
@@ -231,11 +228,10 @@ export const api = {
             const utter = new SpeechSynthesisUtterance(text);
             const voices = window.speechSynthesis.getVoices();
             
-            // UK vs US 설정 확인
+            // UK vs US
             const isUK = state.currentVoiceSet === 'UK';
             const lang = isUK ? 'en-GB' : 'en-US';
             
-            // 목소리 찾기
             const voice = voices.find(v => v.lang === lang && (v.name.includes('Google') || v.name.includes('Microsoft'))) 
                        || voices.find(v => v.lang.includes(lang));
             
@@ -250,7 +246,7 @@ export const api = {
         });
     },
 
-    // Gemini 번역 (무료)
+    // 번역 (무료)
     async fetchTranslation(text) {
         const cacheKey = `trans_${text}`;
         const cached = localStorage.getItem(cacheKey);
