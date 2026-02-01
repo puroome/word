@@ -337,60 +337,53 @@ export const api = {
         }
     },
     
-// [Gemini 2.5 Flash] 타동사 정밀 제어 및 포맷팅 강화 버전
+// [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기, 품사 태그 제거
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
-        // 1. 모델: 성능이 가장 좋은 2.5-flash 사용
+        // 품질을 위해 2.5-flash 모델 유지
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        // 2. 프롬프트: 사용자 요청 사항을 구체적인 알고리즘 형태로 지시
         const prompt = `
-            Act as a strict linguistics expert for Korean students learning English.
+            Act as a linguistics expert for US high school students.
             Analyze the English word: "${word}"
 
-            Your task is to generate a JSON response following these STRICT formatting rules.
-            Do NOT include Markdown formatting (like \`\`\`json). Output raw JSON only.
+            Output pure JSON with three fields:
+            
+            1. "meaning": 
+               - Return an ARRAY of strings.
+               - FORMATTING RULES:
+                 1. If there are multiple meanings, number them clearly (e.g., "1. ...", "2. ...").
+                 2. **DO NOT** use part-of-speech tags like (vt), (vi), (n), (adj).
+                 3. Instead, use the Korean particle to imply the verb type:
+                    * Transitive (Vt): MUST start with "~(Object)Particle" (e.g., "1. ~을 관찰하다", "2. ~(법)을 준수하다").
+                    * Intransitive (Vi): Do not use a particle (e.g., "1. 살아남다").
+                    * If a word is both Vi and Vt (like 'survive'), list BOTH separately:
+                      (e.g., "1. 살아남다", "2. ~에서 살아남다").
+                 4. Mark (slang) or (informal) if applicable.
 
-            {
-              "meaning": [
-                // INSTRUCTION FOR MEANING ARRAY:
-                // 1. Returns an array of strings. Each string represents a distinct definition.
-                // 2. MUST Number each definition (e.g., "1. ...", "2. ...").
-                // 3. REMOVE all part-of-speech tags such as (vt), (vi), (n), (adj), [타동사], [자동사].
-                
-                // 4. CRITICAL RULE FOR VERBS (Transitive vs Intransitive):
-                //    - If the definition is Transitive (vt): You MUST include the Korean object particle (~을/를, ~에, ~와/과) at the start.
-                //      Format: "~(Context)Particle Verb"
-                //      Example: "raise" -> "1. ~(자금 등)을 모금하다", "2. ~(손)을 들어올리다"
-                //      Example: "marry" -> "3. ~와 결혼하다"
-                //      Example: "enter" -> "4. ~에 들어가다"
-                
-                //    - If the definition is Intransitive (vi): Do NOT use any particle. Just the verb.
-                //      Example: "exist" -> "1. 존재하다"
-                //      Example: "rise" -> "2. 오르다"
-                
-                //    - If a word has both Vi and Vt usages (e.g., 'survive'), list them as separate numbered items.
-                //      Example: "1. 살아남다", "2. ~에서 살아남다"
-              ],
+            2. "explanation": 
+               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례], [심화].
+               - FORMAT RULES:
+                 Rule 1 [동의어/반의어]: Group by specific meanings. 
+                        Format: "word1, word2, ... : [Korean Definition]"
+                        Max 7 words per group.
+                        * Ensure the Korean definition follows the 'meaning' formatting rules (particles included, no POS tags).
+                 Rule 2 [용례]: Focus on Collocations or Idioms. Format: "Expression : Korean Meaning".
+                 Rule 3 [심화]: List high-frequency words sharing the SAME ETYMOLOGICAL ROOT. 
+                        Format: "Word : Korean Meaning".
+                        Example: "preserve : ~을 보존하다"
+                 Rule 4: Insert an empty line between categories. If a category is empty, omit it.
+            
+            3. "samples": An array of English example sentences.
+               - QUANTITY LOGIC:
+                 Case A: Single meaning -> 1 sentence.
+                 Case B: Distinct meanings -> 1 sentence per meaning (Max 5).
+               - No translations.
 
-              "explanation": 
-                // Generate a single string with structured headers using KOREAN.
-                // Insert an empty line (\\n) between each section.
-                "[동의어]\\nword1, word2 : [Simple Korean Meaning] (Max 5 words)\\n\\n" +
-                "[반의어]\\nword1, word2 : [Simple Korean Meaning] (Max 5 words)\\n\\n" +
-                "[파생어]\\nword : [Meaning] (List 2-3 important derivatives)\\n\\n" +
-                "[용례]\\nExpression : Korean Meaning (Focus on common collocations/idioms)\\n\\n" +
-                "[심화]\\nList words sharing the same etymological root (e.g., 'dict' -> predict, contradict). Format: 'word : meaning'",
-
-              "samples": [
-                // An array of 2~5 English sentences.
-                // Ensure the sentences cover different meanings listed above.
-                // DO NOT include Korean translations.
-              ]
-            }
+            Do not include Markdown code blocks. Just the JSON string.
         `;
 
         try {
@@ -405,19 +398,14 @@ export const api = {
             const data = await response.json();
             const textResponse = data.candidates[0].content.parts[0].text;
             
-            // JSON 파싱 (혹시 모를 마크다운 잔여물 제거)
+            // Markdown 코드 블록 제거 및 JSON 파싱
             const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
 
             return cleanJson;
 
         } catch (error) {
             console.error("AI 단어 정보 가져오기 실패:", error);
-            // 에러 발생 시 UI에 표시할 기본값 반환 (앱 멈춤 방지)
-            return {
-                meaning: ["1. 데이터 로드 실패 (다시 시도해주세요)"],
-                explanation: "서버 응답 오류",
-                samples: ["Error loading data."]
-            };
+            throw error;
         }
     },
 
