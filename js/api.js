@@ -329,7 +329,7 @@ export const api = {
         }
     },
     
-// [재수정] 타동사의 자연스러운 조사 처리(~을, ~에, ~와 등) 및 심화 학습 포함
+// [최종 수정] 타동사 괄호 위치 및 조사 결합 정밀 제어 프롬프트
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -345,9 +345,18 @@ export const api = {
             1. "meaning": 
                - The most common Korean meaning(s).
                - CRITICAL FOR VERBS: Distinguish Transitive (vt) vs Intransitive (vi). 
-                 * If Vt (Transitive): Include the MOST NATURAL Korean particle (~을, ~에, ~와, ~에서, etc.) before the verb meaning. 
-                   (e.g., 'love' -> '~을 사랑하다', 'enter' -> '~에 들어가다', 'marry' -> '~와 결혼하다', 'survive' -> '~에서 살아남다').
-                 * If Vi (Intransitive): Just the verb meaning or with prepositional nuance if needed.
+                 * If Vi (Intransitive): Format as "[뜻]하다" or include preposition like "~에 [뜻]하다".
+                 * If Vt (Transitive): You MUST include the Korean particle (~을, ~에, ~와, etc.) before the verb.
+                   [IMPORTANT FORMATTING RULE for Vt]:
+                   - General case: "~을 [뜻]하다"
+                   - If specific object context is needed: Insert context in parentheses between tilde and particle.
+                     Format: "~(Context)Particle Verb"
+                   - Examples:
+                     * 'raise' (money) -> "~(자금 등)을 모금하다"
+                     * 'raise' (issue) -> "~(문제·이의 등)을 제기하다"
+                     * 'enter' -> "~에 들어가다"
+                     * 'marry' -> "~와 결혼하다"
+
                - Mark (slang) or (informal) if applicable.
 
             2. "explanation": 
@@ -356,11 +365,11 @@ export const api = {
                  Rule 1 [동의어/반의어]: Group by specific meanings. 
                         Format: "word1, word2, ... : [Korean Definition]"
                         Max 7 words per group.
-                        * Ensure the Korean definition includes the correct particle (e.g., ~을, ~에, ~와).
+                        * Ensure the Korean definition follows the Vt formatting rules above (e.g., ~(자금 등)을 모금하다).
                  Rule 2 [용례]: Focus on Collocations or Idioms. Format: "Expression : Korean Meaning".
                  Rule 3 [심화]: List high-frequency words sharing the SAME ETYMOLOGICAL ROOT. 
                         Format: "Word : Korean Meaning".
-                        Example (if word is 'observe'): "preserve : ~을 보존하다"
+                        Example: "preserve : ~을 보존하다"
                  Rule 4: Insert an empty line between categories. If a category is empty, omit it.
             
             3. "samples": An array of English example sentences.
@@ -392,7 +401,7 @@ export const api = {
             console.error("AI 단어 정보 가져오기 실패:", error);
             throw error;
         }
-    },
+    },,
     
     // AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
