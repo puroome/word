@@ -135,59 +135,41 @@ export const api = {
     },
 
 // ==========================================================================
-    // [수정됨] 무료 번역 (Gemini 1.5 Flash 사용 - 2.5는 아직 없음)
-    // 기존 구글 스크립트 대신 AI에게 번역 요청 (무료)
+    // [진단용] 모델 목록 확인 코드
+    // 이 코드를 실행해서 콘솔(F12)에 무엇이 찍히는지 알려주세요.
     // ==========================================================================
     async translate(text) {
-        // 1. 캐시 확인
-        try {
-            const cached = await translationCache.get(text);
-            if (cached) return cached;
-        } catch (e) { console.warn("Translation cache read error:", e); }
+        console.log("🚀 진단 시작: 모델 목록을 불러옵니다...");
 
-        // 2. Gemini API 호출 (1.5 Flash 모델 사용)
-        // 주의: API Key는 절대 외부에 노출되지 않도록 관리하세요.
-        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
+        // 선생님의 키 조합
+        const k1 = "AIzaSyBz3aL_UMfqemFZ7"; 
         const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = (k1 + k2).trim(); // 혹시 모를 공백 제거
-        
-        // [중요 변경] v1beta -> v1 (안정 버전), 모델명 확인
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const apiKey = (k1 + k2).trim();
 
-        const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
+        // 모델 목록 조회 주소 (v1beta)
+        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
 
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    contents: [{ parts: [{ text: prompt }] }] 
-                })
-            });
-
-            // 에러 상세 확인을 위해 로그 추가
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error("API Error Details:", errorData);
-                throw new Error(`Translation API Error (${response.status})`);
-            }
-
+            // GET 방식으로 목록 요청
+            const response = await fetch(url, { method: 'GET' });
             const data = await response.json();
-            
-            // 응답 구조 안전하게 파싱
-            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
-                 const translatedText = data.candidates[0].content.parts[0].text.trim();
-                 
-                // 3. 결과 캐싱 및 반환
-                translationCache.save(text, translatedText);
-                return translatedText;
-            } else {
-                throw new Error("API 응답에 번역 내용이 없습니다.");
+
+            if (!response.ok) {
+                console.error("❌ 진단 실패 (에러 내용):", data);
+                return "진단 실패: 콘솔 확인 필요";
             }
+
+            console.log("✅ 진단 성공! 사용 가능한 모델 목록:", data);
+            
+            // 1.5-flash 모델이 목록에 있는지 확인
+            const hasFlash = data.models?.some(m => m.name.includes("gemini-1.5-flash"));
+            console.log("🎯 gemini-1.5-flash 존재 여부:", hasFlash ? "있음 (사용 가능)" : "없음 (이게 문제!)");
+
+            return "진단 완료 (콘솔 확인)";
 
         } catch (error) {
-            console.error("Translation API error:", error);
-            return "번역 오류"; // 사용자에게 보여줄 메시지
+            console.error("❌ 진단 중 네트워크 오류:", error);
+            return "네트워크 오류";
         }
     },
 
