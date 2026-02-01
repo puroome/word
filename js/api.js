@@ -96,8 +96,8 @@ export const api = {
                 utterance.lang = 'en-US';
             }
 
-            // 5. 속도 조절 (예문은 0.9배속, 단어는 1.0배속)
-            utterance.rate = contentType === 'sample' ? 1.0 : 1.0;
+            // 5. 속도 조절 (1.0배속)
+            utterance.rate = 1.0;
             
             // 6. 상태 관리 (스피커 아이콘 애니메이션용)
             state.isSpeaking = true;
