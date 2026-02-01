@@ -329,7 +329,7 @@ export const api = {
         }
     },
     
-// [재수정] 예문 개수 로직 (단일 뜻 1개, 다의어 최대 5개)
+// [재수정] 타동사의 자연스러운 조사 처리(~을, ~에, ~와 등) 및 심화 학습 포함
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -338,23 +338,35 @@ export const api = {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `
+            Act as a linguistics expert for US high school students.
             Analyze the English word: "${word}"
 
             Output pure JSON with three fields:
-            1. "meaning": The most common Korean meaning(s).
+            1. "meaning": 
+               - The most common Korean meaning(s).
+               - CRITICAL FOR VERBS: Distinguish Transitive (vt) vs Intransitive (vi). 
+                 * If Vt (Transitive): Include the MOST NATURAL Korean particle (~을, ~에, ~와, ~에서, etc.) before the verb meaning. 
+                   (e.g., 'love' -> '~을 사랑하다', 'enter' -> '~에 들어가다', 'marry' -> '~와 결혼하다', 'survive' -> '~에서 살아남다').
+                 * If Vi (Intransitive): Just the verb meaning or with prepositional nuance if needed.
+               - Mark (slang) or (informal) if applicable.
+
             2. "explanation": 
-               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례].
+               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례], [심화].
                - FORMAT RULES:
-                 Rule 1: Use the format "English Word : Korean Meaning" (No parentheses, use colon).
-                 Rule 2: English items for [동의어]/[반의어] must also have Korean meanings.
-                 Rule 3: Insert an empty line between categories.
-                 Rule 4: If a category is empty, omit it.
+                 Rule 1 [동의어/반의어]: Group by specific meanings. 
+                        Format: "word1, word2, ... : [Korean Definition]"
+                        Max 7 words per group.
+                        * Ensure the Korean definition includes the correct particle (e.g., ~을, ~에, ~와).
+                 Rule 2 [용례]: Focus on Collocations or Idioms. Format: "Expression : Korean Meaning".
+                 Rule 3 [심화]: List high-frequency words sharing the SAME ETYMOLOGICAL ROOT. 
+                        Format: "Word : Korean Meaning".
+                        Example (if word is 'observe'): "preserve : ~을 보존하다"
+                 Rule 4: Insert an empty line between categories. If a category is empty, omit it.
             
             3. "samples": An array of English example sentences.
-               - QUANTITY LOGIC (Strictly Follow):
-                 Case A: If the word has only ONE common meaning/usage -> Generate EXACTLY 1 sentence.
-                 Case B: If the word has DISTINCT meanings (e.g., Noun vs Verb, or totally different definitions) -> Generate 1 sentence per distinct meaning.
-                 Max Limit: Up to 5 sentences total.
+               - QUANTITY LOGIC:
+                 Case A: Single meaning -> 1 sentence.
+                 Case B: Distinct meanings -> 1 sentence per meaning (Max 5).
                - No translations.
 
             Do not include Markdown code blocks. Just the JSON string.
