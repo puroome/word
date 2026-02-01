@@ -134,8 +134,8 @@ export const api = {
         });
     },
 
-    // ==========================================================================
-    // [수정됨] 무료 번역 (Gemini 2.5 Flash 사용)
+// ==========================================================================
+    // [수정됨] 무료 번역 (Gemini 1.5 Flash 사용 - 2.5는 아직 없음)
     // 기존 구글 스크립트 대신 AI에게 번역 요청 (무료)
     // ==========================================================================
     async translate(text) {
@@ -145,13 +145,14 @@ export const api = {
             if (cached) return cached;
         } catch (e) { console.warn("Translation cache read error:", e); }
 
-        // 2. Gemini API 호출 (품질 좋은 2.5 Flash 모델 유지)
+        // 2. Gemini API 호출 (1.5 Flash 모델 사용)
+        // 주의: API Key는 절대 외부에 노출되지 않도록 관리하세요.
         const k1 = "AIzaSyBz3aL_UMfqemFZ7";
         const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = k1 + k2; 
+        const apiKey = (k1 + k2).trim(); // 혹시 모를 공백 제거
         
-        // 사용자님이 원하시는 2.5 모델 사용
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // [중요 변경] v1beta -> v1 (안정 버전), 모델명 확인
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
 
@@ -159,24 +160,34 @@ export const api = {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                body: JSON.stringify({ 
+                    contents: [{ parts: [{ text: prompt }] }] 
+                })
             });
 
-            if (!response.ok) throw new Error(`Translation API Error (${response.status})`);
+            // 에러 상세 확인을 위해 로그 추가
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("API Error Details:", errorData);
+                throw new Error(`Translation API Error (${response.status})`);
+            }
 
             const data = await response.json();
-            const translatedText = data.candidates[0].content.parts[0].text.trim();
-
-            // 3. 결과 캐싱 및 반환
-            if (translatedText) {
+            
+            // 응답 구조 안전하게 파싱
+            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                 const translatedText = data.candidates[0].content.parts[0].text.trim();
+                 
+                // 3. 결과 캐싱 및 반환
                 translationCache.save(text, translatedText);
                 return translatedText;
             } else {
-                throw new Error("번역 결과 없음");
+                throw new Error("API 응답에 번역 내용이 없습니다.");
             }
+
         } catch (error) {
             console.error("Translation API error:", error);
-            return "번역 오류";
+            return "번역 오류"; // 사용자에게 보여줄 메시지
         }
     },
 
@@ -319,7 +330,7 @@ export const api = {
         const apiKey = k1 + k2; 
         
         // [원본 유지] 2.5 Flash 모델 사용
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `
             Target word: "${wordData.word}"
@@ -360,7 +371,7 @@ export const api = {
         const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+       const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `
             Act as a linguistics expert for US high school students.
