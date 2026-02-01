@@ -135,41 +135,56 @@ export const api = {
     },
 
 // ==========================================================================
-    // [진단용] 모델 목록 확인 코드
-    // 이 코드를 실행해서 콘솔(F12)에 무엇이 찍히는지 알려주세요.
+    // [진짜_마지막_수정] 무료 & 넉넉한 용량 (Gemini 2.0 Flash Lite 001 사용)
+    // 선생님 목록 5번에 있는 'Lite' 정식 버전을 사용하여 사용량 제한을 피합니다.
     // ==========================================================================
     async translate(text) {
-        console.log("🚀 진단 시작: 모델 목록을 불러옵니다...");
+        // 1. 캐시 확인
+        try {
+            const cached = await translationCache.get(text);
+            if (cached) return cached;
+        } catch (e) { console.warn("Translation cache read error:", e); }
 
-        // 선생님의 키 조합
+        // 2. Gemini API 호출
         const k1 = "AIzaSyBz3aL_UMfqemFZ7"; 
         const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = (k1 + k2).trim();
+        const apiKey = (k1 + k2).trim(); 
+        
+        // 🔻 [여기 집중] 'gemini-2.0-flash-lite-001' 
+        // 선생님 리스트 5번에 있는 이 놈이 '무료+대용량'의 핵심입니다.
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent?key=${apiKey}`;
 
-        // 모델 목록 조회 주소 (v1beta)
-        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
 
         try {
-            // GET 방식으로 목록 요청
-            const response = await fetch(url, { method: 'GET' });
-            const data = await response.json();
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    contents: [{ parts: [{ text: prompt }] }] 
+                })
+            });
 
             if (!response.ok) {
-                console.error("❌ 진단 실패 (에러 내용):", data);
-                return "진단 실패: 콘솔 확인 필요";
+                // 이번에도 안 되면 에러 내용을 정확히 보기 위해 로그를 남깁니다.
+                const errorData = await response.json().catch(() => ({}));
+                console.error(`🔥 API Error (${response.status}):`, errorData);
+                throw new Error(`API Error: ${response.status}`);
             }
 
-            console.log("✅ 진단 성공! 사용 가능한 모델 목록:", data);
+            const data = await response.json();
             
-            // 1.5-flash 모델이 목록에 있는지 확인
-            const hasFlash = data.models?.some(m => m.name.includes("gemini-1.5-flash"));
-            console.log("🎯 gemini-1.5-flash 존재 여부:", hasFlash ? "있음 (사용 가능)" : "없음 (이게 문제!)");
-
-            return "진단 완료 (콘솔 확인)";
+            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                 const translatedText = data.candidates[0].content.parts[0].text.trim();
+                 translationCache.save(text, translatedText);
+                 return translatedText;
+            } else {
+                throw new Error("번역 결과 없음");
+            }
 
         } catch (error) {
-            console.error("❌ 진단 중 네트워크 오류:", error);
-            return "네트워크 오류";
+            console.error("번역 실패:", error);
+            return "오류 발생"; 
         }
     },
 
