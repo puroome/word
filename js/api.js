@@ -337,7 +337,7 @@ export const api = {
         }
     },
     
-// [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기, 품사 태그 제거
+// [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
     async fetchWordInfoFromAI(word) {
         const k1 = "AIzaSyAdXvE2SkyEbPmU";
         const k2 = "XtLUeVi7f-niGpXUu_0";
@@ -398,8 +398,14 @@ export const api = {
             const data = await response.json();
             const textResponse = data.candidates[0].content.parts[0].text;
             
-            // Markdown 코드 블록 제거 및 JSON 파싱
+            // JSON 파싱
             const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
+
+            // [핵심 수정] 배열로 들어온 뜻(meaning)을 줄바꿈 문자(\n)로 합쳐서 문자열로 변환
+            // 이렇게 해야 화면에서 1번, 2번이 아래로 떨어져서 보입니다.
+            if (Array.isArray(cleanJson.meaning)) {
+                cleanJson.meaning = cleanJson.meaning.join('\n');
+            }
 
             return cleanJson;
 
