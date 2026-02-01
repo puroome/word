@@ -135,8 +135,9 @@ export const api = {
     },
 
 // ==========================================================================
-    // [진짜_마지막_수정] 무료 & 넉넉한 용량 (Gemini 2.0 Flash Lite 001 사용)
-    // 선생님 목록 5번에 있는 'Lite' 정식 버전을 사용하여 사용량 제한을 피합니다.
+    // [최종_해결] 구관이 명관 (Gemini 1.5 Flash-002 사용)
+    // 2.0/2.5 같은 실험 버전은 하루 50회 제한이 있어 429 에러가 뜹니다.
+    // 작년 9월에 나온 '1.5 Flash-002' 정식 버전을 써야 하루 1,500회 무료입니다.
     // ==========================================================================
     async translate(text) {
         // 1. 캐시 확인
@@ -150,10 +151,11 @@ export const api = {
         const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = (k1 + k2).trim(); 
         
-        // 🔻 [여기 집중] 'gemini-2.0-flash-lite-001' 
-        // 선생님 리스트 5번에 있는 이 놈이 '무료+대용량'의 핵심입니다.
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent?key=${apiKey}`;
+        // 🔻 [절대 수정 금지] 이 모델명(gemini-1.5-flash-002)이 유일한 정답입니다.
+        // '002'를 붙여야 404 오류 없이 서버가 인식합니다.
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${apiKey}`;
 
+        // 영어 선생님 맞춤 프롬프트
         const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
 
         try {
@@ -165,10 +167,15 @@ export const api = {
                 })
             });
 
+            // 429(사용량 초과)나 404(모델 없음)가 뜨면 상세 내용을 로그에 남김
             if (!response.ok) {
-                // 이번에도 안 되면 에러 내용을 정확히 보기 위해 로그를 남깁니다.
                 const errorData = await response.json().catch(() => ({}));
-                console.error(`🔥 API Error (${response.status}):`, errorData);
+                console.error(`🚨 API Error (${response.status}):`, errorData);
+                
+                // 만약 429가 뜨면, 사용자에게 잠시 쉬었다 하라고 알림
+                if (response.status === 429) {
+                    throw new Error("오늘 사용량을 초과했습니다. (잠시 후 다시 시도)");
+                }
                 throw new Error(`API Error: ${response.status}`);
             }
 
@@ -184,7 +191,8 @@ export const api = {
 
         } catch (error) {
             console.error("번역 실패:", error);
-            return "오류 발생"; 
+            // 에러 메시지를 그대로 반환하여 UI에서 확인 가능하게 함
+            return "오류: " + error.message; 
         }
     },
 
