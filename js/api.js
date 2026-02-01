@@ -151,7 +151,7 @@ export const api = {
         const apiKey = k1 + k2; 
         
         // 사용자님이 원하시는 2.5 모델 사용
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${apiKey}`;
 
         const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
 
@@ -319,7 +319,7 @@ export const api = {
         const apiKey = k1 + k2; 
         
         // [원본 유지] 2.5 Flash 모델 사용
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${apiKey}`;
 
         const prompt = `
             Target word: "${wordData.word}"
@@ -360,7 +360,7 @@ export const api = {
         const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${apiKey}`;
 
         const prompt = `
             Act as a linguistics expert for US high school students.
