@@ -964,33 +964,9 @@ async saveAndExitEditMode() {
         p.appendChild(botBtn);
         const showTranslation = async (event) => {
             state.activeTranslationTarget = p;
-
-            // [Voca 앱 방식 이식] 툴팁 직접 제어
-            const tooltip = document.getElementById('translation-tooltip');
-            if (tooltip) {
-                // 1. 기존 툴팁/메뉴 닫기
-                ui.hideAllMenus();
-
-                // 2. 위치 계산 (마우스가 아닌 '문장 p' 기준)
-                const targetRect = p.getBoundingClientRect();
-                tooltip.style.left = `${targetRect.left + window.scrollX}px`;
-                tooltip.style.top = `${targetRect.bottom + window.scrollY + 5}px`;
-
-                // 3. '번역 중...' 메시지 표시
-                tooltip.textContent = '번역 중...';
-                tooltip.classList.remove('hidden');
-            }
-
-            // 4. 번역 요청
             const translatedText = await api.translate(sentenceText); 
-            
-            // 5. 요청 후 마우스가 떠났으면 중단
             if (state.activeTranslationTarget !== p) return;
-
-            // 6. 결과 텍스트 업데이트
-            if (tooltip) {
-                tooltip.textContent = translatedText;
-            }
+            ui.showTranslationTooltip(translatedText, event);
         };
         p.onclick = (e) => {
             if (e.target === botBtn || e.target.closest('button')) return; 
