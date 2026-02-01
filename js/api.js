@@ -12,7 +12,9 @@ export const api = {
         database = realtimeDbInstance;
     },
 
-    // [데이터 로드] Firebase -> 로컬 동기화 (기존 로직 100% 유지)
+    // ==========================================================================
+    // [기본 데이터] 단어장 로드/저장/삭제
+    // ==========================================================================
     async loadWordList(force = false) {
         if (force) {
             localStorage.removeItem('wordListCache');
@@ -58,193 +60,6 @@ export const api = {
         }
     },
 
-    // --------------------------------------------------------------------------
-    // [기능 1] Gemini 1.5 Flash (무료) - 단어 정보 생성
-    // --------------------------------------------------------------------------
-    async fetchWordInfoFromAI(word) {
-        const k1 = "AIzaSyAdXvE2SkyEbPmU";
-        const k2 = "XtLUeVi7f-niGpXUu_0";
-        const apiKey = k1 + k2; 
-        
-        // 1.5-flash 모델 사용 (안정적, 무료 티어)
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-        // 사용자 요청 사항(타동사 조사, 문맥 괄호 등) 완벽 반영 프롬프트
-        const prompt = `
-            Act as a linguistics expert for US high school students.
-            Analyze the English word: "${word}"
-
-            Output pure JSON with three fields:
-            1. "meaning": 
-               - The most common Korean meaning(s).
-               - CRITICAL FOR VERBS: Distinguish Transitive (vt) vs Intransitive (vi). 
-                 * If Vi (Intransitive): Format as "[뜻]하다" or include preposition like "~에 [뜻]하다".
-                 * If Vt (Transitive): You MUST include the Korean particle (~을, ~에, ~와, etc.) before the verb.
-                   [IMPORTANT FORMATTING RULE for Vt]:
-                   - General case: "~을 [뜻]하다"
-                   - If specific object context is needed: Insert context in parentheses between tilde and particle.
-                     Format: "~(Context)Particle Verb"
-                   - Examples:
-                     * 'raise' (money) -> "~(자금 등)을 모금하다"
-                     * 'raise' (issue) -> "~(문제·이의 등)을 제기하다"
-                     * 'enter' -> "~에 들어가다"
-                     * 'marry' -> "~와 결혼하다"
-               - Mark (slang) or (informal) if applicable.
-
-            2. "explanation": 
-               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례], [심화].
-               - FORMAT RULES:
-                 Rule 1 [동의어/반의어]: Group by specific meanings. 
-                        Format: "word1, word2, ... : [Korean Definition]"
-                        Max 7 words per group.
-                        * Ensure the Korean definition follows the Vt formatting rules above.
-                 Rule 2 [용례]: Focus on Collocations or Idioms. Format: "Expression : Korean Meaning".
-                 Rule 3 [심화]: List high-frequency words sharing the SAME ETYMOLOGICAL ROOT. 
-                        Format: "Word : Korean Meaning".
-                        Example: "preserve : ~을 보존하다"
-                 Rule 4: Insert an empty line between categories. If a category is empty, omit it.
-            
-            3. "samples": An array of English example sentences.
-               - QUANTITY LOGIC:
-                 Case A: Single meaning -> 1 sentence.
-                 Case B: Distinct meanings -> 1 sentence per meaning (Max 5).
-               - No translations.
-
-            Do not include Markdown code blocks. Just the JSON string.
-        `;
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-
-            if (!response.ok) throw new Error(`API Error (${response.status})`);
-
-            const data = await response.json();
-            const textResponse = data.candidates[0].content.parts[0].text;
-            
-            // JSON 파싱 전처리 (마크다운 제거)
-            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
-
-            return cleanJson;
-
-        } catch (error) {
-            console.error("AI 단어 정보 가져오기 실패:", error);
-            throw error;
-        }
-    },
-
-    // --------------------------------------------------------------------------
-    // [호환성 패치] quiz.js가 호출하는 함수 이름 연결 (매우 중요!)
-    // --------------------------------------------------------------------------
-    async fetchDefinition(word) {
-        // quiz.js는 이 이름으로 호출하므로, 위에서 만든 메인 함수로 토스해줍니다.
-        return this.fetchWordInfoFromAI(word);
-    },
-
-    // --------------------------------------------------------------------------
-    // [기능 2] 브라우저 TTS (무료) - main.js의 UK/US 설정 연동
-    // --------------------------------------------------------------------------
-    speak(text, type = 'word') {
-        return new Promise((resolve) => {
-            if (!text) return resolve();
-
-            // 브라우저 지원 여부 체크
-            if (!window.speechSynthesis) {
-                console.warn("TTS 미지원 브라우저");
-                return resolve();
-            }
-
-            // 기존 음성 중단 (겹침 방지)
-            window.speechSynthesis.cancel();
-
-            const utterance = new SpeechSynthesisUtterance(text);
-            const voices = window.speechSynthesis.getVoices();
-            
-            // main.js에서 사용자가 선택한 발음 설정 가져오기 ('UK' or 'US')
-            // state.currentVoiceSet 값이 없으면 기본값 'US'
-            const currentSet = state.currentVoiceSet || 'US';
-            const targetLangCode = (currentSet === 'UK') ? 'en-GB' : 'en-US';
-
-            // 1. 완벽하게 일치하는 목소리 찾기 (Google/Microsoft 우선)
-            let selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Google')) ||
-                                voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft')) ||
-                                voices.find(v => v.lang === targetLangCode);
-
-            // 2. 없으면 해당 국가 코드 포함하는 아무 목소리나 (예: en-US-Standard)
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
-            }
-
-            // 목소리 설정
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-                utterance.lang = selectedVoice.lang;
-            } else {
-                utterance.lang = 'en-US'; // 최후의 수단
-            }
-
-            // 예문(sample)일 경우 조금 천천히 읽기 (학습 효과 증대)
-            utterance.rate = type === 'sample' ? 0.9 : 1.0;
-            utterance.pitch = 1.0;
-
-            utterance.onend = () => resolve();
-            utterance.onerror = (e) => {
-                console.error("TTS Error:", e);
-                resolve(); // 에러가 나도 앱이 멈추지 않게 함
-            };
-
-            window.speechSynthesis.speak(utterance);
-        });
-    },
-
-    // --------------------------------------------------------------------------
-    // [기능 3] Gemini 1.5 Flash (무료) - 번역 기능
-    // --------------------------------------------------------------------------
-    async fetchTranslation(text) {
-        // 캐시 확인 (중복 호출 비용 절약)
-        const cacheKey = `trans_${text}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) return cached;
-
-        const k1 = "AIzaSyAdXvE2SkyEbPmU";
-        const k2 = "XtLUeVi7f-niGpXUu_0";
-        const apiKey = k1 + k2; 
-        
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-        const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-
-            if (!response.ok) throw new Error('Translation Failed');
-
-            const data = await response.json();
-            const translatedText = data.candidates[0].content.parts[0].text.trim();
-
-            // 로컬 스토리지에 저장 (캐싱)
-            try {
-                localStorage.setItem(cacheKey, translatedText);
-            } catch (e) {}
-
-            return translatedText;
-
-        } catch (error) {
-            console.error("번역 실패:", error);
-            return "번역 서버 연결 실패";
-        }
-    },
-
-    // --------------------------------------------------------------------------
-    // [기능 4] 단어 저장 및 삭제 (기존 로직 유지)
-    // --------------------------------------------------------------------------
     async saveWord(wordData) {
         if (!state.userId) {
             alert("로그인이 필요합니다.");
@@ -284,19 +99,15 @@ export const api = {
     },
 
     async deleteWord(word) {
-        // 1. Google Sheets(GAS) 연동 (옵션)
         if (config.SCRIPT_URL) {
             try {
                 const scriptUrl = new URL(config.SCRIPT_URL);
                 scriptUrl.searchParams.append('action', 'delete_word');
                 scriptUrl.searchParams.append('word', word);
-                
-                // Fire and forget 방식 (결과 기다리지 않음)
                 fetch(scriptUrl.toString()).catch(e => console.warn("GAS 통신 오류", e));
             } catch(e) {}
         }
 
-        // 2. Firebase DB 삭제
         if (database) {
             const { ref, remove } = window.firebaseSDK;
             const safeKey = word.replace(/[.#$[\]/]/g, '_');
@@ -304,9 +115,7 @@ export const api = {
             remove(wordRef).catch(e => console.error(e));
         }
 
-        // 3. 로컬 상태 업데이트
         state.wordList = state.wordList.filter(w => w.word !== word);
-        
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
@@ -315,5 +124,183 @@ export const api = {
                 localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
             }
         } catch (e) {}
+    },
+
+    // ==========================================================================
+    // [복구됨] 학습 통계 및 기록 (이 부분이 없어서 에러가 났습니다!)
+    // ==========================================================================
+    
+    // 1. 학습 시간 업데이트 (main.js가 호출함)
+    async updateStudyTime(seconds) {
+        if (!state.userId || !seconds) return;
+        const { ref, get, update } = window.firebaseSDK;
+        try {
+            const userRef = ref(database, `/studyTime/${state.userId}`);
+            const snapshot = await get(userRef);
+            const current = snapshot.val() || 0;
+            
+            const updates = {};
+            updates[`/studyTime/${state.userId}`] = current + seconds;
+            await update(ref(database), updates);
+        } catch (e) {
+            console.error("학습 시간 저장 실패:", e);
+        }
+    },
+
+    // 2. 학습 시간 불러오기 (dashboard.js가 호출할 수 있음)
+    async loadStudyTime() {
+        if (!state.userId) return 0;
+        const { ref, get } = window.firebaseSDK;
+        try {
+            const snapshot = await get(ref(database, `/studyTime/${state.userId}`));
+            return snapshot.val() || 0;
+        } catch (e) {
+            return 0;
+        }
+    },
+
+    // 3. 퀴즈 결과 저장 (dashboard 차트용 데이터)
+    async saveQuizResult(quizType, isCorrect) {
+        if (!state.userId) return;
+        const { ref, push } = window.firebaseSDK;
+        try {
+            await push(ref(database, `/quizHistory/${state.userId}`), {
+                type: quizType,
+                correct: isCorrect,
+                timestamp: Date.now()
+            });
+        } catch (e) {
+            console.error("퀴즈 기록 저장 실패:", e);
+        }
+    },
+
+    // 4. 퀴즈 기록 불러오기 (dashboard 차트용)
+    async loadQuizHistory() {
+        if (!state.userId) return {};
+        const { ref, get, query, limitToLast } = window.firebaseSDK;
+        try {
+            // 최근 1000개 정도만 가져오기 (데이터 과부하 방지)
+            const q = query(ref(database, `/quizHistory/${state.userId}`), limitToLast(1000));
+            const snapshot = await get(q);
+            return snapshot.val() || {};
+        } catch (e) {
+            return {};
+        }
+    },
+
+    // ==========================================================================
+    // [기능 1] Gemini 1.5 Flash (무료) - 단어 정보 생성
+    // ==========================================================================
+    async fetchWordInfoFromAI(word) {
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
+        const apiKey = k1 + k2; 
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+        const prompt = `
+            Act as a linguistics expert for US high school students.
+            Analyze the English word: "${word}"
+            Output pure JSON with three fields:
+            1. "meaning": 
+               - The most common Korean meaning(s).
+               - CRITICAL FOR VERBS: Distinguish Transitive (vt) vs Intransitive (vi). 
+                 * If Vi: Format as "[뜻]하다" or include preposition.
+                 * If Vt: MUST include Korean particle (~을, ~에, etc.).
+                   Rule: "~(Context)Particle Verb" (e.g., 'raise' (money) -> "~(자금 등)을 모금하다").
+               - Mark (slang/informal).
+            2. "explanation": 
+               - Headers: [동의어], [반의어], [파생어], [용례], [심화].
+               - Rule 1 [Synonyms]: Group by meaning. Format: "word1, word2 : [Meaning]".
+               - Rule 2 [Usage]: Collocations/Idioms.
+               - Rule 3 [Root]: Same etymological root words.
+            3. "samples": English example sentences (1 per meaning, max 5).
+            Do not include Markdown.
+        `;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!response.ok) throw new Error(`API Error (${response.status})`);
+            const data = await response.json();
+            const textResponse = data.candidates[0].content.parts[0].text;
+            return JSON.parse(textResponse.replace(/```json|```/g, '').trim());
+        } catch (error) {
+            console.error("AI Error:", error);
+            throw error;
+        }
+    },
+
+    // [호환성 연결] quiz.js가 사용하는 함수 이름
+    async fetchDefinition(word) {
+        return this.fetchWordInfoFromAI(word);
+    },
+
+    // ==========================================================================
+    // [기능 2] 브라우저 TTS (무료) - main.js의 UK/US 설정 연동
+    // ==========================================================================
+    speak(text, type = 'word') {
+        return new Promise((resolve) => {
+            if (!text) return resolve();
+            if (!window.speechSynthesis) return resolve();
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = window.speechSynthesis.getVoices();
+            
+            const currentSet = state.currentVoiceSet || 'US';
+            const targetLangCode = (currentSet === 'UK') ? 'en-GB' : 'en-US';
+
+            let selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Google')) ||
+                                voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft')) ||
+                                voices.find(v => v.lang === targetLangCode);
+
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
+
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+                utterance.lang = selectedVoice.lang;
+            } else {
+                utterance.lang = 'en-US';
+            }
+
+            utterance.rate = type === 'sample' ? 0.9 : 1.0;
+            utterance.onend = () => resolve();
+            utterance.onerror = () => resolve();
+            window.speechSynthesis.speak(utterance);
+        });
+    },
+
+    // ==========================================================================
+    // [기능 3] Gemini 1.5 Flash (무료) - 번역 기능
+    // ==========================================================================
+    async fetchTranslation(text) {
+        const cacheKey = `trans_${text}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) return cached;
+
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
+        const apiKey = k1 + k2; 
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+        const prompt = `Translate this to natural Korean (output only Korean):\n"${text}"`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!response.ok) throw new Error('Translation Failed');
+            const data = await response.json();
+            const result = data.candidates[0].content.parts[0].text.trim();
+            try { localStorage.setItem(cacheKey, result); } catch (e) {}
+            return result;
+        } catch (error) {
+            return "번역 서버 연결 실패";
+        }
     }
 };
