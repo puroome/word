@@ -111,6 +111,7 @@ export const ui = {
 
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
+                this.showTranslationTooltip("Translating...", event);
                 const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); 
                 if (state.activeTranslationTarget !== p) return;
                 this.showTranslationTooltip(translatedText, event);
