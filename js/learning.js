@@ -964,9 +964,37 @@ async saveAndExitEditMode() {
         p.appendChild(botBtn);
         const showTranslation = async (event) => {
             state.activeTranslationTarget = p;
+
+            // 1. 기존 메뉴들을 닫고 툴팁 요소를 가져옵니다.
+            ui.hideAllMenus(); 
+            const tooltip = document.getElementById('translation-tooltip');
+            
+            if (tooltip) {
+                // 2. Voca앱처럼 '문장(p)' 위치를 기준으로 툴팁 좌표를 잡습니다.
+                const rect = p.getBoundingClientRect();
+                tooltip.style.left = `${rect.left + window.scrollX}px`;
+                tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+                
+                // 3. '번역중...' 메시지를 먼저 띄웁니다.
+                tooltip.textContent = "번역중...";
+                tooltip.classList.remove('hidden');
+            } else {
+                // 툴팁 요소가 없을 경우 대비 (기존 방식)
+                ui.showTranslationTooltip("번역중...", event);
+            }
+
+            // 4. 번역 API 호출
             const translatedText = await api.translate(sentenceText); 
+            
+            // 5. 번역 완료 전 마우스가 벗어났으면 중단
             if (state.activeTranslationTarget !== p) return;
-            ui.showTranslationTooltip(translatedText, event);
+            
+            // 6. 번역 결과로 텍스트 교체
+            if (tooltip) {
+                tooltip.textContent = translatedText;
+            } else {
+                ui.showTranslationTooltip(translatedText, event);
+            }
         };
         p.onclick = (e) => {
             if (e.target === botBtn || e.target.closest('button')) return; 
