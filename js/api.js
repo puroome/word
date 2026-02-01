@@ -401,7 +401,7 @@ export const api = {
             console.error("AI 단어 정보 가져오기 실패:", error);
             throw error;
         }
-    },,
+    },
     
     // AI 생성 버튼 결과 저장 (AISample 열)
     async saveAISamplesToSheet(wordData, fullEnText) {
