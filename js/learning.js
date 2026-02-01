@@ -964,7 +964,7 @@ async saveAndExitEditMode() {
         p.appendChild(botBtn);
         const showTranslation = async (event) => {
             state.activeTranslationTarget = p;
-            ui.showTranslationTooltip("번역중...", event);
+            ui.showTranslationTooltip("Translating...", event);
             const translatedText = await api.translate(sentenceText); 
             if (state.activeTranslationTarget !== p) return;
             ui.showTranslationTooltip(translatedText, event);
