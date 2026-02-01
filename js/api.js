@@ -54,8 +54,10 @@ export const api = {
     },
 
     // ==========================================================================
-    // [수정됨] 무료 TTS (브라우저 내장 기능 사용)
-    // 원본 앱의 [UK/US] 토글 설정(state.currentVoiceSet)을 완벽하게 따름
+    // [수정됨] 무료 TTS (Microsoft Natural Voice 우선 적용)
+    // 1순위: 요청하신 Christopher(US) / Maisie(UK)
+    // 2순위: 그 외 Microsoft 계열
+    // 3순위: Google 및 기타 브라우저 기본 음성
     // ==========================================================================
     speak(text, contentType = 'word') {
         return new Promise((resolve) => {
@@ -70,36 +72,49 @@ export const api = {
             // 2. 기존 재생 중단 (중복 방지)
             window.speechSynthesis.cancel();
             
-            // 3. 발화 설정
+            // 3. 발화 설정 및 목소리 목록 로드
             const utterance = new SpeechSynthesisUtterance(text);
             const voices = window.speechSynthesis.getVoices();
 
             // 4. 영국(UK) vs 미국(US) 목소리 선택 로직
-            // 앱 상단의 토글 버튼 값(state.currentVoiceSet)을 확인
-            const targetLangCode = (state.currentVoiceSet === 'UK') ? 'en-GB' : 'en-US';
+            const isUK = state.currentVoiceSet === 'UK';
+            const targetLangCode = isUK ? 'en-GB' : 'en-US';
 
-            // (A) Google > Microsoft > 기타 순으로 해당 언어의 목소리 찾기
-            let selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Google')) ||
-                                voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft')) ||
-                                voices.find(v => v.lang === targetLangCode);
+            // [핵심 변경] 요청하신 Natural Voice 이름 정의
+            const targetName = isUK 
+                ? "Microsoft Maisie Online (Natural) - English (United Kingdom)" 
+                : "Microsoft Christopher Online (Natural) - English (United States)";
 
-            // (B) 정확한 일치가 없으면 해당 언어 코드를 포함하는 목소리 찾기
+            // (A) 1순위: 정확한 Natural Voice 찾기 (Edge 등에서 활성화)
+            let selectedVoice = voices.find(v => v.name === targetName);
+
+            // (B) 2순위: 없다면 해당 언어의 다른 Microsoft 목소리 찾기
+            if (!selectedVoice) {
+                selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft'));
+            }
+
+            // (C) 3순위: 그것도 없다면 Google 등 해당 언어권 목소리 (Chrome 등)
+            if (!selectedVoice) {
+                selectedVoice = voices.find(v => v.lang === targetLangCode);
+            }
+
+            // (D) 4순위: 정말 없으면 언어 코드만이라도 일치하는 것 (가장 넓은 범위)
             if (!selectedVoice) {
                 selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
             }
 
-            // (C) 목소리 적용 (없으면 기본값)
+            // 5. 목소리 적용
             if (selectedVoice) {
                 utterance.voice = selectedVoice;
                 utterance.lang = selectedVoice.lang;
             } else {
-                utterance.lang = 'en-US';
+                utterance.lang = 'en-US'; // 최후의 수단
             }
 
-            // 5. 속도 조절 (1.0배속)
+            // 6. 속도 조절 (1.0배속)
             utterance.rate = 1.0;
             
-            // 6. 상태 관리 (스피커 아이콘 애니메이션용)
+            // 7. 상태 관리 (스피커 아이콘 애니메이션용)
             state.isSpeaking = true;
 
             utterance.onend = () => {
@@ -113,7 +128,7 @@ export const api = {
                 resolve();
             };
 
-            // 7. 재생 시작
+            // 8. 재생 시작
             window.speechSynthesis.speak(utterance);
         });
     },
