@@ -146,8 +146,8 @@ export const api = {
         } catch (e) { console.warn("Translation cache read error:", e); }
 
         // 2. Gemini API 호출 (품질 좋은 2.5 Flash 모델 유지)
-        const k1 = "AIzaSyBDRkZl1hzVqMqX";
-        const k2 = "FyIcBym1Is36p2to000";
+        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
+        const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = k1 + k2; 
         
         // 사용자님이 원하시는 2.5 모델 사용
@@ -314,8 +314,8 @@ export const api = {
      },
 
     async generateAIExamples(wordData, currentMeaning, count = 1) {
-        const k1 = "AIzaSyBDRkZl1hzVqMqX";
-        const k2 = "FyIcBym1Is36p2to000";
+        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
+        const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = k1 + k2; 
         
         // [원본 유지] 2.5 Flash 모델 사용
@@ -355,8 +355,8 @@ export const api = {
     
 // [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
     async fetchWordInfoFromAI(word) {
-        const k1 = "AIzaSyBDRkZl1hzVqMqX";
-        const k2 = "FyIcBym1Is36p2to000";
+        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
+        const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
