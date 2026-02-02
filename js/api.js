@@ -329,49 +329,77 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// [수정됨] 이름은 AI 예문 생성이지만, 실제로는 GAS(Merriam-Webster)를 호출함
+// api.js 파일의 generateAIExamples 함수 교체
+
     async generateAIExamples(wordData, currentMeaning, count = 1) {
         const word = wordData.word;
         if (!word) return [];
 
-        console.log(`📡 GAS 사전 예문 요청: ${word} (${count}개)`);
+        console.log(`🚀 예문 생성 시도: ${word}`);
 
-        // config.js에 있는 GAS 주소 사용
-        const scriptBaseUrl = config.SCRIPT_URL;
-        if (!scriptBaseUrl) {
-            console.error("설정 오류: SCRIPT_URL이 없습니다.");
-            return [];
+        // ---------------------------------------------------------
+        // 1단계: 무료 사전(GAS/Merriam-Webster) 먼저 확인
+        // ---------------------------------------------------------
+        try {
+            if (config.SCRIPT_URL) {
+                const scriptUrl = new URL(config.SCRIPT_URL);
+                scriptUrl.searchParams.append('action', 'get_mw_examples');
+                scriptUrl.searchParams.append('word', word);
+                scriptUrl.searchParams.append('count', count);
+
+                const response = await fetch(scriptUrl.toString());
+                const data = await response.json();
+
+                if (data.success && data.examples && data.examples.length > 0) {
+                    console.log("✅ [사전 성공] Merriam-Webster 예문 사용:", data.examples);
+                    return data.examples.slice(0, count);
+                }
+            }
+        } catch (e) {
+            console.warn("⚠️ 사전 조회 실패 (AI로 넘어갑니다):", e);
         }
 
-        // URL 생성
-        const url = new URL(scriptBaseUrl);
-        url.searchParams.append('action', 'get_mw_examples');
-        url.searchParams.append('word', word);
-        url.searchParams.append('count', count); // 필요한 개수 전달
+        // ---------------------------------------------------------
+        // 2단계: 사전에 없으면 Gemini AI가 생성 (백업)
+        // ---------------------------------------------------------
+        console.log("🤖 [AI 전환] 사전에 적절한 예문이 없어 AI가 생성합니다.");
+        
+        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
+        const k2 = "HkCHMN_LzN441aVtZE";
+        const apiKey = k1 + k2;
+        const aiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+        const prompt = `
+            Target word: "${word}"
+            Meaning: "${currentMeaning}"
+            Task: Create exactly ${count} natural English example sentence(s).
+            Rules:
+            1. Use simple vocabulary suitable for students.
+            2. Output ONLY a JSON array of strings: ["sentence 1", "sentence 2"]
+            3. No markdown, no translation.
+        `;
 
         try {
-            const response = await fetch(url.toString());
+            const aiRes = await fetch(aiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (!aiRes.ok) throw new Error("AI API Error");
+
+            const aiData = await aiRes.json();
+            const text = aiData.candidates[0].content.parts[0].text;
             
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
-            }
+            // JSON 파싱 (마크다운 ```json 제거)
+            const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
 
-            const data = await response.json();
-
-            if (data.success && data.examples && data.examples.length > 0) {
-                console.log("✅ 사전 예문 로드 성공:", data.examples);
-                // 요청한 개수만큼만 잘라서 반환 (혹시 모르니 안전장치)
-                return data.examples.slice(0, count);
-            } else {
-                console.warn("⚠️ 사전에 예문이 없음:", data.message);
-                // 예문이 없을 경우 빈 배열 반환 (UI 에러 방지)
-                return []; 
-            }
+            console.log("✅ [AI 성공] 예문 생성 완료");
+            return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
 
         } catch (error) {
-            console.error("❌ 예문 가져오기 실패:", error);
-            // 에러 시에도 빈 배열 반환하여 앱이 멈추지 않게 함
-            return [];
+            console.error("❌ [완전 실패] 예문 생성 불가:", error);
+            return []; // 최후의 경우 빈 배열 반환
         }
     },
     
