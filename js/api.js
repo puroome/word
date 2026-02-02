@@ -134,67 +134,67 @@ export const api = {
         });
     },
 
-// ==========================================================================
-    // [최종_해결] 구관이 명관 (Gemini 1.5 Flash-002 사용)
-    // 2.0/2.5 같은 실험 버전은 하루 50회 제한이 있어 429 에러가 뜹니다.
-    // 작년 9월에 나온 '1.5 Flash-002' 정식 버전을 써야 하루 1,500회 무료입니다.
-    // ==========================================================================
+// api.js 파일 내의 translate 함수 교체
+
     async translate(text) {
-        // 1. 캐시 확인
+        if (!text) return "";
+
+        // 1. 캐시 확인 (기존 로직 유지)
         try {
-            const cached = await translationCache.get(text);
-            if (cached) return cached;
-        } catch (e) { console.warn("Translation cache read error:", e); }
+            // 캐시 객체가 있는지 확인 후 가져오기
+            if (typeof translationCache !== 'undefined') {
+                const cached = await translationCache.get(text);
+                if (cached) return cached;
+            }
+        } catch (e) { 
+            console.warn("Cache check failed:", e); 
+        }
 
-        // 2. Gemini API 호출
-        const k1 = "AIzaSyBz3aL_UMfqemFZ7"; 
-        const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = (k1 + k2).trim(); 
-        
-        // 🔻 [절대 수정 금지] 이 모델명(gemini-1.5-flash-002)이 유일한 정답입니다.
-        // '002'를 붙여야 404 오류 없이 서버가 인식합니다.
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${apiKey}`;
-
-        // 영어 선생님 맞춤 프롬프트
-        const prompt = `Translate the following English text into natural Korean. Output ONLY the Korean translation, no extra text.\n\nText: "${text}"`;
-
+        // 2. GAS(Google Apps Script) 무료 번역 호출
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    contents: [{ parts: [{ text: prompt }] }] 
-                })
-            });
+            // config.js에 있는 SCRIPT_URL을 가져옵니다.
+            const scriptBaseUrl = config.SCRIPT_URL;
+            
+            if (!scriptBaseUrl) {
+                console.error("Config Error: SCRIPT_URL is missing.");
+                return "설정 오류: 서버 주소 없음";
+            }
 
-            // 429(사용량 초과)나 404(모델 없음)가 뜨면 상세 내용을 로그에 남김
+            // URL 생성 (action=translate)
+            // 주의: 보내주신 GAS 코드에 맞춰 action 이름을 'translate'로 설정했습니다.
+            const url = new URL(scriptBaseUrl);
+            url.searchParams.append('action', 'translate');
+            url.searchParams.append('text', text);
+
+            const response = await fetch(url.toString());
+
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error(`🚨 API Error (${response.status}):`, errorData);
-                
-                // 만약 429가 뜨면, 사용자에게 잠시 쉬었다 하라고 알림
-                if (response.status === 429) {
-                    throw new Error("오늘 사용량을 초과했습니다. (잠시 후 다시 시도)");
-                }
-                throw new Error(`API Error: ${response.status}`);
+                throw new Error(`HTTP Error: ${response.status}`);
             }
 
             const data = await response.json();
-            
-            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
-                 const translatedText = data.candidates[0].content.parts[0].text.trim();
-                 translationCache.save(text, translatedText);
-                 return translatedText;
+
+            // 3. 결과 처리
+            if (data.success) {
+                const translatedText = data.translatedText;
+
+                // 캐시에 저장
+                try {
+                    if (typeof translationCache !== 'undefined' && translatedText) {
+                        translationCache.save(text, translatedText);
+                    }
+                } catch (e) {}
+
+                return translatedText;
             } else {
-                throw new Error("번역 결과 없음");
+                throw new Error(data.message || "번역 실패");
             }
 
         } catch (error) {
-            console.error("번역 실패:", error);
-            // 에러 메시지를 그대로 반환하여 UI에서 확인 가능하게 함
-            return "오류: " + error.message; 
+            console.error("Translation Error:", error);
+            return "번역 서버 연결 실패 (잠시 후 다시 시도)";
         }
-    },
+    },,
 
     // ==========================================================================
     // [아래부터는 원본 코드 100% 동일 유지]
