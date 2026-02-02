@@ -76,7 +76,7 @@ export const api = {
             const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
           
             // 3. 발화 설정 및 목소리 목록 로드
-            const utterance = new SpeechSynthesisUtterance(text);
+            const utterance = new SpeechSynthesisUtterance(processedText);
             const voices = window.speechSynthesis.getVoices();
 
             // 4. 영국(UK) vs 미국(US) 목소리 선택 로직
