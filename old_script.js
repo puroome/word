@@ -2887,3 +2887,38 @@ document.addEventListener('firebaseSDKLoaded', () => {
     window.firebaseSDK.writeBatch = writeBatch;
     app.init();
 });
+
+
+// [신규 추가] GAS(Merriam-Webster API)를 통해 사전 예문 가져오기
+    async getDictionaryExamples(word) {
+        if (!word) return null;
+
+        // config.js에 있는 GAS 주소 사용
+        const scriptBaseUrl = config.SCRIPT_URL;
+        
+        if (!scriptBaseUrl) {
+            console.error("설정 오류: SCRIPT_URL이 없습니다.");
+            return null;
+        }
+
+        // URL 생성 (action=get_mw_examples)
+        const url = new URL(scriptBaseUrl);
+        url.searchParams.append('action', 'get_mw_examples');
+        url.searchParams.append('word', word);
+
+        try {
+            const response = await fetch(url.toString());
+            const data = await response.json();
+
+            if (data.success && data.examples && data.examples.length > 0) {
+                console.log("📖 사전 예문 로드 성공:", data.examples);
+                return data.examples; // ['예문1', '예문2'] 배열 반환
+            } else {
+                console.warn(data.message || "사전에 예문이 없습니다.");
+                return null; 
+            }
+        } catch (error) {
+            console.error("예문 가져오기 통신 실패:", error);
+            return null;
+        }
+    },
