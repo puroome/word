@@ -340,7 +340,7 @@ export const api = {
         try {
             if (config.SCRIPT_URL) {
                 const scriptUrl = new URL(config.SCRIPT_URL);
-                scriptUrl.searchParams.append('action', 'get_mw_examples'); // GAS 함수 이름과 매칭
+                scriptUrl.searchParams.append('action', 'get_examples'); // GAS 함수 이름과 매칭
                 scriptUrl.searchParams.append('word', word);
                 scriptUrl.searchParams.append('count', count);
 
