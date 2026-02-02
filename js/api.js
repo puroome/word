@@ -329,78 +329,68 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// [api.js] 1순위: Tatoeba (학습용 문장 DB) / 2순위: AI
-    async generateAIExamples(wordData, currentMeaning, count = 1) {
-        const word = wordData.word;
-        if (!word) return [];
+// 1. AI 예문 생성 (GAS 안 거치고 바로 Gemini 호출)
+// --------------------------------------------------------------------------
+async generateAIExamples(wordData, currentMeaning, count = 2) {
+    const word = wordData.word;
+    if (!word) return [];
 
-        console.log(`🚀 예문 생성 시도 (Tatoeba): ${word}`);
+    console.log(`🚀 AI 예문 생성 요청 (Direct Gemini): ${word}`);
 
-        // ---------------------------------------------------------
-        // 1단계: Tatoeba 문장 가져오기 (GAS)
-        // ---------------------------------------------------------
-        try {
-            if (config.SCRIPT_URL) {
-                const scriptUrl = new URL(config.SCRIPT_URL);
-                // 🔴 GAS의 doGet에 설정한 이름과 같아야 합니다 ('get_examples')
-                scriptUrl.searchParams.append('action', 'get_examples'); 
-                scriptUrl.searchParams.append('word', word);
-                scriptUrl.searchParams.append('count', count);
+    // ✅ 유료 API KEY (여기에 적용)
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
+        const apiKey = k1 + k2; 
+    // 모델명: gemini-1.5-flash (빠르고 저렴함)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-                const response = await fetch(scriptUrl.toString());
-                const data = await response.json();
+    const prompt = `
+        Word: "${word}"
+        Task: Write ${count} simple sentences suitable for children using this word.
+        Format: Return ONLY a JSON array of strings. Example: ["Sentence 1.", "Sentence 2."]
+        No markdown, no explanations.
+    `;
 
-                if (data.success && data.examples && data.examples.length > 0) {
-                    console.log("✅ [성공] Tatoeba 문장 발견:", data.examples);
-                    return data.examples.slice(0, count);
-                }
-            }
-        } catch (e) {
-            console.warn("⚠️ Tatoeba 실패 (AI로 전환):", e);
-        }
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
 
-        // ---------------------------------------------------------
-        // 2단계: 최후의 수단 - Gemini AI (초등 레벨 작문)
-        // ---------------------------------------------------------
-        console.log("🤖 [AI 전환] 문장 DB 실패 -> AI 작문 시작");
-        
-        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
-        const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = k1 + k2;
-        const aiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const data = await response.json();
 
-        const prompt = `
-            Word: "${word}"
-            Task: Write ${count} simple sentences suitable for children.
-            Format: JSON array ["Sentence 1", "Sentence 2"].
-            No markdown.
-        `;
-
-        try {
-            const aiRes = await fetch(aiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-            
-            const aiData = await aiRes.json();
-            const text = aiData.candidates[0].content.parts[0].text;
-            const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
-
-            return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
-        } catch (error) {
+        // 응답 데이터 검증
+        if (!data.candidates || !data.candidates[0].content) {
+            console.warn("AI 응답 형식 오류:", data);
             return [];
         }
-    },
+
+        const text = data.candidates[0].content.parts[0].text;
+        
+        // 마크다운 제거 및 JSON 파싱
+        const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
+
+        // 배열인지 확인 후 반환
+        const results = Array.isArray(cleanJson) ? cleanJson : [cleanJson];
+        console.log("✅ 예문 생성 완료:", results);
+        
+        return results;
+
+    } catch (error) {
+        console.error("AI 예문 생성 실패:", error);
+        return [];
+    }
+},
     
 // [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
     async fetchWordInfoFromAI(word) {
-        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
-        const k2 = "HkCHMN_LzN441aVtZE";
+        const k1 = "AIzaSyAdXvE2SkyEbPmU";
+        const k2 = "XtLUeVi7f-niGpXUu_0";
         const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
-       const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
         const prompt = `
             Act as a linguistics expert for US high school students.
