@@ -329,18 +329,21 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// [api.js] 1순위: Free Dictionary / 2순위: Gemini AI (쉬운 난이도)
+// [api.js] 1순위: Tatoeba (학습용 문장 DB) / 2순위: AI
     async generateAIExamples(wordData, currentMeaning, count = 1) {
         const word = wordData.word;
         if (!word) return [];
 
-        console.log(`🚀 예문 생성 시도 (Free Dictionary): ${word}`);
+        console.log(`🚀 예문 생성 시도 (Tatoeba): ${word}`);
 
-        // 1단계: 무료 쉬운 사전(GAS) 확인
+        // ---------------------------------------------------------
+        // 1단계: Tatoeba 문장 가져오기 (GAS)
+        // ---------------------------------------------------------
         try {
             if (config.SCRIPT_URL) {
                 const scriptUrl = new URL(config.SCRIPT_URL);
-                scriptUrl.searchParams.append('action', 'get_examples'); // GAS 함수 이름과 매칭
+                // 🔴 GAS의 doGet에 설정한 이름과 같아야 합니다 ('get_examples')
+                scriptUrl.searchParams.append('action', 'get_examples'); 
                 scriptUrl.searchParams.append('word', word);
                 scriptUrl.searchParams.append('count', count);
 
@@ -348,33 +351,29 @@ export const api = {
                 const data = await response.json();
 
                 if (data.success && data.examples && data.examples.length > 0) {
-                    console.log("✅ [사전 성공] 예문 발견:", data.examples);
+                    console.log("✅ [성공] Tatoeba 문장 발견:", data.examples);
                     return data.examples.slice(0, count);
                 }
             }
         } catch (e) {
-            console.warn("⚠️ 사전 조회 실패 (AI로 전환):", e);
+            console.warn("⚠️ Tatoeba 실패 (AI로 전환):", e);
         }
 
-        // 2단계: 사전 실패 시 Gemini AI (초등 레벨로 작문 요청)
-        console.log("🤖 [AI 전환] 사전 예문 없음 -> 교육용 작문 시작");
+        // ---------------------------------------------------------
+        // 2단계: 최후의 수단 - Gemini AI (초등 레벨 작문)
+        // ---------------------------------------------------------
+        console.log("🤖 [AI 전환] 문장 DB 실패 -> AI 작문 시작");
         
         const k1 = "AIzaSyBz3aL_UMfqemFZ7";
         const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = k1 + k2;
         const aiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-        // 프롬프트를 "아주 쉽게(Kindergarten level)"로 강력하게 지정
         const prompt = `
-            Target word: "${word}"
-            Definition: "${currentMeaning}"
-            Task: Create exactly ${count} very simple, educational example sentence(s).
-            Rules:
-            1. Target Level: Kindergarten to Elementary School.
-            2. Short and clear sentences (5-12 words).
-            3. Must clearly show the meaning of the word.
-            4. Output ONLY a JSON array of strings: ["sentence 1"]
-            5. No markdown.
+            Word: "${word}"
+            Task: Write ${count} simple sentences suitable for children.
+            Format: JSON array ["Sentence 1", "Sentence 2"].
+            No markdown.
         `;
 
         try {
@@ -383,17 +382,13 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-
-            if (!aiRes.ok) throw new Error("AI API Error");
-
+            
             const aiData = await aiRes.json();
             const text = aiData.candidates[0].content.parts[0].text;
             const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
 
             return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
-
         } catch (error) {
-            console.error("❌ [실패] 예문 생성 불가:", error);
             return [];
         }
     },
