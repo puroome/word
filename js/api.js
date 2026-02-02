@@ -113,7 +113,7 @@ export const api = {
             }
 
             // 6. 속도 조절 (1.0배속)
-            utterance.rate = (contentType === 'word') ? 1.0 : 0.3;
+            utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
             
             // 7. 상태 관리 (스피커 아이콘 애니메이션용)
             state.isSpeaking = true;
