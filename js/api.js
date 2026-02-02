@@ -73,8 +73,8 @@ export const api = {
             // 2. 기존 재생 중단 (중복 방지)
             window.speechSynthesis.cancel();
 
-            const processedText = textWithoutEmoji.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
-            
+            const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
+          
             // 3. 발화 설정 및 목소리 목록 로드
             const utterance = new SpeechSynthesisUtterance(text);
             const voices = window.speechSynthesis.getVoices();
