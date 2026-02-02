@@ -329,43 +329,49 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
+// [수정됨] 이름은 AI 예문 생성이지만, 실제로는 GAS(Merriam-Webster)를 호출함
     async generateAIExamples(wordData, currentMeaning, count = 1) {
-        const k1 = "AIzaSyBz3aL_UMfqemFZ7";
-        const k2 = "HkCHMN_LzN441aVtZE";
-        const apiKey = k1 + k2; 
-        
-        // [원본 유지] 2.5 Flash 모델 사용
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const word = wordData.word;
+        if (!word) return [];
 
-        const prompt = `
-            Target word: "${wordData.word}"
-            Current definition: "${currentMeaning}"
+        console.log(`📡 GAS 사전 예문 요청: ${word} (${count}개)`);
 
-            Task:
-            1. Create exactly ${count} example sentence(s) using "${wordData.word}".
-            2. Try to use a DIFFERENT part of speech or meaning if possible.
-            3. Output strictly as a JSON array of strings: ["sentence 1", "sentence 2"]
-            4. Do not include translations or markdown. Just the English sentences.
-        `;
+        // config.js에 있는 GAS 주소 사용
+        const scriptBaseUrl = config.SCRIPT_URL;
+        if (!scriptBaseUrl) {
+            console.error("설정 오류: SCRIPT_URL이 없습니다.");
+            return [];
+        }
+
+        // URL 생성
+        const url = new URL(scriptBaseUrl);
+        url.searchParams.append('action', 'get_mw_examples');
+        url.searchParams.append('word', word);
+        url.searchParams.append('count', count); // 필요한 개수 전달
 
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-
-            if (!response.ok) throw new Error(`API Error (${response.status})`);
+            const response = await fetch(url.toString());
+            
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
 
             const data = await response.json();
-            const textResponse = data.candidates[0].content.parts[0].text;
-            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
 
-            return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
+            if (data.success && data.examples && data.examples.length > 0) {
+                console.log("✅ 사전 예문 로드 성공:", data.examples);
+                // 요청한 개수만큼만 잘라서 반환 (혹시 모르니 안전장치)
+                return data.examples.slice(0, count);
+            } else {
+                console.warn("⚠️ 사전에 예문이 없음:", data.message);
+                // 예문이 없을 경우 빈 배열 반환 (UI 에러 방지)
+                return []; 
+            }
 
         } catch (error) {
-            console.error("AI 생성 실패:", error);
-            throw error;
+            console.error("❌ 예문 가져오기 실패:", error);
+            // 에러 시에도 빈 배열 반환하여 앱이 멈추지 않게 함
+            return [];
         }
     },
     
