@@ -691,35 +691,3 @@ export const api = {
         }
     }
 };
-
-
-// api.js 안에 추가 (또는 기존 생성 함수 대체)
-    
-    async getDictionaryExamples(word) {
-        if (!word) return null;
-
-        // config.js에 있는 GAS 주소 사용
-        const scriptBaseUrl = config.SCRIPT_URL;
-        
-        // URL 생성 (action=get_mw_examples)
-        const url = new URL(scriptBaseUrl);
-        url.searchParams.append('action', 'get_mw_examples');
-        url.searchParams.append('word', word);
-
-        try {
-            const response = await fetch(url.toString());
-            const data = await response.json();
-
-            if (data.success && data.examples && data.examples.length > 0) {
-                // 성공! 예문 배열 반환 (['예문1', '예문2'])
-                console.log("사전 예문 로드 성공:", data.examples);
-                return data.examples;
-            } else {
-                console.warn(data.message || "예문 없음");
-                return null; // 예문이 없으면 null 반환
-            }
-        } catch (error) {
-            console.error("예문 가져오기 실패:", error);
-            return null;
-        }
-    },
