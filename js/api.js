@@ -83,8 +83,8 @@ export const api = {
 
             // [핵심 변경] 요청하신 Natural Voice 이름 정의
             const targetName = isUK 
-                ? "Microsoft Maisie Online (Natural) - English (United Kingdom)" 
-                : "Microsoft Christopher Online (Natural) - English (United States)";
+                ? "Microsoft Thomas Online (Natural) - English (United Kingdom)" 
+                : "Microsoft Ava Online (Natural) - English (United States)";
 
             // (A) 1순위: 정확한 Natural Voice 찾기 (Edge 등에서 활성화)
             let selectedVoice = voices.find(v => v.name === targetName);
