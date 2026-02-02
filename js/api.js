@@ -329,21 +329,22 @@ export const api = {
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// api.js 파일의 generateAIExamples 함수 교체
-
+// [api.js 수정] 1순위: Free Dictionary (쉬운 사전) / 2순위: AI
     async generateAIExamples(wordData, currentMeaning, count = 1) {
         const word = wordData.word;
         if (!word) return [];
 
-        console.log(`🚀 예문 생성 시도: ${word}`);
+        console.log(`🚀 예문 생성 시도 (Free Dictionary): ${word}`);
 
         // ---------------------------------------------------------
-        // 1단계: 무료 사전(GAS/Merriam-Webster) 먼저 확인
+        // 1단계: 무료 쉬운 사전(GAS proxy) 먼저 확인
         // ---------------------------------------------------------
         try {
             if (config.SCRIPT_URL) {
                 const scriptUrl = new URL(config.SCRIPT_URL);
-                scriptUrl.searchParams.append('action', 'get_mw_examples');
+                // GAS 코드의 doGet에서 action 이름을 확인해서 맞춰주세요!
+                // (아래 코드는 GAS doGet을 수정 안 했다고 가정하고 기존 action 이름 사용)
+                scriptUrl.searchParams.append('action', 'get_mw_examples'); 
                 scriptUrl.searchParams.append('word', word);
                 scriptUrl.searchParams.append('count', count);
 
@@ -351,32 +352,35 @@ export const api = {
                 const data = await response.json();
 
                 if (data.success && data.examples && data.examples.length > 0) {
-                    console.log("✅ [사전 성공] Merriam-Webster 예문 사용:", data.examples);
+                    console.log("✅ [사전 성공] 쉬운 예문 발견:", data.examples);
                     return data.examples.slice(0, count);
                 }
             }
         } catch (e) {
-            console.warn("⚠️ 사전 조회 실패 (AI로 넘어갑니다):", e);
+            console.warn("⚠️ 사전 조회 실패 (AI로 전환):", e);
         }
 
         // ---------------------------------------------------------
-        // 2단계: 사전에 없으면 Gemini AI가 생성 (백업)
+        // 2단계: 사전도 마음에 안 들거나 없으면 -> AI가 "교육용"으로 작문
         // ---------------------------------------------------------
-        console.log("🤖 [AI 전환] 사전에 적절한 예문이 없어 AI가 생성합니다.");
+        console.log("🤖 [AI 전환] 사전 예문 없음 -> AI가 교육용으로 작문 시작");
         
         const k1 = "AIzaSyBz3aL_UMfqemFZ7";
         const k2 = "HkCHMN_LzN441aVtZE";
         const apiKey = k1 + k2;
         const aiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
+        // 프롬프트를 "아주 쉽게"로 강력하게 지정
         const prompt = `
             Target word: "${word}"
-            Meaning: "${currentMeaning}"
-            Task: Create exactly ${count} natural English example sentence(s).
+            Definition: "${currentMeaning}"
+            Task: Create exactly ${count} very simple, educational example sentence(s).
             Rules:
-            1. Use simple vocabulary suitable for students.
-            2. Output ONLY a JSON array of strings: ["sentence 1", "sentence 2"]
-            3. No markdown, no translation.
+            1. Suitable for ESL students (easy vocabulary).
+            2. Short and clear sentences (10-15 words).
+            3. Must clearly show the meaning of the word.
+            4. Output ONLY a JSON array of strings: ["sentence 1"]
+            5. No markdown.
         `;
 
         try {
@@ -390,16 +394,14 @@ export const api = {
 
             const aiData = await aiRes.json();
             const text = aiData.candidates[0].content.parts[0].text;
-            
-            // JSON 파싱 (마크다운 ```json 제거)
             const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
 
-            console.log("✅ [AI 성공] 예문 생성 완료");
+            console.log("✅ [AI 성공] 교육용 예문 생성 완료");
             return Array.isArray(cleanJson) ? cleanJson : [cleanJson];
 
         } catch (error) {
-            console.error("❌ [완전 실패] 예문 생성 불가:", error);
-            return []; // 최후의 경우 빈 배열 반환
+            console.error("❌ [실패] 예문 생성 불가:", error);
+            return [];
         }
     },
     
