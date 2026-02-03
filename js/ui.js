@@ -208,8 +208,6 @@ export const ui = {
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
 
-        document.getElementById('search-app-context-btn').style.display = options.hideAppSearch ? 'none' : 'block';
-
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
