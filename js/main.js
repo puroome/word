@@ -157,8 +157,7 @@ const app = {
             await api.loadUserProgress();
             this.updateLastUpdatedText();
         } catch (e) { return; }
-
-        this.loadInitialImages();
+        
         quizMode.init();
         learningMode.init();
         dashboard.init();
