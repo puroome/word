@@ -281,14 +281,6 @@ const app = {
         } catch (error) { console.error(error); }
     },
     
-    async loadInitialImages() {
-        const imageSelectors = ['#select-learning-btn img', '#select-quiz-btn img', '#start-meaning-quiz-btn img', '#start-blank-quiz-btn img', '#start-definition-quiz-btn img'];
-        for (const selector of imageSelectors) {
-            const img = document.querySelector(selector);
-            if (img && img.src) img.src = await imageDBCache.loadImage(img.src);
-        }
-    },
-
     navigateTo(mode, options = {}) {
         const currentState = history.state || {};
         if (currentState.mode !== mode) this.syncOfflineData();
