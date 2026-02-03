@@ -233,17 +233,38 @@ const app = {
             this._renderMode(mode, options);
         });
 
+        // ===============================================================
+        // [수정됨] 전역 우클릭 제어 (카드 바깥 배경에서만 메뉴 호출)
+        // ===============================================================
         document.addEventListener('contextmenu', (e) => {
-            const target = e.target;
-            const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
-            const isCustomContextMenu = target.closest('#word-context-menu');
-            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
-            const isEditContextMenu = target.closest('#edit-context-menu');
-            const isEditTrigger = target.closest('#meaning-container, #explanation-container');
-            
-            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
-                e.preventDefault();
+            // 1. 입력창, 텍스트영역, 편집모드에서는 브라우저 기본 메뉴 허용
+            if (e.target.tagName === 'INPUT' || 
+                e.target.tagName === 'TEXTAREA' || 
+                e.target.isContentEditable) {
+                return; 
             }
+
+            // 2. 이미 떠있는 팝업 메뉴 위에서 클릭한 경우 무시
+            if (e.target.closest('#word-context-menu') || 
+                e.target.closest('#edit-context-menu') || 
+                e.target.closest('#card-context-menu')) {
+                return;
+            }
+
+            // 3. [핵심] 클릭한 위치가 카드(앞면/뒷면) 내부인지 확인
+            const isInsideFront = e.target.closest('#learning-card-front');
+            const isInsideBack = e.target.closest('#learning-card-back');
+
+            // 4. 카드 내부라면 -> 메뉴 띄우지 않음 (기본 메뉴도 막음)
+            // (단어 위 클릭 등은 learning.js 내부에서 별도로 처리되어 여기까지 전파되지 않음)
+            if (isInsideFront || isInsideBack) {
+                e.preventDefault();
+                return;
+            }
+
+            // 5. 카드 바깥 배경이라면 -> "새 카드/삭제" 메뉴 표시
+            e.preventDefault();
+            ui.showCardContextMenu(e);
         });
 
         window.addEventListener('beforeunload', () => {
