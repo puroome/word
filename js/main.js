@@ -234,42 +234,49 @@ const app = {
         });
 
 // ===============================================================
-        // [수정됨] 전역 우클릭 제어 (카드 바깥은 메뉴 호출, 카드 안쪽 빈 공간은 닫기)
+        // [최종 수정] 전역 우클릭 제어 (학습 모드에서만 동작)
         // ===============================================================
         document.addEventListener('contextmenu', (e) => {
-            // 1. 입력창, 텍스트영역, 편집모드에서는 브라우저 기본 메뉴 허용
+            // 1. 입력창, 텍스트영역 등에서는 기본 메뉴 허용
             if (e.target.tagName === 'INPUT' || 
                 e.target.tagName === 'TEXTAREA' || 
                 e.target.isContentEditable) {
                 return; 
             }
 
-            // 2. 이미 떠있는 팝업 메뉴 위에서 클릭한 경우 -> 메뉴 유지
+            // 2. 이미 떠있는 커스텀 메뉴 위 클릭은 무시
             if (e.target.closest('#word-context-menu') || 
                 e.target.closest('#edit-context-menu') || 
                 e.target.closest('#card-context-menu')) {
                 return;
             }
 
-            // 3. 클릭 위치 확인
+            // 3. [추가된 조건] 현재 '학습 모드' 화면이 아니라면 작동 중지
+            // (퀴즈, 대시보드, 선택 화면 등에서는 메뉴가 뜨지 않게 함)
+            const learningContainer = document.getElementById('learning-mode-container');
+            if (!learningContainer || learningContainer.classList.contains('hidden')) {
+                return; 
+            }
+
+            // 4. 클릭 위치 확인 (카드 내부인가?)
             const isInsideFront = e.target.closest('#learning-card-front');
             const isInsideBack = e.target.closest('#learning-card-back');
 
-            // 4. 카드 영역 내부인 경우
+            // 5. 카드 영역 내부인 경우
             if (isInsideFront || isInsideBack) {
-                // (주의) 단어(interactive-word) 위라면 자체 메뉴가 뜨도록 놔둡니다.
+                // 단어 위라면 단어 메뉴(learning.js 처리)를 위해 통과
                 if (e.target.classList.contains('interactive-word')) return;
 
-                // [핵심 변경] 기능이 없는 빈 공간을 우클릭했다면? -> "기존 메뉴 닫기"
+                // 카드 내 빈 공간 -> "기존 메뉴 닫기"
                 e.preventDefault();
-                ui.hideAllMenus(); 
+                ui.hideAllMenus();
                 return;
             }
 
-            // 5. 카드 바깥 배경인 경우 -> "새 카드/삭제" 메뉴 호출
+            // 6. 학습 모드이고 + 카드 바깥 배경인 경우 -> "새 카드/삭제" 메뉴 호출
             e.preventDefault();
-            ui.hideAllMenus(); // 안전하게 기존 메뉴 닫고
-            ui.showCardContextMenu(e); // 새 메뉴 오픈
+            ui.hideAllMenus();
+            ui.showCardContextMenu(e);
         });
 
         window.addEventListener('beforeunload', () => {
