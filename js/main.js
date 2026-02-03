@@ -26,7 +26,7 @@ const studyTracker = {
         this.saveInterval = setInterval(() => {
             if (this.sessionSeconds > 0) {
                 try {
-                    const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0');
+                    const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
                     localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
                     this.sessionSeconds = 0;
                 } catch (e) { console.error(e); }
@@ -42,7 +42,7 @@ const studyTracker = {
         this.saveInterval = null;
         try {
             if (this.sessionSeconds > 0) {
-                const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0');
+                const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
                 localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
             }
         } catch (e) { console.error(e); }
