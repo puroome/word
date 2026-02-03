@@ -125,24 +125,6 @@ export const learningMode = {
                 ui.hideCardContextMenu();
             });
         }
-        if (this.elements.deleteCardBtn) {
-            this.elements.deleteCardBtn.addEventListener('click', () => {
-                ui.showDeleteConfirmModal();
-                ui.hideCardContextMenu();
-            });
-        }
-
-        if (this.elements.deleteConfirmBtn) {
-            this.elements.deleteConfirmBtn.addEventListener('click', () => {
-                this.deleteCurrentCard();
-                ui.hideDeleteConfirmModal();
-            });
-        }
-        if (this.elements.deleteCancelBtn) {
-            this.elements.deleteCancelBtn.addEventListener('click', () => {
-                ui.hideDeleteConfirmModal();
-            });
-        }
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
