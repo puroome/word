@@ -720,11 +720,5 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
             }
         } catch (e) {}
 
-        if (database) {
-            const { ref, remove } = window.firebaseSDK;
-            const safeKey = word.replace(/[.#$[\]/]/g, '_');
-            const wordRef = ref(database, `/vocabulary/${safeKey}`);
-            remove(wordRef).catch(e => console.warn(e));
-        }
     }
 };
