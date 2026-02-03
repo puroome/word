@@ -188,35 +188,6 @@ export const translationCache = {
     }
 };
 
-export const imageDBCache = {
-    db: null, dbName: 'imageCacheDB', storeName: 'imageStore',
-    init() {
-        return new Promise((resolve) => {
-            if (!('indexedDB' in window)) return resolve();
-            const request = indexedDB.open(this.dbName, 1);
-            request.onupgradeneeded = e => e.target.result.createObjectStore(this.storeName);
-            request.onsuccess = e => { this.db = e.target.result; resolve(); };
-            request.onerror = () => resolve();
-        });
-    },
-    async loadImage(url) {
-        if (!this.db || !url) return url;
-        const cached = await new Promise(r => {
-             const req = this.db.transaction([this.storeName]).objectStore(this.storeName).get(url);
-             req.onsuccess = () => r(req.result);
-             req.onerror = () => r(null);
-        });
-        if (cached) return URL.createObjectURL(cached);
-        try {
-            const res = await fetch(url);
-            if (!res.ok) return url;
-            const blob = await res.blob();
-            this.db.transaction([this.storeName], 'readwrite').objectStore(this.storeName).put(blob, url);
-            return URL.createObjectURL(blob);
-        } catch (e) { return url; }
-    }
-};
-
 // --- Audio Effects ---
 export function playSingleBeep({ frequency, duration = 0.1, type = 'sine', gain = 0.3, endFrequency }) {
     if (!state.audioContext) return;
