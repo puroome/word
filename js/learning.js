@@ -125,7 +125,7 @@ export const learningMode = {
                 ui.hideCardContextMenu();
             });
         }
-
+        
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
             if (!e.target.closest('#card-context-menu')) ui.hideCardContextMenu();
@@ -156,7 +156,7 @@ export const learningMode = {
         if (e.target.closest('#word-header') || 
             e.target.closest('#meaning-container') || 
             e.target.closest('#explanation-container') || 
-            e.target.closest('#learning-card-back') || 
+            e.target.closest('#learning-card-back')) { 
             return;
         }
         e.preventDefault();
