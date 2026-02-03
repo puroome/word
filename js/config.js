@@ -19,7 +19,6 @@ export const state = {
     currentVoiceSet: 'UK',
     isSpeaking: false,
     audioContext: null,
-    currentSource: null,
     wordList: [],
     currentProgress: {},
     isWordListReady: false,
