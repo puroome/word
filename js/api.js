@@ -94,17 +94,26 @@ speak(text, contentType = 'word') {
                 // 이름(Name)보다 언어코드(Lang) 일치를 최우선으로 봅니다.
                 // ==============================================================
                 
-                let selectedVoice = null;
+let selectedVoice = null;
 
-                // 1단계: 언어 코드가 정확히 일치하는 것 찾기 (대소문자/언더바 무시)
-                // 예: 'en-GB', 'en_GB', 'en-gb' 등
-                selectedVoice = voices.find(v => {
-                    const vLang = v.lang.replace('_', '-').toLowerCase();
-                    return vLang === targetLang;
-                });
+                // [신규] 0단계: UK일 경우 최우선 순위 'Microsoft Ryan' 찾기
+                // 정확한 이름: "Microsoft Ryan Online (Natural) - English (United Kingdom)"
+                if (isUK) {
+                    selectedVoice = voices.find(v => 
+                        v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
+                    );
+                }
+
+                // 1단계: 아직 못 찾았다면, 언어 코드가 정확히 일치하는 것 찾기 (대소문자/언더바 무시)
+                // (주의: 0단계에서 찾았다면 이 단계는 건너뛰어야 하므로 if (!selectedVoice) 추가)
+                if (!selectedVoice) {
+                    selectedVoice = voices.find(v => {
+                        const vLang = v.lang.replace('_', '-').toLowerCase();
+                        return vLang === targetLang;
+                    });
+                }
 
                 // 2단계: 만약 못 찾았다면, 해당 국가 코드를 포함하는 것 찾기
-                // 예: 'en-GB-x-fis' 같은 변종 대응
                 if (!selectedVoice) {
                     selectedVoice = voices.find(v => {
                         const vLang = v.lang.replace('_', '-').toLowerCase();
@@ -119,20 +128,20 @@ speak(text, contentType = 'word') {
                 }
 
                 // ==============================================================
-                
+                 
                 // 목소리 적용
                 if (selectedVoice) {
                     utterance.voice = selectedVoice;
                     utterance.lang = selectedVoice.lang;
                     // console.log(`[TTS] 적용된 목소리: ${selectedVoice.name} (${selectedVoice.lang})`);
                 } else {
-                    // 목소리 객체를 못 찾아도 언어 코드는 강제로 박아넣음 (엔진이 알아서 바꾸길 기대)
+                    // 목소리 객체를 못 찾아도 언어 코드는 강제로 박아넣음
                     utterance.lang = isUK ? 'en-GB' : 'en-US';
                     // console.log(`[TTS] 목소리 못 찾음. 언어 코드만 적용: ${utterance.lang}`);
                 }
 
                 utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
-                
+                 
                 state.isSpeaking = true;
 
                 utterance.onend = () => {
