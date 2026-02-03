@@ -146,9 +146,14 @@ speak(text, contentType = 'word') {
                 window.speechSynthesis.speak(utterance);
             };
 
-            // [안드로이드 필수] voices가 비어있으면 로드될 때까지 대기
+// [안드로이드 필수] voices가 비어있으면 로드될 때까지 대기
             if (window.speechSynthesis.getVoices().length === 0) {
-                window.speechSynthesis.onvoiceschanged = setVoice;
+                // [수정됨] 이벤트가 한 번 발생하면 즉시 리스너를 제거하여 중복 실행(3번 반복) 및 섞임 방지
+                const voiceChangedHandler = () => {
+                    window.speechSynthesis.onvoiceschanged = null; // 중요: 리스너 연결 해제
+                    setVoice();
+                };
+                window.speechSynthesis.onvoiceschanged = voiceChangedHandler;
             } else {
                 setVoice();
             }
