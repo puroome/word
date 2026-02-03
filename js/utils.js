@@ -164,33 +164,6 @@ export const utils = {
 };
 
 // --- Caches ---
-export const audioCache = {
-    db: null, dbName: 'ttsAudioCacheDB', storeName: 'audioStore',
-    init() {
-        return new Promise((resolve, reject) => {
-            if (!('indexedDB' in window)) { console.warn('IndexedDB not supported'); return resolve(); }
-            const request = indexedDB.open(this.dbName, 1);
-            request.onupgradeneeded = event => { const db = event.target.result; if (!db.objectStoreNames.contains(this.storeName)) { db.createObjectStore(this.storeName); } };
-            request.onsuccess = event => { this.db = event.target.result; resolve(); };
-            request.onerror = event => { reject(event.target.error); };
-        });
-    },
-    getAudio(key) {
-        return new Promise((resolve, reject) => {
-            if (!this.db) return resolve(null);
-            const transaction = this.db.transaction([this.storeName], 'readonly');
-            const store = transaction.objectStore(this.storeName);
-            const request = store.get(key);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = (e) => reject(e.target.error);
-        });
-    },
-    saveAudio(key, data) {
-        if (!this.db) return;
-        try { this.db.transaction([this.storeName], 'readwrite').objectStore(this.storeName).put(data, key); } catch(e){}
-    }
-};
-
 export const translationCache = {
     db: null, dbName: 'translationCacheDB', storeName: 'translations',
     init() {
