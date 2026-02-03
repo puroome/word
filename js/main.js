@@ -147,7 +147,7 @@ const app = {
         } catch (e) { console.error(e); }
 
         try {
-            await Promise.all([translationCache.init(), imageDBCache.init()]);
+            await Promise.all([translationCache.init()]);
         } catch (e) { console.error(e); }
 
         await this.syncOfflineData();
