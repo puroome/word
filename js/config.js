@@ -26,7 +26,6 @@ export const state = {
     longPressTimer: null,
     translationTimer: null,
     activeTranslationTarget: null,
-    favorites: [],
     LOCAL_STORAGE_KEYS: {
         TTS_VOICE: 'student_ttsVoice',
         LAST_INDEX: 'student_lastIndex_main',
