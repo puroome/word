@@ -64,72 +64,72 @@ speak(text, contentType = 'word') {
         return new Promise((resolve) => {
             if (!text || !text.trim()) return resolve();
 
-            // 1. 브라우저 TTS 지원 확인
             if (!window.speechSynthesis) {
                 console.warn("이 브라우저는 TTS를 지원하지 않습니다.");
                 return resolve();
             }
 
-            // 2. 기존 재생 중단 (중복 방지)
             window.speechSynthesis.cancel();
 
-            // [유지] sb, sth 발음 치환
+            // [유지] 발음 치환
             const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
-           
-            // 3. 발화 객체 생성
+
+            // 발화 객체 생성
             const utterance = new SpeechSynthesisUtterance(processedText);
 
-            // [내부 함수] 목소리 선택 및 재생 실행 로직
-            const setVoiceAndSpeak = () => {
+            // [중요] 목소리 세팅 함수
+            const setVoice = () => {
                 const voices = window.speechSynthesis.getVoices();
-                
-                // 영국(UK) vs 미국(US) 설정
                 const isUK = state.currentVoiceSet === 'UK';
-                const targetLangCode = isUK ? 'en-GB' : 'en-US';
-
-                // (A) 1순위: PC용 고품질 (Microsoft Natural)
-                const targetName = isUK 
-                    ? "Microsoft Thomas Online (Natural) - English (United Kingdom)" 
-                    : "Microsoft Ava Online (Natural) - English (United States)";
                 
-                let selectedVoice = voices.find(v => v.name === targetName);
+                // 목표: 영국이면 'en-GB', 미국이면 'en-US'
+                // (안드로이드는 en_GB 처럼 언더바를 쓰기도 하므로 정규화 필요)
+                const targetLang = isUK ? 'en-gb' : 'en-us';
 
-                // (B) 2순위: [안드로이드 중요] Google/Samsung 엔진의 해당 국가 발음 찾기
-                // 안드로이드는 언어 코드가 'en_GB'처럼 언더바(_)로 올 수도 있어 replace 처리함
+                // ==============================================================
+                // [안드로이드 삼성/구글 TTS 맞춤형 목소리 찾기]
+                // 이름(Name)보다 언어코드(Lang) 일치를 최우선으로 봅니다.
+                // ==============================================================
+                
+                let selectedVoice = null;
+
+                // 1단계: 언어 코드가 정확히 일치하는 것 찾기 (대소문자/언더바 무시)
+                // 예: 'en-GB', 'en_GB', 'en-gb' 등
+                selectedVoice = voices.find(v => {
+                    const vLang = v.lang.replace('_', '-').toLowerCase();
+                    return vLang === targetLang;
+                });
+
+                // 2단계: 만약 못 찾았다면, 해당 국가 코드를 포함하는 것 찾기
+                // 예: 'en-GB-x-fis' 같은 변종 대응
                 if (!selectedVoice) {
-                    selectedVoice = voices.find(v => 
-                        v.lang.replace('_', '-') === targetLangCode && 
-                        (v.name.includes('Google') || v.name.includes('Samsung'))
-                    );
+                    selectedVoice = voices.find(v => {
+                        const vLang = v.lang.replace('_', '-').toLowerCase();
+                        return vLang.includes(targetLang);
+                    });
                 }
 
-                // (C) 3순위: 해당 언어 코드와 일치하는 Microsoft 계열 (PC 일반)
+                // 3단계: 그래도 없다면 PC용 Microsoft Natural Voice 시도 (PC 환경 대비)
                 if (!selectedVoice) {
-                    selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft'));
+                    const naturalName = isUK ? "United Kingdom" : "United States";
+                    selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
                 }
 
-                // (D) 4순위: 해당 언어 코드와 일치하는 아무 목소리 (Chrome 등)
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => v.lang.replace('_', '-') === targetLangCode);
-                }
-
-                // (E) 5순위: 언어 코드 포함 여부 (가장 넓은 범위)
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
-                }
-
+                // ==============================================================
+                
                 // 목소리 적용
                 if (selectedVoice) {
                     utterance.voice = selectedVoice;
                     utterance.lang = selectedVoice.lang;
+                    // console.log(`[TTS] 적용된 목소리: ${selectedVoice.name} (${selectedVoice.lang})`);
                 } else {
-                    utterance.lang = 'en-US'; // 최후의 수단
+                    // 목소리 객체를 못 찾아도 언어 코드는 강제로 박아넣음 (엔진이 알아서 바꾸길 기대)
+                    utterance.lang = isUK ? 'en-GB' : 'en-US';
+                    // console.log(`[TTS] 목소리 못 찾음. 언어 코드만 적용: ${utterance.lang}`);
                 }
 
-                // 속도 조절
                 utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
                 
-                // 상태 관리
                 state.isSpeaking = true;
 
                 utterance.onend = () => {
@@ -138,20 +138,19 @@ speak(text, contentType = 'word') {
                 };
 
                 utterance.onerror = (e) => {
-                    console.error("TTS 재생 오류:", e);
+                    console.error("TTS 오류:", e);
                     state.isSpeaking = false;
                     resolve();
                 };
 
-                // 재생 시작
                 window.speechSynthesis.speak(utterance);
             };
 
-            // [안드로이드 대응] 목소리 목록이 아직 로드되지 않았을 경우 대기
+            // [안드로이드 필수] voices가 비어있으면 로드될 때까지 대기
             if (window.speechSynthesis.getVoices().length === 0) {
-                window.speechSynthesis.onvoiceschanged = setVoiceAndSpeak;
+                window.speechSynthesis.onvoiceschanged = setVoice;
             } else {
-                setVoiceAndSpeak();
+                setVoice();
             }
         });
     },
