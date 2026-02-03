@@ -1,5 +1,5 @@
 import { config, state } from './config.js';
-import { audioCache, translationCache, utils } from './utils.js';
+import { translationCache, utils } from './utils.js';
 
 let db = null; // Firestore
 let database = null; // Realtime DB
