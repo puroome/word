@@ -60,7 +60,7 @@ export const api = {
     // 2순위: 그 외 Microsoft 계열
     // 3순위: Google 및 기타 브라우저 기본 음성
     // ==========================================================================
-    speak(text, contentType = 'word') {
+speak(text, contentType = 'word') {
         return new Promise((resolve) => {
             if (!text || !text.trim()) return resolve();
 
@@ -73,66 +73,86 @@ export const api = {
             // 2. 기존 재생 중단 (중복 방지)
             window.speechSynthesis.cancel();
 
+            // [유지] sb, sth 발음 치환
             const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
-          
-            // 3. 발화 설정 및 목소리 목록 로드
+           
+            // 3. 발화 객체 생성
             const utterance = new SpeechSynthesisUtterance(processedText);
-            const voices = window.speechSynthesis.getVoices();
 
-            // 4. 영국(UK) vs 미국(US) 목소리 선택 로직
-            const isUK = state.currentVoiceSet === 'UK';
-            const targetLangCode = isUK ? 'en-GB' : 'en-US';
+            // [내부 함수] 목소리 선택 및 재생 실행 로직
+            const setVoiceAndSpeak = () => {
+                const voices = window.speechSynthesis.getVoices();
+                
+                // 영국(UK) vs 미국(US) 설정
+                const isUK = state.currentVoiceSet === 'UK';
+                const targetLangCode = isUK ? 'en-GB' : 'en-US';
 
-            // [핵심 변경] 요청하신 Natural Voice 이름 정의
-            const targetName = isUK 
-                ? "Microsoft Thomas Online (Natural) - English (United Kingdom)" 
-                : "Microsoft Ava Online (Natural) - English (United States)";
+                // (A) 1순위: PC용 고품질 (Microsoft Natural)
+                const targetName = isUK 
+                    ? "Microsoft Thomas Online (Natural) - English (United Kingdom)" 
+                    : "Microsoft Ava Online (Natural) - English (United States)";
+                
+                let selectedVoice = voices.find(v => v.name === targetName);
 
-            // (A) 1순위: 정확한 Natural Voice 찾기 (Edge 등에서 활성화)
-            let selectedVoice = voices.find(v => v.name === targetName);
+                // (B) 2순위: [안드로이드 중요] Google/Samsung 엔진의 해당 국가 발음 찾기
+                // 안드로이드는 언어 코드가 'en_GB'처럼 언더바(_)로 올 수도 있어 replace 처리함
+                if (!selectedVoice) {
+                    selectedVoice = voices.find(v => 
+                        v.lang.replace('_', '-') === targetLangCode && 
+                        (v.name.includes('Google') || v.name.includes('Samsung'))
+                    );
+                }
 
-            // (B) 2순위: 없다면 해당 언어의 다른 Microsoft 목소리 찾기
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft'));
-            }
+                // (C) 3순위: 해당 언어 코드와 일치하는 Microsoft 계열 (PC 일반)
+                if (!selectedVoice) {
+                    selectedVoice = voices.find(v => v.lang === targetLangCode && v.name.includes('Microsoft'));
+                }
 
-            // (C) 3순위: 그것도 없다면 Google 등 해당 언어권 목소리 (Chrome 등)
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang === targetLangCode);
-            }
+                // (D) 4순위: 해당 언어 코드와 일치하는 아무 목소리 (Chrome 등)
+                if (!selectedVoice) {
+                    selectedVoice = voices.find(v => v.lang.replace('_', '-') === targetLangCode);
+                }
 
-            // (D) 4순위: 정말 없으면 언어 코드만이라도 일치하는 것 (가장 넓은 범위)
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
-            }
+                // (E) 5순위: 언어 코드 포함 여부 (가장 넓은 범위)
+                if (!selectedVoice) {
+                    selectedVoice = voices.find(v => v.lang.includes(targetLangCode));
+                }
 
-            // 5. 목소리 적용
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-                utterance.lang = selectedVoice.lang;
+                // 목소리 적용
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                    utterance.lang = selectedVoice.lang;
+                } else {
+                    utterance.lang = 'en-US'; // 최후의 수단
+                }
+
+                // 속도 조절
+                utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
+                
+                // 상태 관리
+                state.isSpeaking = true;
+
+                utterance.onend = () => {
+                    state.isSpeaking = false;
+                    resolve();
+                };
+
+                utterance.onerror = (e) => {
+                    console.error("TTS 재생 오류:", e);
+                    state.isSpeaking = false;
+                    resolve();
+                };
+
+                // 재생 시작
+                window.speechSynthesis.speak(utterance);
+            };
+
+            // [안드로이드 대응] 목소리 목록이 아직 로드되지 않았을 경우 대기
+            if (window.speechSynthesis.getVoices().length === 0) {
+                window.speechSynthesis.onvoiceschanged = setVoiceAndSpeak;
             } else {
-                utterance.lang = 'en-US'; // 최후의 수단
+                setVoiceAndSpeak();
             }
-
-            // 6. 속도 조절 (1.0배속)
-            utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
-            
-            // 7. 상태 관리 (스피커 아이콘 애니메이션용)
-            state.isSpeaking = true;
-
-            utterance.onend = () => {
-                state.isSpeaking = false;
-                resolve();
-            };
-
-            utterance.onerror = (e) => {
-                console.error("TTS 재생 오류:", e);
-                state.isSpeaking = false;
-                resolve();
-            };
-
-            // 8. 재생 시작
-            window.speechSynthesis.speak(utterance);
         });
     },
 
