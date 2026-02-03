@@ -71,7 +71,6 @@ const app = {
         dashboardContainer: document.getElementById('dashboard-container'),
         imeWarning: document.getElementById('ime-warning'),
         globalLoader: document.getElementById('global-loader'),
-        noSampleMessage: document.getElementById('no-sample-message'),
         wordContextMenu: document.getElementById('word-context-menu'),
         selectLearningBtn: document.getElementById('select-learning-btn'),
         selectQuizBtn: document.getElementById('select-quiz-btn'),
@@ -249,7 +248,6 @@ const app = {
 
         window.addEventListener('navigate', (e) => this.navigateTo(e.detail.mode, e.detail.options));
         window.addEventListener('showToast', (e) => this.showToast(e.detail.message, e.detail.isError));
-        window.addEventListener('showNoSampleMessage', () => this.showNoSampleMessage());
         window.addEventListener('showImeWarning', () => this.showImeWarning());
         window.addEventListener('syncRequest', () => this.syncOfflineData());
         document.addEventListener('searchWord', (e) => this.searchWordInLearningMode(e.detail));
@@ -439,14 +437,7 @@ const app = {
             this.elements.imeWarning.classList.add('hidden');
         }, 2000);
     },
-    showNoSampleMessage() {
-        const msgEl = this.elements.noSampleMessage;
-        msgEl.classList.remove('hidden', 'opacity-0');
-        setTimeout(() => {
-            msgEl.classList.add('opacity-0');
-            setTimeout(() => msgEl.classList.add('hidden'), 500);
-        }, 1500);
-    },
+
     searchWordInLearningMode(word) {
         if (!word) return;
         this.navigateTo('learning');
