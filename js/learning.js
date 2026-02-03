@@ -157,7 +157,6 @@ export const learningMode = {
             e.target.closest('#meaning-container') || 
             e.target.closest('#explanation-container') || 
             e.target.closest('#learning-card-back') || 
-            e.target.closest('#learning-fixed-buttons')) {
             return;
         }
         e.preventDefault();
