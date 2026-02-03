@@ -3,6 +3,7 @@ import { audioCache, translationCache, utils } from './utils.js';
 
 let db = null; // Firestore
 let database = null; // Realtime DB
+let activeSpeakId = 0; // 👈 [추가 1] 여기에 이 줄만 추가하세요.
 
 export const api = {
     
@@ -62,6 +63,7 @@ export const api = {
     // ==========================================================================
 speak(text, contentType = 'word') {
         return new Promise((resolve) => {
+            const myRequestId = ++activeSpeakId;
             if (!text || !text.trim()) return resolve();
 
             if (!window.speechSynthesis) {
@@ -79,6 +81,7 @@ speak(text, contentType = 'word') {
 
             // [중요] 목소리 세팅 함수
             const setVoice = () => {
+                if (myRequestId !== activeSpeakId) return;
                 const voices = window.speechSynthesis.getVoices();
                 const isUK = state.currentVoiceSet === 'UK';
                 
