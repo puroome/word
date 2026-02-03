@@ -1,5 +1,5 @@
 import { config, state } from './config.js';
-import { utils, translationCache, imageDBCache } from './utils.js';
+import { utils, translationCache } from './utils.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
 import { learningMode } from './learning.js';
