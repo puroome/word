@@ -226,7 +226,6 @@ export function playSingleBeep({ frequency, duration = 0.1, type = 'sine', gain 
     const now = state.audioContext.currentTime;
     osc.type = type;
     osc.frequency.setValueAtTime(frequency, now);
-    if (endFrequency) osc.frequency.linearRampToValueAtTime(endFrequency, now + duration);
     gNode.gain.setValueAtTime(0, now);
     gNode.gain.linearRampToValueAtTime(gain, now + 0.01);
     gNode.gain.exponentialRampToValueAtTime(0.0001, now + duration + 0.01);
