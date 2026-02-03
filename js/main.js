@@ -233,50 +233,17 @@ const app = {
             this._renderMode(mode, options);
         });
 
-// ===============================================================
-        // [최종 수정] 전역 우클릭 제어 (학습 모드에서만 동작)
-        // ===============================================================
         document.addEventListener('contextmenu', (e) => {
-            // 1. 입력창, 텍스트영역 등에서는 기본 메뉴 허용
-            if (e.target.tagName === 'INPUT' || 
-                e.target.tagName === 'TEXTAREA' || 
-                e.target.isContentEditable) {
-                return; 
-            }
-
-            // 2. 이미 떠있는 커스텀 메뉴 위 클릭은 무시
-            if (e.target.closest('#word-context-menu') || 
-                e.target.closest('#edit-context-menu') || 
-                e.target.closest('#card-context-menu')) {
-                return;
-            }
-
-            // 3. [추가된 조건] 현재 '학습 모드' 화면이 아니라면 작동 중지
-            // (퀴즈, 대시보드, 선택 화면 등에서는 메뉴가 뜨지 않게 함)
-            const learningContainer = document.getElementById('learning-mode-container');
-            if (!learningContainer || learningContainer.classList.contains('hidden')) {
-                return; 
-            }
-
-            // 4. 클릭 위치 확인 (카드 내부인가?)
-            const isInsideFront = e.target.closest('#learning-card-front');
-            const isInsideBack = e.target.closest('#learning-card-back');
-
-            // 5. 카드 영역 내부인 경우
-            if (isInsideFront || isInsideBack) {
-                // 단어 위라면 단어 메뉴(learning.js 처리)를 위해 통과
-                if (e.target.classList.contains('interactive-word')) return;
-
-                // 카드 내 빈 공간 -> "기존 메뉴 닫기"
+            const target = e.target;
+            const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
+            const isCustomContextMenu = target.closest('#word-context-menu');
+            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
+            const isEditContextMenu = target.closest('#edit-context-menu');
+            const isEditTrigger = target.closest('#meaning-container, #explanation-container');
+            
+            if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
                 e.preventDefault();
-                ui.hideAllMenus();
-                return;
             }
-
-            // 6. 학습 모드이고 + 카드 바깥 배경인 경우 -> "새 카드/삭제" 메뉴 호출
-            e.preventDefault();
-            ui.hideAllMenus();
-            ui.showCardContextMenu(e);
         });
 
         window.addEventListener('beforeunload', () => {
