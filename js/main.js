@@ -12,7 +12,6 @@ const studyTracker = {
     timerInterval: null,
     saveInterval: null,
     INACTIVITY_LIMIT: 30000,
-    init() {},
     start() {
         if (this.timerInterval) return;
         this.lastActivityTimestamp = Date.now();
