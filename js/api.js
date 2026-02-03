@@ -377,7 +377,7 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
     console.log(`🚀 AI 예문 생성 요청 (Direct Gemini): ${word}`);
 
     // 모델명: gemini-1.5-flash (빠르고 저렴함)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     const prompt = `
         Word: "${word}"
@@ -422,7 +422,7 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
     async fetchWordInfoFromAI(word) {
         
         // 품질을 위해 2.5-flash 모델 유지
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
         const prompt = `
             Act as a linguistics expert for US high school students.
