@@ -111,9 +111,7 @@ export const learningMode = {
             if(e.target.closest('button')) return; 
             preventCardMenu(e, 'back');
         });
-
-        this.elements.learningModeContainer.addEventListener('contextmenu', (e) => this.handleCardContextMenu(e));
-
+        
         this.elements.editContextBtn.addEventListener('click', () => {
             this.enterEditMode(this.state.editingSide);
             ui.hideEditContextMenu();
