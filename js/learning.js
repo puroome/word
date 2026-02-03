@@ -1,6 +1,6 @@
-import { state } from './config.js';
+import { config, state } from './config.js';
 import { api } from './api.js';
-import { utils, imageDBCache } from './utils.js';
+import { utils } from './utils.js';
 import { ui } from './ui.js';
 
 export const learningMode = {
@@ -272,7 +272,7 @@ export const learningMode = {
         }
 
         const editImgUrl = 'images/cat-edit.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(editImgUrl);
+        this.elements.sampleBtnImg.src = editImgUrl;
     },
 async saveAndExitEditMode() {
         // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
@@ -635,7 +635,7 @@ async saveAndExitEditMode() {
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
         const sampleImgUrl = 'images/cat-delivery.png';
         const noSampleImgUrl = 'images/cat-add.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
+        this.elements.sampleBtnImg.src = hasSample ? sampleImgUrl : noSampleImgUrl;
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
@@ -699,7 +699,7 @@ async saveAndExitEditMode() {
 
         this.appendAIGenButton(this.elements.backContent, wordData);
         const backImgUrl = 'images/cat-remove.png';
-        this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+        this.elements.sampleBtnImg.src = backImgUrl;
     },
 
     async handleFlip() {
@@ -728,11 +728,11 @@ async saveAndExitEditMode() {
             
             this.appendAIGenButton(this.elements.backContent, wordData);
             this.elements.cardBack.classList.add('is-slid-up');
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(backImgUrl);
+            this.elements.sampleBtnImg.src = backImgUrl;
         } else {
             this.elements.cardBack.classList.remove('is-slid-up');
             const hasSample = (wordData.sample && wordData.sample.trim() !== '') || (wordData.AISample && wordData.AISample.en);
-            this.elements.sampleBtnImg.src = await imageDBCache.loadImage(hasSample ? sampleImgUrl : noSampleImgUrl);
+            this.elements.sampleBtnImg.src = hasSample ? sampleImgUrl : noSampleImgUrl;
         }
     },
     startMistakeReview(mistakeWords) {
