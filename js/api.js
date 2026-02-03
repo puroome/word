@@ -3,7 +3,8 @@ import { translationCache, utils } from './utils.js';
 
 let db = null; // Firestore
 let database = null; // Realtime DB
-let activeSpeakId = 0; // 👈 [추가 1] 여기에 이 줄만 추가하세요.
+let activeSpeakId = 0;
+const GEMINI_API_KEY = "AIzaSyAdXvE2SkyEbPmU" + "XtLUeVi7f-niGpXUu_0";
 
 export const api = {
     
@@ -375,10 +376,6 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
 
     console.log(`🚀 AI 예문 생성 요청 (Direct Gemini): ${word}`);
 
-    // ✅ 유료 API KEY (여기에 적용)
-        const k1 = "AIzaSyAdXvE2SkyEbPmU";
-        const k2 = "XtLUeVi7f-niGpXUu_0";
-        const apiKey = k1 + k2; 
     // 모델명: gemini-1.5-flash (빠르고 저렴함)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
@@ -423,9 +420,6 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
     
 // [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
     async fetchWordInfoFromAI(word) {
-        const k1 = "AIzaSyAdXvE2SkyEbPmU";
-        const k2 = "XtLUeVi7f-niGpXUu_0";
-        const apiKey = k1 + k2; 
         
         // 품질을 위해 2.5-flash 모델 유지
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
