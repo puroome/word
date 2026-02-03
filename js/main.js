@@ -150,7 +150,6 @@ const app = {
             await Promise.all([translationCache.init(), imageDBCache.init()]);
         } catch (e) { console.error(e); }
 
-        studyTracker.init();
         await this.syncOfflineData();
 
         try {
