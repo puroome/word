@@ -1,5 +1,5 @@
 import { config, state } from './config.js';
-import { utils, audioCache, translationCache, imageDBCache } from './utils.js';
+import { utils, translationCache, imageDBCache } from './utils.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
 import { learningMode } from './learning.js';
@@ -148,7 +148,7 @@ const app = {
         } catch (e) { console.error(e); }
 
         try {
-            await Promise.all([audioCache.init(), translationCache.init(), imageDBCache.init()]);
+            await Promise.all([translationCache.init(), imageDBCache.init()]);
         } catch (e) { console.error(e); }
 
         studyTracker.init();
