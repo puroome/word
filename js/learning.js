@@ -757,7 +757,6 @@ async saveAndExitEditMode() {
     startMistakeReview(mistakeWords) {
         this.state.isMistakeMode = true;
         this.state.isFavoriteMode = false;
-        if (!state.isWordListReady) {}
         const wordMap = new Map(state.wordList.map(wordObj => [wordObj.word, wordObj]));
         this.state.currentWordList = mistakeWords.map(word => wordMap.get(word)).filter(Boolean);
         this.state.currentIndex = 0;
