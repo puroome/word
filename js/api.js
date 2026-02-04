@@ -548,7 +548,7 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
             scriptUrl.searchParams.append('original_word', originalWord);
             
             if (updateData.word !== undefined) scriptUrl.searchParams.append('word', updateData.word);
-            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos || "n/a");
+            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
             if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
             
