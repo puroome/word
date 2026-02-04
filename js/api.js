@@ -616,12 +616,19 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
 
     // [수정 1] 새 단어 생성 (캐시 도미노 업데이트 적용 완료)
     async createWord(cardData, afterWord = null) {
+        
+        // ▼▼▼ [추가된 코드] POS가 없으면 자동으로 'n/a' 설정 ▼▼▼
+        if (!cardData.pos || !cardData.pos.trim()) {
+            cardData.pos = "n/a";
+        }
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
         // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
             scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || "");
+            scriptUrl.searchParams.append('pos', cardData.pos || ""); // 위에서 n/a가 할당되었으므로 n/a가 전송됨
             scriptUrl.searchParams.append('meaning', cardData.meaning || "");
             scriptUrl.searchParams.append('explanation', cardData.explanation || "");
             scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
@@ -655,7 +662,6 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 }
 
                 // (2) 도미노: 삽입 위치 뒤에 있는 모든 단어들의 index를 +1씩 밀어내기
-                // 주의: splice로 넣기 '전'에 기존 단어들의 번호를 먼저 밀어야 함
                 for (let i = insertIndex; i < words.length; i++) {
                     if (typeof words[i].index === 'number') {
                         words[i].index += 1;
