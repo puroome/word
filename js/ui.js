@@ -47,52 +47,41 @@ export const ui = {
         });
         return fragment;
     },
-    renderExplanationText(targetElement, text) {
+    
+renderExplanationText(targetElement, text) {
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
-        const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
-        text.split('\n').forEach((line, lineIndex, lineArr) => {
-            let lastIndex = 0;
-            let match;
-            while ((match = regex.exec(line))) {
-                if (match.index > lastIndex) {
-                    targetElement.appendChild(document.createTextNode(line.substring(lastIndex, match.index)));
-                }
-                const [_, nonClickable, englishPhrase] = match;
-                if (englishPhrase) {
-                    const span = document.createElement('span');
-                    span.textContent = englishPhrase;
-                    if (!nonInteractiveWords.has(englishPhrase.toLowerCase())) {
-                        span.className = 'interactive-word';
-                        span.onclick = () => {
-                            clearTimeout(state.longPressTimer);
-                            api.speak(englishPhrase, 'word');
-                        };
-                        span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
-                        let touchMove = false;
-                        span.addEventListener('touchstart', (e) => {
-                            touchMove = false;
-                            clearTimeout(state.longPressTimer);
-                            state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, englishPhrase); }, 700);
-                        }, { passive: true });
-                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                        span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
-                    }
-                    targetElement.appendChild(span);
-                } else if (nonClickable) {
-                    targetElement.appendChild(document.createTextNode(nonClickable));
-                }
-                lastIndex = regex.lastIndex;
+
+        // HTML 태그 확인 (단순 줄바꿈 제외)
+        const hasHTML = /<[a-z][\s\S]*>/i.test(text);
+        if (!hasHTML) {
+            text = text.replace(/\n/g, '<br>');
+        }
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = text;
+
+        const processNode = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const content = node.textContent;
+                if (!content.trim()) return document.createTextNode(content);
+                return this.createInteractiveFragment(content);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName.toLowerCase() === 'br') return node.cloneNode(true);
+                const newNode = node.cloneNode(false);
+                Array.from(node.childNodes).forEach(child => {
+                    newNode.appendChild(processNode(child));
+                });
+                return newNode;
             }
-            if (lastIndex < line.length) {
-                targetElement.appendChild(document.createTextNode(line.substring(lastIndex)));
-            }
-            if (lineIndex < lineArr.length - 1) {
-                targetElement.appendChild(document.createElement('br'));
-            }
+            return node.cloneNode(true);
+        };
+
+        Array.from(tempDiv.childNodes).forEach(child => {
+            targetElement.appendChild(processNode(child));
         });
     },
-
+    
     displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
