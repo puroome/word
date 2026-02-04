@@ -137,31 +137,35 @@ export const learningMode = {
         this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('mousemove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('mouseup', this.handleProgressBarInteraction.bind(this));
-        this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
+this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
         document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
-    },
 
-    handleEditContextMenu(e, side) {
-        if (this.state.isEditing) return; 
-        if (e.target.classList.contains('interactive-word')) return;
-        e.preventDefault();
-        this.state.editingSide = side; 
-        ui.showEditContextMenu(e);
-    },
+        // ============================================================
+        // [신규 추가] Explanation 영역 클릭 시 단어 읽기 (서식 적용된 텍스트 지원용)
+        // ============================================================
+        this.elements.explanationDisplay.addEventListener('click', (e) => {
+            // 편집 모드이거나, 이미 처리된(기존 TTS) 단어면 패스
+            if (this.state.isEditing) return;
+            if (e.target.classList.contains('interactive-word')) return;
 
-    handleCardContextMenu(e) {
-        if (this.state.isEditing) return;
-        if (!this.elements.startScreen.classList.contains('hidden')) return;
-        if (e.target.closest('#word-header') || 
-            e.target.closest('#meaning-container') || 
-            e.target.closest('#explanation-container') || 
-            e.target.closest('#learning-card-back')) { 
-            return;
-        }
-        e.preventDefault();
-        ui.showCardContextMenu(e);
-    },
+            // 클릭한 위치의 단어 찾기
+            const s = window.getSelection();
+            if (s.isCollapsed) {
+                s.modify('extend', 'backward', 'word');
+                const b = s.toString();
+                s.modify('extend', 'forward', 'word');
+                const a = s.toString();
+                s.modify('move', 'forward', 'character'); // 선택 영역 해제
+                
+                const word = (b + a).trim();
+                // 영어 단어일 경우만 읽기
+                if (word && /^[a-zA-Z0-9'-]+$/.test(word)) {
+                    api.speak(word, 'word');
+                }
+            }
+        });
+    }, // 👈 bindEvents 함수 끝
 
 // [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
 async enterEditMode(side) {
@@ -535,7 +539,7 @@ async saveAndExitEditMode() {
         populateList(this.elements.suggestionsExplanationList, explanationSuggestions);
         this.elements.suggestionsContainer.classList.remove('hidden');
     },
-    async displayWord(index, silent = false) {
+async displayWord(index, silent = false) {
         this.state.isEditing = false;
         
         this.updateProgressBar(index);
@@ -557,25 +561,29 @@ async saveAndExitEditMode() {
         
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
-        // [수정] 보기 모드: contentEditable 제거 (TTS 기능 복구)
-        // HTML 태그(색상 등)는 보여주되, 편집은 불가능하게 설정
+        // 1. 뜻 (Meaning) 처리
         let meaningHtml = wordData.meaning || '';
         if (!meaningHtml.includes('<')) { 
             meaningHtml = meaningHtml.replace(/\n/g, '<br>'); 
         }
         this.elements.meaningDisplay.innerHTML = meaningHtml;
-        this.elements.meaningDisplay.contentEditable = "false"; // 읽기 전용
+        this.elements.meaningDisplay.contentEditable = "false";
         this.elements.meaningDisplay.classList.remove('outline-none');
 
-        // [수정] 설명 부분: HTML이 있으면 그대로 출력, 없으면 기존 렌더링 방식 시도
-        // (단, 서식이 저장된 경우 ui.renderExplanationText를 쓰면 태그가 깨질 수 있어 innerHTML 우선 사용)
-        let explanationHtml = wordData.explanation || '';
-        if (!explanationHtml.includes('<')) {
-            explanationHtml = explanationHtml.replace(/\n/g, '<br>');
+        // 2. 설명 (Explanation) 처리 - [핵심 수정]
+        const explanationText = wordData.explanation || '';
+        
+        // (A) HTML 태그(색상 등)가 포함된 경우 -> innerHTML 사용 (서식 보존)
+        if (/<(span|div|b|strong|i|em|font)[^>]*>/i.test(explanationText)) {
+            this.elements.explanationDisplay.innerHTML = explanationText;
+            this.elements.explanationDisplay.contentEditable = "false";
+            this.elements.explanationDisplay.classList.remove('outline-none');
+        } 
+        // (B) 일반 텍스트인 경우 -> 기존 방식 사용 (TTS 및 [대괄호] 스타일 완벽 지원)
+        else {
+            this.elements.explanationDisplay.innerHTML = ''; // 초기화
+            ui.renderExplanationText(this.elements.explanationDisplay, explanationText);
         }
-        this.elements.explanationDisplay.innerHTML = explanationHtml;
-        this.elements.explanationDisplay.contentEditable = "false"; // 읽기 전용
-        this.elements.explanationDisplay.classList.remove('outline-none');
         
         this.elements.explanationContainer.classList.remove('hidden');
 
@@ -585,8 +593,6 @@ async saveAndExitEditMode() {
         this.elements.sampleBtnImg.src = hasSample ? sampleImgUrl : noSampleImgUrl;
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
-        
-        // [중요] 여기서는 initTextSelectionEvents()를 호출하지 않습니다!
     },
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
