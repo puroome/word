@@ -987,5 +987,121 @@ async saveAndExitEditMode() {
         });
         p.appendChild(sentenceContent);
         container.appendChild(p);
+    }, // 👈 여기에 콤마(,)를 꼭 찍어주세요!
+
+    // ============================================================
+    // [신규 추가] 여기서부터 아래 내용을 붙여넣으세요
+    // ============================================================
+
+    createRichEditor(initialHtml, containerId) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'rich-editor-wrapper';
+
+        // 1. 툴바 생성
+        const toolbar = document.createElement('div');
+        toolbar.className = 'rich-editor-toolbar';
+
+        const buttons = [
+            { cmd: 'bold', label: 'B', class: 'btn-bold', val: null },
+            { cmd: 'italic', label: 'I', class: 'btn-italic', val: null },
+            { cmd: 'foreColor', label: 'A', class: 'btn-red', val: '#ef4444' },
+            { cmd: 'foreColor', label: 'A', class: 'btn-blue', val: '#3b82f6' },
+            { cmd: 'foreColor', label: 'A', class: 'btn-yellow', val: '#eab308' }
+        ];
+
+        buttons.forEach(btnInfo => {
+            const btn = document.createElement('button');
+            btn.className = `rich-editor-btn ${btnInfo.class}`;
+            btn.textContent = btnInfo.label;
+            btn.onmousedown = (e) => {
+                e.preventDefault(); 
+                document.execCommand(btnInfo.cmd, false, btnInfo.val);
+            };
+            toolbar.appendChild(btn);
+        });
+
+        // 2. 편집 영역 생성
+        const editor = document.createElement('div');
+        editor.className = 'rich-editor-content';
+        editor.contentEditable = true;
+        editor.innerHTML = initialHtml;
+        editor.id = containerId; 
+
+        wrapper.appendChild(toolbar);
+        wrapper.appendChild(editor);
+
+        return wrapper;
+    },
+
+    toggleEditMode(enable) {
+        const currentWord = this.state.currentWordList[this.state.currentIndex];
+        if (!currentWord) return;
+
+        const cardFront = document.getElementById('learning-card-front-content');
+        if (!cardFront) return;
+
+        const meaningEl = cardFront.querySelector('.text-3xl.font-bold'); 
+        const explanationEl = cardFront.querySelector('.text-lg.text-gray-600'); 
+        
+        let actionBtnContainer = document.getElementById('edit-action-btns');
+
+        if (enable) {
+            this.state.isEditing = true;
+            const currentMeaningHtml = currentWord.meaning || "";
+            const currentExplanationHtml = currentWord.explanation || "";
+
+            if(meaningEl) meaningEl.style.display = 'none';
+            if(explanationEl) explanationEl.style.display = 'none';
+
+            const meaningEditor = this.createRichEditor(currentMeaningHtml, 'editor-meaning');
+            if(meaningEl) meaningEl.parentNode.insertBefore(meaningEditor, meaningEl);
+
+            const explanationEditor = this.createRichEditor(currentExplanationHtml, 'editor-explanation');
+            if(explanationEl) explanationEl.parentNode.insertBefore(explanationEditor, explanationEl);
+
+            if (!actionBtnContainer) {
+                actionBtnContainer = document.createElement('div');
+                actionBtnContainer.id = 'edit-action-btns';
+                actionBtnContainer.className = 'mt-4 flex justify-center gap-3';
+                actionBtnContainer.innerHTML = `
+                    <button id="save-edit-btn" class="bg-blue-500 text-white px-4 py-2 rounded shadow">저장</button>
+                    <button id="cancel-edit-btn" class="bg-gray-300 text-gray-700 px-4 py-2 rounded shadow">취소</button>
+                `;
+                cardFront.appendChild(actionBtnContainer);
+
+                document.getElementById('save-edit-btn').onclick = () => {
+                    const newMeaning = document.getElementById('editor-meaning').innerHTML;
+                    const newExplanation = document.getElementById('editor-explanation').innerHTML;
+                    
+                    import('./api.js').then(module => {
+                        module.api.updateWord(currentWord.word, {
+                            ...currentWord,
+                            meaning: newMeaning,
+                            explanation: newExplanation
+                        });
+                        currentWord.meaning = newMeaning;
+                        currentWord.explanation = newExplanation;
+                        this.toggleEditMode(false); 
+                        this.displayWord(this.state.currentIndex); 
+                    });
+                };
+
+                document.getElementById('cancel-edit-btn').onclick = () => {
+                    this.toggleEditMode(false);
+                };
+            } else {
+                actionBtnContainer.style.display = 'flex';
+            }
+
+        } else {
+            this.state.isEditing = false;
+            const editors = cardFront.querySelectorAll('.rich-editor-wrapper');
+            editors.forEach(el => el.remove());
+
+            if(meaningEl) meaningEl.style.display = '';
+            if(explanationEl) explanationEl.style.display = '';
+
+            if(actionBtnContainer) actionBtnContainer.style.display = 'none';
+        }
     }
 };
