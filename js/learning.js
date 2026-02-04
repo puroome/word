@@ -503,11 +503,16 @@ async saveAndExitEditMode() {
                     wordData.sample = newSample;
                 }
             }
+// learning.js - saveAndExitEditMode 내부
+
         } else { 
             // 뒷면 편집 모드 저장
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
-                const newSampleText = sampleInput.value;
+                // [수정] .value가 아니라 .innerHTML로 변경 (HTML 서식 포함 저장)
+                // 앞뒤 불필요한 줄바꿈(<br>) 제거
+                const newSampleText = sampleInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
+                
                 if (wordData.isNew) {
                      if (!wordData.word) {
                          window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "앞면의 표제어를 먼저 입력해주세요.", isError: true } }));
