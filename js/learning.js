@@ -628,8 +628,25 @@ async saveAndExitEditMode() {
         
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
-        this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
-        ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
+        // [수정] Meaning 표시: HTML 태그(서식) 적용을 위해 innerHTML 사용 + 편집 허용
+        // 기존 줄바꿈(\n) 처리와 저장된 HTML 태그가 공존할 수 있도록 처리
+        let meaningHtml = wordData.meaning || '';
+        if (!meaningHtml.includes('<')) { 
+            meaningHtml = meaningHtml.replace(/\n/g, '<br>'); 
+        }
+        this.elements.meaningDisplay.innerHTML = meaningHtml;
+        this.elements.meaningDisplay.contentEditable = "true"; // 편집 가능
+        this.elements.meaningDisplay.classList.add('outline-none'); // 포커스 테두리 제거
+
+        // [수정] Explanation 표시: 서식 유지를 위해 renderExplanationText 대신 innerHTML 사용
+        let explanationHtml = wordData.explanation || '';
+        if (!explanationHtml.includes('<')) {
+            explanationHtml = explanationHtml.replace(/\n/g, '<br>');
+        }
+        this.elements.explanationDisplay.innerHTML = explanationHtml;
+        this.elements.explanationDisplay.contentEditable = "true"; // 편집 가능
+        this.elements.explanationDisplay.classList.add('outline-none'); // 포커스 테두리 제거
+        
         this.elements.explanationContainer.classList.remove('hidden');
 
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
@@ -638,6 +655,11 @@ async saveAndExitEditMode() {
         this.elements.sampleBtnImg.src = hasSample ? sampleImgUrl : noSampleImgUrl;
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
+
+        // [신규] 텍스트 드래그 시 서식 툴팁(빨/파/노) 이벤트 연결
+        if (this.initTextSelectionEvents) {
+            this.initTextSelectionEvents();
+        }
     },
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
