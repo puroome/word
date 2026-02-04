@@ -509,9 +509,24 @@ async saveAndExitEditMode() {
             // 뒷면 편집 모드 저장
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
-                // [수정] .value가 아니라 .innerHTML로 변경 (HTML 서식 포함 저장)
-                // 앞뒤 불필요한 줄바꿈(<br>) 제거
-                const newSampleText = sampleInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
+                let rawHTML = sampleInput.innerHTML;
+
+                // [수정] HTML 정제 (Clean Up)
+                // 1. <div>를 <br>로 변환 (크롬 에디터 특성 대응)
+                let cleanHTML = rawHTML
+                    .replace(/<div>/gi, '<br>')
+                    .replace(/<\/div>/gi, '')
+                    .replace(/<p>/gi, '<br>')
+                    .replace(/<\/p>/gi, '');
+
+                // 2. 연속된 <br> 정리 및 앞뒤 공백/줄바꿈 완벽 제거
+                // (마지막에 남는 <br> 때문에 시트에 빈 줄이 생기는 것 방지)
+                cleanHTML = cleanHTML
+                    .replace(/(<br>\s*){2,}/gi, '<br>') // 3개 이상 줄바꿈은 2개로 압축 (선택사항)
+                    .replace(/^(<br>\s*)+|(<br>\s*)+$/gi, '') // ★ 맨 앞, 맨 뒤 <br> 제거
+                    .trim();
+
+                const newSampleText = cleanHTML;
                 
                 if (wordData.isNew) {
                      if (!wordData.word) {
