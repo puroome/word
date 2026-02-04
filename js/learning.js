@@ -163,6 +163,37 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
+    createToolbarHTML(toolbarId) {
+        return `
+            <div id="${toolbarId}" class="flex gap-2 mb-1 bg-gray-100 p-1 rounded border border-gray-200">
+                <button type="button" data-cmd="bold" class="p-1 hover:bg-gray-300 rounded font-bold w-8" title="Bold">B</button>
+                <button type="button" data-cmd="italic" class="p-1 hover:bg-gray-300 rounded italic w-8" title="Italic">I</button>
+                <div class="relative flex items-center">
+                    <input type="color" data-cmd="foreColor" class="w-8 h-8 p-0 border-0 rounded cursor-pointer" title="Color" value="#000000">
+                </div>
+                <button type="button" data-cmd="removeFormat" class="p-1 hover:bg-gray-300 rounded text-xs px-2" title="서식 지우기">Clear</button>
+            </div>
+        `;
+    },
+
+    bindToolbarEvents(toolbarId, inputId) {
+        const toolbar = document.getElementById(toolbarId);
+        if (!toolbar) return;
+        toolbar.querySelectorAll('button').forEach(btn => {
+            btn.onclick = (e) => {
+                e.preventDefault();
+                document.execCommand(btn.dataset.cmd, false, null);
+                document.getElementById(inputId).focus();
+            };
+        });
+        const colorInput = toolbar.querySelector('input[type="color"]');
+        if (colorInput) {
+            colorInput.onchange = (e) => {
+                document.execCommand('foreColor', false, e.target.value);
+                document.getElementById(inputId).focus();
+            };
+        }
+    },
 // [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
     async enterEditMode(side) {
         this.state.isEditing = true;
@@ -183,12 +214,22 @@ export const learningMode = {
             `;
             
             const currentMeaning = wordData.meaning || "";
-            this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
+            this.elements.meaningDisplay.innerHTML = `
+                ${this.createToolbarHTML('edit-meaning-toolbar')}
+                <div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] text-left bg-white" contenteditable="true" placeholder="뜻">${currentMeaning}</div>
+            `;
             
             const currentExplanation = wordData.explanation || "";
-            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="8" placeholder="[동의어]\nEnglish : Korean\n\n[파생어]\nEnglish : Korean">${currentExplanation}</textarea>`;
+            const formattedExplanation = currentExplanation.replace(/\n/g, '<br>');
+            this.elements.explanationDisplay.innerHTML = `
+                ${this.createToolbarHTML('edit-explanation-toolbar')}
+                <div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] text-left bg-white" contenteditable="true" placeholder="설명">${formattedExplanation}</div>
+            `;
 
             setTimeout(() => {
+                this.bindToolbarEvents('edit-meaning-toolbar', 'edit-meaning-input');
+                this.bindToolbarEvents('edit-explanation-toolbar', 'edit-explanation-input');
+
                 const autoBtn = document.getElementById('auto-fill-btn');
                 const wordInput = document.getElementById('edit-word-input');
                 const meaningInput = document.getElementById('edit-meaning-input');
@@ -286,8 +327,8 @@ async saveAndExitEditMode() {
             
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
-                const newMeaning = meaningInput.value;
-                const newExplanation = explanationInput.value;
+                const newMeaning = meaningInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
+                const newExplanation = explanationInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
                 
                 // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
