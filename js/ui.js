@@ -278,7 +278,7 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     
-    // [중복 메시지 제거 및 삭제/수정 기능 수정 완료]
+    // [중복 메시지 제거 및 삭제 기능 수정 완료]
     showCardContextMenu(event) {
         this.hideAllMenus(); // 메뉴 닫기
 
@@ -288,34 +288,18 @@ export const ui = {
         // 1. 현재 카드 데이터 가져오기
         const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
 
-        // ============================================================
-        // [신규 추가] 수정 버튼 연결 (편집 모드 진입)
-        // ============================================================
-        let editBtn = document.getElementById('edit-card-btn');
-        if (editBtn) {
-            // 이벤트 중복 방지를 위해 버튼 재생성(clone)
-            const newEditBtn = editBtn.cloneNode(true);
-            editBtn.parentNode.replaceChild(newEditBtn, editBtn);
-            editBtn = newEditBtn;
-
-            editBtn.onclick = () => {
-                this.hideAllMenus();
-                learningMode.toggleEditMode(true); // 편집 모드 실행
-            };
-        }
-
-        // ============================================================
-        // [기존 유지] 삭제 버튼 연결
-        // ============================================================
+        // 2. HTML에 있는 삭제 버튼 찾기 (ID: delete-card-btn)
         let deleteBtn = document.getElementById('delete-card-btn');
 
-        // 버튼이 있고 단어도 있다면?
+        // 3. 버튼이 있고 단어도 있다면?
         if (deleteBtn && currentWord) {
-            // 기존 버튼을 복제해서 교체 (이벤트 초기화)
+            // [핵심] 기존 버튼을 복제해서 교체합니다.
+            // 이렇게 하면 기존 코드(main.js 등)에서 붙여놓은 '빨간 모달(2번째 창)' 이벤트가 싹 사라집니다.
             const newDeleteBtn = deleteBtn.cloneNode(true);
             deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
             deleteBtn = newDeleteBtn; // 참조 변수 업데이트
 
+            // 4. 이제 깨끗해진 버튼에 "우리가 원하는 동작(1번째 창)"만 붙입니다.
             deleteBtn.onclick = () => {
                 this.hideAllMenus();
 
