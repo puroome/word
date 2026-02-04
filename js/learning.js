@@ -230,21 +230,22 @@ export const learningMode = {
         this.elements.sampleBtnImg.src = editImgUrl;
     },
 async saveAndExitEditMode() {
-        // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
 
         if (side === 'front') {
             const wordInput = document.getElementById('edit-word-input');
+            // [수정] contentEditable div 요소 가져오기
             const meaningInput = document.getElementById('edit-meaning-input');
             const explanationInput = document.getElementById('edit-explanation-input');
             
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
-                const newMeaning = meaningInput.value;
-                const newExplanation = explanationInput.value;
                 
-                // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
+                // [수정] value 대신 innerHTML 사용 (서식 포함 저장)
+                const newMeaning = meaningInput.innerHTML; 
+                const newExplanation = explanationInput.innerHTML;
+                
                 const newSample = wordData.sample || "";
 
                 const match = rawWordValue.match(/^(.*?)\s*\[(.*?)\]$/);
@@ -264,7 +265,6 @@ async saveAndExitEditMode() {
                      return;
                 }
 
-                // 중복 체크 (자기 자신 제외)
                 if (newWord !== wordData.word) {
                     const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWord.toLowerCase() && w !== wordData);
                     if (isDuplicate) {
@@ -273,44 +273,32 @@ async saveAndExitEditMode() {
                     }
                 }
 
+                const dataPayload = {
+                    word: newWord,
+                    pos: newPos,
+                    meaning: newMeaning,      // HTML 그대로 전송
+                    explanation: newExplanation, // HTML 그대로 전송
+                    manual_sample: newSample
+                };
+
                 if (wordData.isNew) {
-                    // [서버 통신] 새 단어 생성 요청
-                    const newCardData = {
-                        word: newWord,
-                        pos: newPos || "",
-                        meaning: newMeaning,
-                        explanation: newExplanation,
-                        manual_sample: newSample // 예문 포함 전송
-                    };
+                    const newCardData = { ...dataPayload, pos: newPos || "" };
                     
                     let afterWord = null;
                     if (this.state.currentIndex > 0) {
-                        // 바로 앞 단어 찾기 (A단어)
                         afterWord = this.state.currentWordList[this.state.currentIndex - 1].word;
                     }
 
-                    // API 호출 (서버에 저장)
                     await api.createWord(newCardData, afterWord);
                     
-                    // [UI 데이터 갱신] 임시 카드를 정식 데이터로 확정 (새 카드를 추가하는 게 아님!)
-                    wordData.word = newWord;
-                    wordData.pos = newPos || "";
-                    wordData.meaning = newMeaning;
-                    wordData.explanation = newExplanation;
-                    wordData.sample = newSample; // 예문 확정
-                    delete wordData.isNew; // 이제 더 이상 임시 카드가 아님
+                    Object.assign(wordData, newCardData);
+                    wordData.sample = newSample;
+                    delete wordData.isNew;
                     
                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
 
                 } else {
-                    // 기존 단어 수정 로직
-                    await api.updateWordDetails(wordData.word, {
-                        word: newWord,
-                        pos: newPos,
-                        meaning: newMeaning,
-                        explanation: newExplanation,
-                        manual_sample: newSample
-                    });
+                    await api.updateWordDetails(wordData.word, dataPayload);
                     
                     wordData.word = newWord;
                     if (newPos !== undefined) wordData.pos = newPos;
@@ -320,7 +308,7 @@ async saveAndExitEditMode() {
                 }
             }
         } else { 
-            // 뒷면 편집 모드 저장
+            // 뒷면 저장 (Textarea 유지)
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
                 const newSampleText = sampleInput.value;
@@ -339,11 +327,9 @@ async saveAndExitEditMode() {
              if(aiSection) aiSection.style.display = 'block';
         }
 
-        // 편집 모드 종료
         this.state.isEditing = false;
         this.state.editingSide = null;
         
-        // [화면 갱신] 변경된 내용으로 현재 카드를 다시 그리기
         if (side === 'front') {
             this.displayWord(this.state.currentIndex, true);
         } else {
@@ -964,55 +950,51 @@ async saveAndExitEditMode() {
         container.appendChild(p);
     }, // 👈 여기에 콤마(,)를 꼭 찍어주세요!
 
+// ============================================================
+    // [수정] 아래 initTextSelectionEvents 함수를 통째로 교체하세요
     // ============================================================
-    // [신규 추가] 여기서부터 아래 내용을 붙여넣으세요
-    // ============================================================
+    initTextSelectionEvents(targetElements = []) {
+        // 타겟 요소가 없으면 실행하지 않음
+        if (!targetElements || targetElements.length === 0) return;
 
-// [수정] 텍스트 선택 이벤트 초기화 (확실한 요소에 이벤트 연결)
-    initTextSelectionEvents() {
-        // 1. 이미 this.elements에 저장된 확실한 요소들을 가져옵니다.
-        const targets = [this.elements.meaningDisplay, this.elements.explanationDisplay];
-
-        targets.forEach(area => {
+        targetElements.forEach(area => {
             if (!area) return;
 
-            // 텍스트 드래그(선택)가 끝났을 때
+            // [마우스] 드래그 종료 시 툴팁 표시
             area.onmouseup = (e) => {
                 setTimeout(() => { 
                     const selection = window.getSelection();
-                    // 선택된 텍스트가 있을 때만 실행
+                    // 선택된 텍스트가 있고, 선택 범위가 해당 에디터(area) 안에 있을 때만
                     if (!selection.isCollapsed && selection.toString().length > 0) {
-                        const range = selection.getRangeAt(0);
-                        const rect = range.getBoundingClientRect();
-                        
-                        // 툴팁 띄우기 (선택 영역 중앙 상단)
-                        this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
+                        if (area.contains(selection.anchorNode)) {
+                            const range = selection.getRangeAt(0);
+                            const rect = range.getBoundingClientRect();
+                            this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
+                        }
                     } else {
-                        // 선택이 해제되면 툴팁 숨기기
                         this.hideFormatTooltip();
                     }
                 }, 10);
             };
 
-            // [추가] 모바일 터치 환경에서도 작동하도록 touchend 추가
+            // [모바일] 터치 종료 시 툴팁 표시
             area.ontouchend = (e) => {
                  setTimeout(() => { 
                     const selection = window.getSelection();
                     if (!selection.isCollapsed && selection.toString().length > 0) {
-                        const range = selection.getRangeAt(0);
-                        const rect = range.getBoundingClientRect();
-                        this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
+                        if (area.contains(selection.anchorNode)) {
+                            const range = selection.getRangeAt(0);
+                            const rect = range.getBoundingClientRect();
+                            this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
+                        }
                     }
                 }, 10);
             };
         });
 
-        // 다른 곳 클릭하면 툴팁 닫기
+        // 툴팁 외부 클릭 시 닫기 (선택 해제될 때)
         document.addEventListener('mousedown', (e) => {
             if (!e.target.closest('#text-selection-tooltip')) {
-                // 툴팁 자체가 아닌 다른 곳을 클릭하면 닫기
-                // (단, 텍스트 선택 중에는 닫히면 안 되므로 selection 체크는 onmouseup에서 처리)
-                // 여기서는 selection이 없는 단순 클릭일 때 닫힘
                 const selection = window.getSelection();
                 if (selection.isCollapsed) {
                     this.hideFormatTooltip();
