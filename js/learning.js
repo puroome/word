@@ -163,37 +163,44 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-// [신규] 플로팅 툴바 생성 (최초 1회만 실행됨)
+// [수정됨] 심플해진 플로팅 툴바 (빨/파/녹 + 지우기)
     initFloatingToolbar() {
         if (document.getElementById('floating-toolbar')) return;
 
         const toolbar = document.createElement('div');
         toolbar.id = 'floating-toolbar';
         
-        // 자주 쓰는 색상 10가지 + 서식 지우기(🗑️)
-        const colors = ['#000000', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#6B7280', '#9CA3AF'];
+        // 요청하신 3가지 핵심 색상
+        const colors = [
+            '#EF4444', // Red (빨강)
+            '#3B82F6', // Blue (파랑)
+            '#10B981'  // Green (녹색)
+        ];
         
         let html = '';
         colors.forEach(color => {
             html += `<div class="color-btn" style="background-color:${color}" data-cmd="foreColor" data-val="${color}"></div>`;
         });
-        // 구분선 및 지우기 버튼
-        html += `<div style="width:1px; height:16px; background:#555; margin:0 2px;"></div>`;
-        html += `<div class="clear-btn" data-cmd="removeFormat" title="서식 지우기">🗑️</div>`; // 아이콘으로 변경
+        
+        // 구분선
+        html += `<div style="width:1px; height:16px; background:#555; margin:0 4px;"></div>`;
+        
+        // 서식 지우기 버튼 (아이콘)
+        html += `<div class="clear-btn" data-cmd="removeFormat" title="서식 지우기">🗑️</div>`;
 
         toolbar.innerHTML = html;
         document.body.appendChild(toolbar);
 
-        // 버튼 클릭 이벤트 (이벤트 위임)
+        // 버튼 클릭 이벤트 처리
         toolbar.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // 포커스 잃지 않게 방지
+            e.preventDefault(); 
             const target = e.target;
             const cmd = target.dataset.cmd;
             const val = target.dataset.val;
 
             if (cmd) {
                 document.execCommand(cmd, false, val || null);
-                this.updateFloatingToolbarPosition(); // 적용 후 위치 재조정 (선택영역 변동 가능성)
+                this.updateFloatingToolbarPosition(); 
             }
         });
     },
