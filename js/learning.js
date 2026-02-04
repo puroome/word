@@ -163,119 +163,9 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-// [수정됨] 심플해진 플로팅 툴바 (빨/파/녹 + 지우기)
-    initFloatingToolbar() {
-        if (document.getElementById('floating-toolbar')) return;
-
-        const toolbar = document.createElement('div');
-        toolbar.id = 'floating-toolbar';
-        
-        // 요청하신 3가지 핵심 색상
-        const colors = [
-            '#EF4444', // Red (빨강)
-            '#3B82F6', // Blue (파랑)
-            '#10B981'  // Green (녹색)
-        ];
-        
-        let html = '';
-        colors.forEach(color => {
-            html += `<div class="color-btn" style="background-color:${color}" data-cmd="foreColor" data-val="${color}"></div>`;
-        });
-        
-        // 구분선
-        html += `<div style="width:1px; height:16px; background:#555; margin:0 4px;"></div>`;
-        
-        // 서식 지우기 버튼 (아이콘)
-        html += `<div class="clear-btn" data-cmd="removeFormat" title="서식 지우기">🗑️</div>`;
-
-        toolbar.innerHTML = html;
-        document.body.appendChild(toolbar);
-
-        // 버튼 클릭 이벤트 처리
-        toolbar.addEventListener('mousedown', (e) => {
-            e.preventDefault(); 
-            const target = e.target;
-            const cmd = target.dataset.cmd;
-            const val = target.dataset.val;
-
-            if (cmd) {
-                document.execCommand(cmd, false, val || null);
-                this.updateFloatingToolbarPosition(); 
-            }
-        });
-    },
-
-    // [신규] 드래그 시 툴바 위치 계산 및 표시
-    bindFloatingToolbarEvents(inputId) {
-        const inputEl = document.getElementById(inputId);
-        if (!inputEl) return;
-
-        const updateToolbar = () => {
-            const toolbar = document.getElementById('floating-toolbar');
-            const selection = window.getSelection();
-
-            // 선택된 텍스트가 없거나, 다른 영역을 선택했으면 숨김
-            if (selection.isCollapsed || !inputEl.contains(selection.anchorNode)) {
-                toolbar.style.display = 'none';
-                return;
-            }
-
-            this.updateFloatingToolbarPosition();
-        };
-
-        // 마우스를 뗐을 때(드래그 끝), 키보드로 선택했을 때 체크
-        inputEl.addEventListener('mouseup', () => setTimeout(updateToolbar, 10)); // 약간의 지연 필요
-        inputEl.addEventListener('keyup', (e) => {
-            if (e.key === 'Shift' || e.key.startsWith('Arrow')) setTimeout(updateToolbar, 10);
-        });
-        
-        // 입력 중이거나 포커스를 잃으면 숨김
-        inputEl.addEventListener('input', () => { document.getElementById('floating-toolbar').style.display = 'none'; });
-        inputEl.addEventListener('blur', () => { 
-             // 툴바 버튼 클릭 시 blur가 먼저 발생할 수 있으므로 살짝 지연 체크
-             setTimeout(() => {
-                 const selection = window.getSelection();
-                 if (selection.isCollapsed) document.getElementById('floating-toolbar').style.display = 'none';
-             }, 200);
-        });
-    },
-
-    // [신규] 툴바 위치 실제 계산 함수
-    updateFloatingToolbarPosition() {
-        const toolbar = document.getElementById('floating-toolbar');
-        const selection = window.getSelection();
-        if (selection.rangeCount === 0) return;
-
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect(); // 선택된 텍스트의 좌표
-
-        if (rect.width === 0) return; // 실제 선택된 게 없으면 종료
-
-        toolbar.style.display = 'flex';
-        
-        // 툴바 위치: 선택 영역 바로 위 가운데
-        const toolbarHeight = toolbar.offsetHeight || 40;
-        const toolbarWidth = toolbar.offsetWidth || 300;
-        
-        let top = rect.top + window.scrollY - toolbarHeight - 10; // 10px 여백
-        let left = rect.left + window.scrollX + (rect.width / 2) - (toolbarWidth / 2);
-
-        // 화면 밖으로 나가는 것 방지
-        if (left < 10) left = 10;
-        if (left + toolbarWidth > window.innerWidth) left = window.innerWidth - toolbarWidth - 10;
-        if (top < 10) top = rect.bottom + window.scrollY + 10; // 위 공간 없으면 아래로
-
-        toolbar.style.top = `${top}px`;
-        toolbar.style.left = `${left}px`;
-    },
-    
-// [수정됨] 편집 모드 (플로팅 툴바 적용 & AI 자동 완성 로직 호환)
+// [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
     async enterEditMode(side) {
         this.state.isEditing = true;
-        
-        // [1] 플로팅 툴바 초기화 (최초 1회 생성)
-        if (this.initFloatingToolbar) this.initFloatingToolbar();
-
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
         if (side === 'front') {
@@ -283,7 +173,6 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            // 1. 표제어 (기존 동일)
             this.elements.wordDisplay.innerHTML = `
                 <div class="flex flex-col gap-2">
                     <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
@@ -293,31 +182,16 @@ export const learningMode = {
                 </div>
             `;
             
-            // 2. 뜻 (Meaning) - 툴바 없이 contenteditable div만 배치
             const currentMeaning = wordData.meaning || "";
-            this.elements.meaningDisplay.innerHTML = `
-                <div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] text-left bg-white" contenteditable="true" placeholder="뜻">${currentMeaning}</div>
-            `;
+            this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
             
-            // 3. 설명 (Explanation) - 툴바 없이 contenteditable div만 배치
             const currentExplanation = wordData.explanation || "";
-            // 줄바꿈을 <br>로 변환하여 에디터에 표시
-            const formattedExplanation = currentExplanation.replace(/\n/g, '<br>');
-            this.elements.explanationDisplay.innerHTML = `
-                <div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] text-left bg-white" contenteditable="true" placeholder="설명">${formattedExplanation}</div>
-            `;
+            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="8" placeholder="[동의어]\nEnglish : Korean\n\n[파생어]\nEnglish : Korean">${currentExplanation}</textarea>`;
 
             setTimeout(() => {
-                // [이벤트 연결] 드래그 시 플로팅 툴바 표시
-                if (this.bindFloatingToolbarEvents) {
-                    this.bindFloatingToolbarEvents('edit-meaning-input');
-                    this.bindFloatingToolbarEvents('edit-explanation-input');
-                }
-
-                // AI 버튼 로직 (div contenteditable 호환되도록 수정됨)
                 const autoBtn = document.getElementById('auto-fill-btn');
                 const wordInput = document.getElementById('edit-word-input');
-                const meaningInput = document.getElementById('edit-meaning-input'); 
+                const meaningInput = document.getElementById('edit-meaning-input');
                 const explanationInput = document.getElementById('edit-explanation-input');
 
                 if (autoBtn) {
@@ -336,33 +210,30 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                            // 뜻 (Meaning) - innerHTML 사용
+                        // [수정 1] 뜻 (Meaning) - 기존 값이 있으면 두 줄 띄우고 추가
                             if (aiData.meaning) {
-                                const original = meaningInput.innerHTML; 
-                                const newContent = aiData.meaning.replace(/\n/g, '<br>'); // 줄바꿈 변환
-                                
-                                if (original && original.trim() && original !== '<br>') {
-                                    if (!original.includes(newContent)) {
-                                        meaningInput.innerHTML = original + "<br><br>" + newContent;
+                                const original = meaningInput.value.trim();
+                                if (original) {
+                                    // 중복되지 않을 때만 추가
+                                    if (!original.includes(aiData.meaning)) {
+                                        meaningInput.value = original + "\n\n" + aiData.meaning;
                                     }
                                 } else {
-                                    meaningInput.innerHTML = newContent;
+                                    meaningInput.value = aiData.meaning;
                                 }
                             }
 
-                            // 설명 (Explanation) - innerHTML 사용
+                            // [수정 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
                             if (aiData.explanation) {
-                                const original = explanationInput.innerHTML;
-                                const newContent = aiData.explanation.replace(/\n/g, '<br>');
-                                
-                                if (original && original.trim() && original !== '<br>') {
-                                    explanationInput.innerHTML = original + "<br><br>" + newContent;
+                                const original = explanationInput.value.trim();
+                                if (original) {
+                                    explanationInput.value = original + "\n\n" + aiData.explanation;
                                 } else {
-                                    explanationInput.innerHTML = newContent;
+                                    explanationInput.value = aiData.explanation;
                                 }
                             }
 
-                            // 예문 (Samples) - 데이터(wordData)에만 저장
+                            // [수정 3] 예문 (Samples) - 기존 예문 뒤에 두 줄 띄우고 추가
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
@@ -372,7 +243,10 @@ export const learningMode = {
                                 } else {
                                     wordData.sample = newSampleText;
                                 }
+                                
+                                // 동기화용 필드 업데이트
                                 wordData.manualSample = wordData.sample;
+
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
                             } else {
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료 (예문 없음)" } }));
@@ -392,19 +266,7 @@ export const learningMode = {
         } else {
             // 뒷면 편집 모드
             let currentSample = wordData.sample || "";
-            // 줄바꿈 처리
-            const formattedSample = currentSample.replace(/\n/g, '<br>');
-
-            this.elements.backContent.innerHTML = `
-                <div id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-left overflow-y-auto leading-relaxed" contenteditable="true" placeholder="예문" style="min-height: 200px;">${formattedSample}</div>
-            `;
-            
-            setTimeout(() => {
-                if (this.bindFloatingToolbarEvents) {
-                    this.bindFloatingToolbarEvents('edit-sample-input');
-                }
-            }, 0);
-
+            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
@@ -412,7 +274,6 @@ export const learningMode = {
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
     },
-    
 async saveAndExitEditMode() {
         // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -425,8 +286,8 @@ async saveAndExitEditMode() {
             
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
-                const newMeaning = meaningInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
-                const newExplanation = explanationInput.innerHTML.replace(/^(<br>)+|(<br>)+$/g, '').trim();
+                const newMeaning = meaningInput.value;
+                const newExplanation = explanationInput.value;
                 
                 // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
@@ -503,31 +364,11 @@ async saveAndExitEditMode() {
                     wordData.sample = newSample;
                 }
             }
-// learning.js - saveAndExitEditMode 내부
-
         } else { 
             // 뒷면 편집 모드 저장
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
-                let rawHTML = sampleInput.innerHTML;
-
-                // [수정] HTML 정제 (Clean Up)
-                // 1. <div>를 <br>로 변환 (크롬 에디터 특성 대응)
-                let cleanHTML = rawHTML
-                    .replace(/<div>/gi, '<br>')
-                    .replace(/<\/div>/gi, '')
-                    .replace(/<p>/gi, '<br>')
-                    .replace(/<\/p>/gi, '');
-
-                // 2. 연속된 <br> 정리 및 앞뒤 공백/줄바꿈 완벽 제거
-                // (마지막에 남는 <br> 때문에 시트에 빈 줄이 생기는 것 방지)
-                cleanHTML = cleanHTML
-                    .replace(/(<br>\s*){2,}/gi, '<br>') // 3개 이상 줄바꿈은 2개로 압축 (선택사항)
-                    .replace(/^(<br>\s*)+|(<br>\s*)+$/gi, '') // ★ 맨 앞, 맨 뒤 <br> 제거
-                    .trim();
-
-                const newSampleText = cleanHTML;
-                
+                const newSampleText = sampleInput.value;
                 if (wordData.isNew) {
                      if (!wordData.word) {
                          window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "앞면의 표제어를 먼저 입력해주세요.", isError: true } }));

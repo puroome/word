@@ -47,147 +47,130 @@ export const ui = {
         });
         return fragment;
     },
-    
-renderExplanationText(targetElement, text) {
+    renderExplanationText(targetElement, text) {
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
-
-        // HTML 태그 확인 (단순 줄바꿈 제외)
-        const hasHTML = /<[a-z][\s\S]*>/i.test(text);
-        if (!hasHTML) {
-            text = text.replace(/\n/g, '<br>');
-        }
-
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = text;
-
-        const processNode = (node) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                const content = node.textContent;
-                if (!content.trim()) return document.createTextNode(content);
-                return this.createInteractiveFragment(content);
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.tagName.toLowerCase() === 'br') return node.cloneNode(true);
-                const newNode = node.cloneNode(false);
-                Array.from(node.childNodes).forEach(child => {
-                    newNode.appendChild(processNode(child));
-                });
-                return newNode;
+        const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
+        text.split('\n').forEach((line, lineIndex, lineArr) => {
+            let lastIndex = 0;
+            let match;
+            while ((match = regex.exec(line))) {
+                if (match.index > lastIndex) {
+                    targetElement.appendChild(document.createTextNode(line.substring(lastIndex, match.index)));
+                }
+                const [_, nonClickable, englishPhrase] = match;
+                if (englishPhrase) {
+                    const span = document.createElement('span');
+                    span.textContent = englishPhrase;
+                    if (!nonInteractiveWords.has(englishPhrase.toLowerCase())) {
+                        span.className = 'interactive-word';
+                        span.onclick = () => {
+                            clearTimeout(state.longPressTimer);
+                            api.speak(englishPhrase, 'word');
+                        };
+                        span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
+                        let touchMove = false;
+                        span.addEventListener('touchstart', (e) => {
+                            touchMove = false;
+                            clearTimeout(state.longPressTimer);
+                            state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, englishPhrase); }, 700);
+                        }, { passive: true });
+                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+                        span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
+                    }
+                    targetElement.appendChild(span);
+                } else if (nonClickable) {
+                    targetElement.appendChild(document.createTextNode(nonClickable));
+                }
+                lastIndex = regex.lastIndex;
             }
-            return node.cloneNode(true);
-        };
-
-        Array.from(tempDiv.childNodes).forEach(child => {
-            targetElement.appendChild(processNode(child));
+            if (lastIndex < line.length) {
+                targetElement.appendChild(document.createTextNode(line.substring(lastIndex)));
+            }
+            if (lineIndex < lineArr.length - 1) {
+                targetElement.appendChild(document.createElement('br'));
+            }
         });
     },
-    
-// ui.js - displaySentences 함수 앞부분 수정
 
-    displaySentences(sentencesInput, containerElement) {
+    displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
-        let sentences = [];
-        if (typeof sentencesInput === 'string') {
-            const raw = sentencesInput
-                .replace(/<div>/gi, '__BR__')
-                .replace(/<\/div>/gi, '')
-                .replace(/<p>/gi, '__BR__')
-                .replace(/<\/p>/gi, '')
-                .replace(/<br\s*\/?>/gi, '__BR__');
-            
-            // [수정됨] .filter(s => s.trim() !== '') 삭제!
-            // 빈 줄도 배열에 포함시켜야 화면에 여백으로 나옵니다.
-            sentences = raw.split('__BR__'); 
-        } else if (Array.isArray(sentencesInput)) {
-            sentences = sentencesInput;
-        }
-
-        sentences.forEach((sentence, index) => {
-            // [수정됨] 빈 줄이면 높이가 있는 투명 박스(spacer) 추가하고 종료
+        (sentences || []).forEach((sentence, index) => {
+            // 빈 줄(Spacer) 처리
             if (!sentence || !sentence.trim()) {
-                // 연속된 줄바꿈이 너무 좁아 보이지 않게 최소 높이(h-6) 부여
                 const spacer = document.createElement('div');
                 spacer.className = 'h-6 w-full'; 
                 containerElement.appendChild(spacer);
                 return; 
             }
-            
-            const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group flex items-start';
 
-            // 번역/TTS 기능 (기존 로직)
+            const p = document.createElement('p');
+            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
+
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
                 this.showTranslationTooltip("Translating...", event);
-                const cleanText = p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '');
-                const translatedText = await api.translate(cleanText); 
+                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); 
                 if (state.activeTranslationTarget !== p) return;
                 this.showTranslationTooltip(translatedText, event);
             };
 
             p.onclick = (e) => {
-                if (e.target.closest('.interactive-word')) return;
-                const cleanText = p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '');
-                api.speak(cleanText, 'sample');
+                if (e.target.closest('.sentence-content-area .interactive-word')) return;
+                api.speak(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''), 'sample');
                 showTranslation(e);
             };
-            
+
             p.addEventListener('mouseenter', (e) => {
                  if (e.target === p) {
                     clearTimeout(state.translationTimer);
                     state.activeTranslationTarget = p;
-                    state.translationTimer = setTimeout(() => { if (state.activeTranslationTarget === p) showTranslation(e); }, 1000);
+                    state.translationTimer = setTimeout(() => {
+                        if (state.activeTranslationTarget === p) {
+                            showTranslation(e);
+                        }
+                    }, 1000);
                  }
             });
+
             p.addEventListener('mouseleave', () => {
                 clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) state.activeTranslationTarget = null;
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
+                }
                 this.hideTranslationTooltip();
             });
 
-            // 이모지
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
-            emojiSpan.className = 'flex-shrink-0 mr-2 select-none text-xl leading-snug mt-0.5';
+            emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
             p.appendChild(emojiSpan);
 
-            // [핵심] HTML 구조를 유지하면서 텍스트 노드만 찾아 클릭 기능 입히기 (재귀 함수)
-            const contentSpan = document.createElement('span');
-            contentSpan.className = 'flex-grow sentence-content-area leading-snug';
-            contentSpan.style.cursor = 'text';
+            const sentenceContent = document.createElement('span');
+            sentenceContent.className = 'sentence-content-area';
+            sentenceContent.style.cursor = 'text';
 
-            const processNode = (node) => {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    const content = node.textContent;
-                    if (!content.trim()) return document.createTextNode(content);
-                    // 기존 createInteractiveFragment 재사용 (단어 클릭 기능)
-                    return this.createInteractiveFragment(content, true);
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    const tagName = node.tagName.toLowerCase();
-                    // 줄바꿈 태그는 이미 위에서 처리했으므로 여기선 무시하거나 공백 처리
-                    if (tagName === 'br' || tagName === 'div' || tagName === 'p') {
-                        return document.createTextNode(' '); 
-                    }
-                    
-                    const newNode = node.cloneNode(false); // 태그 껍데기 복사 (style, class 등 포함)
-                    Array.from(node.childNodes).forEach(child => {
-                        newNode.appendChild(processNode(child));
-                    });
-                    return newNode;
+            sentenceContent.addEventListener('mouseenter', () => {
+                clearTimeout(state.translationTimer);
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
                 }
-                return node.cloneNode(true);
-            };
-
-            // HTML 문자열을 DOM으로 변환 후 처리
-            const tempContainer = document.createElement('div');
-            tempContainer.innerHTML = sentence;
-            Array.from(tempContainer.childNodes).forEach(child => {
-                contentSpan.appendChild(processNode(child));
+                this.hideTranslationTooltip();
             });
 
-            p.appendChild(contentSpan);
+            const sentenceParts = sentence.split(/(\*.*?\*)/g);
+            sentenceParts.forEach(part => {
+                if (part.startsWith('*') && part.endsWith('*')) {
+                    const strong = document.createElement('strong');
+                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
+                    sentenceContent.appendChild(strong);
+                } else if (part) {
+                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
+                }
+            });
+            p.appendChild(sentenceContent);
             containerElement.appendChild(p);
         });
     },
