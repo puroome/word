@@ -82,84 +82,107 @@ renderExplanationText(targetElement, text) {
         });
     },
     
-    displaySentences(sentences, containerElement) {
+    // [수정됨] HTML 태그를 해석하여 서식은 유지하되, 단어 클릭 기능 추가
+    displaySentences(sentencesInput, containerElement) {
         containerElement.innerHTML = '';
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
-        (sentences || []).forEach((sentence, index) => {
-            // 빈 줄(Spacer) 처리
-            if (!sentence || !sentence.trim()) {
-                const spacer = document.createElement('div');
-                spacer.className = 'h-6 w-full'; 
-                containerElement.appendChild(spacer);
-                return; 
-            }
+        // 1. 입력값이 문자열(HTML)이면 줄바꿈 태그를 기준으로 분리하여 배열로 만듦
+        let sentences = [];
+        if (typeof sentencesInput === 'string') {
+            // div, p, br 태그를 확실한 구분자로 변경 후 분리
+            const raw = sentencesInput
+                .replace(/<div>/gi, '__BR__')     // div 시작 -> 줄바꿈
+                .replace(/<\/div>/gi, '')         // div 끝 -> 무시
+                .replace(/<p>/gi, '__BR__')       // p 시작 -> 줄바꿈
+                .replace(/<\/p>/gi, '')           // p 끝 -> 무시
+                .replace(/<br\s*\/?>/gi, '__BR__'); // br -> 줄바꿈
+            
+            sentences = raw.split('__BR__').filter(s => s.trim() !== '');
+        } else if (Array.isArray(sentencesInput)) {
+            sentences = sentencesInput;
+        }
+
+        sentences.forEach((sentence, index) => {
+            // HTML 태그를 제외한 순수 텍스트가 없으면(빈 줄이면) 건너뜀 (이미지도 없으면)
+            const tempCheck = document.createElement('div');
+            tempCheck.innerHTML = sentence;
+            if (!tempCheck.textContent.trim() && !tempCheck.querySelector('img')) return;
 
             const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
+            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group flex items-start';
 
+            // 번역/TTS 기능 (기존 로직)
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
                 this.showTranslationTooltip("Translating...", event);
-                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); 
+                const cleanText = p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '');
+                const translatedText = await api.translate(cleanText); 
                 if (state.activeTranslationTarget !== p) return;
                 this.showTranslationTooltip(translatedText, event);
             };
 
             p.onclick = (e) => {
-                if (e.target.closest('.sentence-content-area .interactive-word')) return;
-                api.speak(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''), 'sample');
+                if (e.target.closest('.interactive-word')) return;
+                const cleanText = p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '');
+                api.speak(cleanText, 'sample');
                 showTranslation(e);
             };
-
+            
             p.addEventListener('mouseenter', (e) => {
                  if (e.target === p) {
                     clearTimeout(state.translationTimer);
                     state.activeTranslationTarget = p;
-                    state.translationTimer = setTimeout(() => {
-                        if (state.activeTranslationTarget === p) {
-                            showTranslation(e);
-                        }
-                    }, 1000);
+                    state.translationTimer = setTimeout(() => { if (state.activeTranslationTarget === p) showTranslation(e); }, 1000);
                  }
             });
-
             p.addEventListener('mouseleave', () => {
                 clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
-                }
+                if (state.activeTranslationTarget === p) state.activeTranslationTarget = null;
                 this.hideTranslationTooltip();
             });
 
+            // 이모지
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length]; 
-            emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
+            emojiSpan.className = 'flex-shrink-0 mr-2 select-none text-xl leading-snug mt-0.5';
             p.appendChild(emojiSpan);
 
-            const sentenceContent = document.createElement('span');
-            sentenceContent.className = 'sentence-content-area';
-            sentenceContent.style.cursor = 'text';
+            // [핵심] HTML 구조를 유지하면서 텍스트 노드만 찾아 클릭 기능 입히기 (재귀 함수)
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'flex-grow sentence-content-area leading-snug';
+            contentSpan.style.cursor = 'text';
 
-            sentenceContent.addEventListener('mouseenter', () => {
-                clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
+            const processNode = (node) => {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const content = node.textContent;
+                    if (!content.trim()) return document.createTextNode(content);
+                    // 기존 createInteractiveFragment 재사용 (단어 클릭 기능)
+                    return this.createInteractiveFragment(content, true);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    const tagName = node.tagName.toLowerCase();
+                    // 줄바꿈 태그는 이미 위에서 처리했으므로 여기선 무시하거나 공백 처리
+                    if (tagName === 'br' || tagName === 'div' || tagName === 'p') {
+                        return document.createTextNode(' '); 
+                    }
+                    
+                    const newNode = node.cloneNode(false); // 태그 껍데기 복사 (style, class 등 포함)
+                    Array.from(node.childNodes).forEach(child => {
+                        newNode.appendChild(processNode(child));
+                    });
+                    return newNode;
                 }
-                this.hideTranslationTooltip();
+                return node.cloneNode(true);
+            };
+
+            // HTML 문자열을 DOM으로 변환 후 처리
+            const tempContainer = document.createElement('div');
+            tempContainer.innerHTML = sentence;
+            Array.from(tempContainer.childNodes).forEach(child => {
+                contentSpan.appendChild(processNode(child));
             });
 
-            const sentenceParts = sentence.split(/(\*.*?\*)/g);
-            sentenceParts.forEach(part => {
-                if (part.startsWith('*') && part.endsWith('*')) {
-                    const strong = document.createElement('strong');
-                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
-                    sentenceContent.appendChild(strong);
-                } else if (part) {
-                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
-                }
-            });
-            p.appendChild(sentenceContent);
+            p.appendChild(contentSpan);
             containerElement.appendChild(p);
         });
     },
