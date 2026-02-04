@@ -993,115 +993,123 @@ async saveAndExitEditMode() {
     // [신규 추가] 여기서부터 아래 내용을 붙여넣으세요
     // ============================================================
 
-    createRichEditor(initialHtml, containerId) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'rich-editor-wrapper';
-
-        // 1. 툴바 생성
-        const toolbar = document.createElement('div');
-        toolbar.className = 'rich-editor-toolbar';
-
-        const buttons = [
-            { cmd: 'bold', label: 'B', class: 'btn-bold', val: null },
-            { cmd: 'italic', label: 'I', class: 'btn-italic', val: null },
-            { cmd: 'foreColor', label: 'A', class: 'btn-red', val: '#ef4444' },
-            { cmd: 'foreColor', label: 'A', class: 'btn-blue', val: '#3b82f6' },
-            { cmd: 'foreColor', label: 'A', class: 'btn-yellow', val: '#eab308' }
-        ];
-
-        buttons.forEach(btnInfo => {
-            const btn = document.createElement('button');
-            btn.className = `rich-editor-btn ${btnInfo.class}`;
-            btn.textContent = btnInfo.label;
-            btn.onmousedown = (e) => {
-                e.preventDefault(); 
-                document.execCommand(btnInfo.cmd, false, btnInfo.val);
-            };
-            toolbar.appendChild(btn);
-        });
-
-        // 2. 편집 영역 생성
-        const editor = document.createElement('div');
-        editor.className = 'rich-editor-content';
-        editor.contentEditable = true;
-        editor.innerHTML = initialHtml;
-        editor.id = containerId; 
-
-        wrapper.appendChild(toolbar);
-        wrapper.appendChild(editor);
-
-        return wrapper;
-    },
-
-    toggleEditMode(enable) {
-        const currentWord = this.state.currentWordList[this.state.currentIndex];
-        if (!currentWord) return;
-
+// [신규] 텍스트 선택 이벤트 초기화 (displayWord에서 호출됨)
+    initTextSelectionEvents() {
         const cardFront = document.getElementById('learning-card-front-content');
         if (!cardFront) return;
 
-        const meaningEl = cardFront.querySelector('.text-3xl.font-bold'); 
-        const explanationEl = cardFront.querySelector('.text-lg.text-gray-600'); 
-        
-        let actionBtnContainer = document.getElementById('edit-action-btns');
+        // 서식 적용 가능한 영역 (Meaning, Explanation)
+        const targetAreas = cardFront.querySelectorAll('.text-3xl.font-bold, .text-lg.text-gray-600');
 
-        if (enable) {
-            this.state.isEditing = true;
-            const currentMeaningHtml = currentWord.meaning || "";
-            const currentExplanationHtml = currentWord.explanation || "";
+        targetAreas.forEach(area => {
+            // 1. 텍스트 드래그가 끝났을 때
+            area.onmouseup = (e) => {
+                setTimeout(() => { // selection이 잡히는 시간 확보
+                    const selection = window.getSelection();
+                    if (!selection.isCollapsed && selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+                        
+                        // 선택된 텍스트가 현재 영역 내부인지 확인
+                        if (area.contains(range.commonAncestorContainer) || range.commonAncestorContainer === area) {
+                            this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
+                        }
+                    } else {
+                        this.hideFormatTooltip();
+                    }
+                }, 10);
+            };
+        });
 
-            if(meaningEl) meaningEl.style.display = 'none';
-            if(explanationEl) explanationEl.style.display = 'none';
-
-            const meaningEditor = this.createRichEditor(currentMeaningHtml, 'editor-meaning');
-            if(meaningEl) meaningEl.parentNode.insertBefore(meaningEditor, meaningEl);
-
-            const explanationEditor = this.createRichEditor(currentExplanationHtml, 'editor-explanation');
-            if(explanationEl) explanationEl.parentNode.insertBefore(explanationEditor, explanationEl);
-
-            if (!actionBtnContainer) {
-                actionBtnContainer = document.createElement('div');
-                actionBtnContainer.id = 'edit-action-btns';
-                actionBtnContainer.className = 'mt-4 flex justify-center gap-3';
-                actionBtnContainer.innerHTML = `
-                    <button id="save-edit-btn" class="bg-blue-500 text-white px-4 py-2 rounded shadow">저장</button>
-                    <button id="cancel-edit-btn" class="bg-gray-300 text-gray-700 px-4 py-2 rounded shadow">취소</button>
-                `;
-                cardFront.appendChild(actionBtnContainer);
-
-                document.getElementById('save-edit-btn').onclick = () => {
-                    const newMeaning = document.getElementById('editor-meaning').innerHTML;
-                    const newExplanation = document.getElementById('editor-explanation').innerHTML;
-                    
-                    import('./api.js').then(module => {
-                        module.api.updateWord(currentWord.word, {
-                            ...currentWord,
-                            meaning: newMeaning,
-                            explanation: newExplanation
-                        });
-                        currentWord.meaning = newMeaning;
-                        currentWord.explanation = newExplanation;
-                        this.toggleEditMode(false); 
-                        this.displayWord(this.state.currentIndex); 
-                    });
-                };
-
-                document.getElementById('cancel-edit-btn').onclick = () => {
-                    this.toggleEditMode(false);
-                };
-            } else {
-                actionBtnContainer.style.display = 'flex';
+        // 다른 곳 클릭하면 툴팁 닫기
+        document.addEventListener('mousedown', (e) => {
+            if (!e.target.closest('#text-selection-tooltip')) {
+                this.hideFormatTooltip();
             }
+        });
+    },
 
+    // [신규] 서식 툴팁 표시
+    showFormatTooltip(x, y) {
+        this.hideFormatTooltip(); // 기존꺼 제거
+
+        const tooltip = document.createElement('div');
+        tooltip.id = 'text-selection-tooltip';
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y - 40}px`; // 텍스트보다 살짝 위에
+
+        // 버튼들 생성 (빨, 파, 노, 지우기)
+        const colors = [
+            { cls: 'format-btn-red', cmd: 'foreColor', val: '#ef4444' },
+            { cls: 'format-btn-blue', cmd: 'foreColor', val: '#3b82f6' },
+            { cls: 'format-btn-yellow', cmd: 'foreColor', val: '#eab308' },
+            { cls: 'format-btn-clear', cmd: 'removeFormat', val: null, icon: '🗑️' }
+        ];
+
+        colors.forEach(btnInfo => {
+            const btn = document.createElement('div');
+            btn.className = `format-btn ${btnInfo.cls}`;
+            if (btnInfo.icon) btn.textContent = btnInfo.icon;
+
+            btn.onmousedown = (e) => {
+                e.preventDefault(); // 포커스 유지
+                this.applyFormat(btnInfo.cmd, btnInfo.val);
+            };
+            tooltip.appendChild(btn);
+        });
+
+        document.body.appendChild(tooltip);
+    },
+
+    // [신규] 툴팁 숨기기
+    hideFormatTooltip() {
+        const tooltip = document.getElementById('text-selection-tooltip');
+        if (tooltip) tooltip.remove();
+    },
+
+    // [신규] 서식 적용 및 저장
+    applyFormat(command, value) {
+        // 1. 서식 적용 (contentEditable이 아니어도 execCommand가 먹히도록 임시 처리 필요할 수 있음)
+        // 하지만 안전하게 가기 위해 designMode를 켜지 않고, Selection을 이용해 span으로 감싸는 방식 사용
+
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        
+        document.execCommand('styleWithCSS', false, true);
+
+        if (command === 'removeFormat') {
+            document.execCommand('removeFormat', false, null);
+            // 색상 태그가 남을 수 있으므로 직접 정리
+            document.execCommand('foreColor', false, '#1f2937'); // 기본 검정으로 복귀
         } else {
-            this.state.isEditing = false;
-            const editors = cardFront.querySelectorAll('.rich-editor-wrapper');
-            editors.forEach(el => el.remove());
-
-            if(meaningEl) meaningEl.style.display = '';
-            if(explanationEl) explanationEl.style.display = '';
-
-            if(actionBtnContainer) actionBtnContainer.style.display = 'none';
+            document.execCommand(command, false, value);
+            // 굵게 처리도 같이 원하시면 아래 주석 해제
+            document.execCommand('bold', false, null); 
         }
-    }
-};
+
+        this.hideFormatTooltip();
+
+        // 2. 변경된 내용 저장 (API 호출)
+        const currentWord = this.state.currentWordList[this.state.currentIndex];
+        const cardFront = document.getElementById('learning-card-front-content');
+        
+        // HTML 통째로 가져오기
+        const meaningEl = cardFront.querySelector('.text-3xl.font-bold');
+        const explanationEl = cardFront.querySelector('.text-lg.text-gray-600');
+        
+        const newMeaning = meaningEl.innerHTML;
+        const newExplanation = explanationEl.innerHTML;
+
+        // 로컬 상태 업데이트
+        currentWord.meaning = newMeaning;
+        currentWord.explanation = newExplanation;
+
+        // 서버 전송
+        import('./api.js').then(module => {
+            module.api.updateWord(currentWord.word, {
+                ...currentWord,
+                meaning: newMeaning,
+                explanation: newExplanation
+            });
+        });
+    },
