@@ -82,33 +82,38 @@ renderExplanationText(targetElement, text) {
         });
     },
     
-    // [수정됨] HTML 태그를 해석하여 서식은 유지하되, 단어 클릭 기능 추가
+// ui.js - displaySentences 함수 앞부분 수정
+
     displaySentences(sentencesInput, containerElement) {
         containerElement.innerHTML = '';
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
-        // 1. 입력값이 문자열(HTML)이면 줄바꿈 태그를 기준으로 분리하여 배열로 만듦
         let sentences = [];
         if (typeof sentencesInput === 'string') {
-            // div, p, br 태그를 확실한 구분자로 변경 후 분리
             const raw = sentencesInput
-                .replace(/<div>/gi, '__BR__')     // div 시작 -> 줄바꿈
-                .replace(/<\/div>/gi, '')         // div 끝 -> 무시
-                .replace(/<p>/gi, '__BR__')       // p 시작 -> 줄바꿈
-                .replace(/<\/p>/gi, '')           // p 끝 -> 무시
-                .replace(/<br\s*\/?>/gi, '__BR__'); // br -> 줄바꿈
+                .replace(/<div>/gi, '__BR__')
+                .replace(/<\/div>/gi, '')
+                .replace(/<p>/gi, '__BR__')
+                .replace(/<\/p>/gi, '')
+                .replace(/<br\s*\/?>/gi, '__BR__');
             
-            sentences = raw.split('__BR__').filter(s => s.trim() !== '');
+            // [수정됨] .filter(s => s.trim() !== '') 삭제!
+            // 빈 줄도 배열에 포함시켜야 화면에 여백으로 나옵니다.
+            sentences = raw.split('__BR__'); 
         } else if (Array.isArray(sentencesInput)) {
             sentences = sentencesInput;
         }
 
         sentences.forEach((sentence, index) => {
-            // HTML 태그를 제외한 순수 텍스트가 없으면(빈 줄이면) 건너뜀 (이미지도 없으면)
-            const tempCheck = document.createElement('div');
-            tempCheck.innerHTML = sentence;
-            if (!tempCheck.textContent.trim() && !tempCheck.querySelector('img')) return;
-
+            // [수정됨] 빈 줄이면 높이가 있는 투명 박스(spacer) 추가하고 종료
+            if (!sentence || !sentence.trim()) {
+                // 연속된 줄바꿈이 너무 좁아 보이지 않게 최소 높이(h-6) 부여
+                const spacer = document.createElement('div');
+                spacer.className = 'h-6 w-full'; 
+                containerElement.appendChild(spacer);
+                return; 
+            }
+            
             const p = document.createElement('p');
             p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group flex items-start';
 
