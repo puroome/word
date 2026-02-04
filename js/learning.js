@@ -1134,4 +1134,5 @@ async saveAndExitEditMode() {
                 explanation: newExplanation
             });
         });
+    }
     },
