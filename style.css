@@ -181,3 +181,48 @@ body {
 .rich-editor-content:empty:before {
     content: '\200b';
 }
+
+/* 텍스트 선택 시 뜨는 서식 툴팁 */
+#text-selection-tooltip {
+    position: fixed;
+    z-index: 1000;
+    background: #333;
+    border-radius: 8px;
+    padding: 5px 10px;
+    display: flex;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateX(-50%);
+    pointer-events: auto;
+}
+#text-selection-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
+.format-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #555;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+.format-btn:active { transform: scale(0.9); }
+.format-btn-red { background-color: #ef4444; }
+.format-btn-blue { background-color: #3b82f6; }
+.format-btn-yellow { background-color: #eab308; }
+.format-btn-clear { 
+    background: transparent; 
+    border: none; 
+    font-size: 18px; 
+    line-height: 24px;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+}
