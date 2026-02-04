@@ -1135,4 +1135,4 @@ async saveAndExitEditMode() {
             });
         });
     }
-    },
+    };
