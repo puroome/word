@@ -163,40 +163,112 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-    createToolbarHTML(toolbarId) {
-        return `
-            <div id="${toolbarId}" class="flex gap-2 mb-1 bg-gray-100 p-1 rounded border border-gray-200">
-                <button type="button" data-cmd="bold" class="p-1 hover:bg-gray-300 rounded font-bold w-8" title="Bold">B</button>
-                <button type="button" data-cmd="italic" class="p-1 hover:bg-gray-300 rounded italic w-8" title="Italic">I</button>
-                <div class="relative flex items-center">
-                    <input type="color" data-cmd="foreColor" class="w-8 h-8 p-0 border-0 rounded cursor-pointer" title="Color" value="#000000">
-                </div>
-                <button type="button" data-cmd="removeFormat" class="p-1 hover:bg-gray-300 rounded text-xs px-2" title="서식 지우기">Clear</button>
-            </div>
-        `;
+// [신규] 플로팅 툴바 생성 (최초 1회만 실행됨)
+    initFloatingToolbar() {
+        if (document.getElementById('floating-toolbar')) return;
+
+        const toolbar = document.createElement('div');
+        toolbar.id = 'floating-toolbar';
+        
+        // 자주 쓰는 색상 10가지 + 서식 지우기(🗑️)
+        const colors = ['#000000', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#6B7280', '#9CA3AF'];
+        
+        let html = '';
+        colors.forEach(color => {
+            html += `<div class="color-btn" style="background-color:${color}" data-cmd="foreColor" data-val="${color}"></div>`;
+        });
+        // 구분선 및 지우기 버튼
+        html += `<div style="width:1px; height:16px; background:#555; margin:0 2px;"></div>`;
+        html += `<div class="clear-btn" data-cmd="removeFormat" title="서식 지우기">🗑️</div>`; // 아이콘으로 변경
+
+        toolbar.innerHTML = html;
+        document.body.appendChild(toolbar);
+
+        // 버튼 클릭 이벤트 (이벤트 위임)
+        toolbar.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // 포커스 잃지 않게 방지
+            const target = e.target;
+            const cmd = target.dataset.cmd;
+            const val = target.dataset.val;
+
+            if (cmd) {
+                document.execCommand(cmd, false, val || null);
+                this.updateFloatingToolbarPosition(); // 적용 후 위치 재조정 (선택영역 변동 가능성)
+            }
+        });
     },
 
-    bindToolbarEvents(toolbarId, inputId) {
-        const toolbar = document.getElementById(toolbarId);
-        if (!toolbar) return;
-        toolbar.querySelectorAll('button').forEach(btn => {
-            btn.onclick = (e) => {
-                e.preventDefault();
-                document.execCommand(btn.dataset.cmd, false, null);
-                document.getElementById(inputId).focus();
-            };
+    // [신규] 드래그 시 툴바 위치 계산 및 표시
+    bindFloatingToolbarEvents(inputId) {
+        const inputEl = document.getElementById(inputId);
+        if (!inputEl) return;
+
+        const updateToolbar = () => {
+            const toolbar = document.getElementById('floating-toolbar');
+            const selection = window.getSelection();
+
+            // 선택된 텍스트가 없거나, 다른 영역을 선택했으면 숨김
+            if (selection.isCollapsed || !inputEl.contains(selection.anchorNode)) {
+                toolbar.style.display = 'none';
+                return;
+            }
+
+            this.updateFloatingToolbarPosition();
+        };
+
+        // 마우스를 뗐을 때(드래그 끝), 키보드로 선택했을 때 체크
+        inputEl.addEventListener('mouseup', () => setTimeout(updateToolbar, 10)); // 약간의 지연 필요
+        inputEl.addEventListener('keyup', (e) => {
+            if (e.key === 'Shift' || e.key.startsWith('Arrow')) setTimeout(updateToolbar, 10);
         });
-        const colorInput = toolbar.querySelector('input[type="color"]');
-        if (colorInput) {
-            colorInput.onchange = (e) => {
-                document.execCommand('foreColor', false, e.target.value);
-                document.getElementById(inputId).focus();
-            };
-        }
+        
+        // 입력 중이거나 포커스를 잃으면 숨김
+        inputEl.addEventListener('input', () => { document.getElementById('floating-toolbar').style.display = 'none'; });
+        inputEl.addEventListener('blur', () => { 
+             // 툴바 버튼 클릭 시 blur가 먼저 발생할 수 있으므로 살짝 지연 체크
+             setTimeout(() => {
+                 const selection = window.getSelection();
+                 if (selection.isCollapsed) document.getElementById('floating-toolbar').style.display = 'none';
+             }, 200);
+        });
     },
-// [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
+
+    // [신규] 툴바 위치 실제 계산 함수
+    updateFloatingToolbarPosition() {
+        const toolbar = document.getElementById('floating-toolbar');
+        const selection = window.getSelection();
+        if (selection.rangeCount === 0) return;
+
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect(); // 선택된 텍스트의 좌표
+
+        if (rect.width === 0) return; // 실제 선택된 게 없으면 종료
+
+        toolbar.style.display = 'flex';
+        
+        // 툴바 위치: 선택 영역 바로 위 가운데
+        const toolbarHeight = toolbar.offsetHeight || 40;
+        const toolbarWidth = toolbar.offsetWidth || 300;
+        
+        let top = rect.top + window.scrollY - toolbarHeight - 10; // 10px 여백
+        let left = rect.left + window.scrollX + (rect.width / 2) - (toolbarWidth / 2);
+
+        // 화면 밖으로 나가는 것 방지
+        if (left < 10) left = 10;
+        if (left + toolbarWidth > window.innerWidth) left = window.innerWidth - toolbarWidth - 10;
+        if (top < 10) top = rect.bottom + window.scrollY + 10; // 위 공간 없으면 아래로
+
+        toolbar.style.top = `${top}px`;
+        toolbar.style.left = `${left}px`;
+    },
+    
+// [수정됨] 편집 모드 (플로팅 툴바 적용 & AI 자동 완성 로직 호환)
     async enterEditMode(side) {
         this.state.isEditing = true;
+        
+        // [1] 플로팅 툴바 초기화 (최초 1회 생성)
+        if (this.initFloatingToolbar) this.initFloatingToolbar();
+
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
         if (side === 'front') {
@@ -204,6 +276,7 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
+            // 1. 표제어 (기존 동일)
             this.elements.wordDisplay.innerHTML = `
                 <div class="flex flex-col gap-2">
                     <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
@@ -213,26 +286,31 @@ export const learningMode = {
                 </div>
             `;
             
+            // 2. 뜻 (Meaning) - 툴바 없이 contenteditable div만 배치
             const currentMeaning = wordData.meaning || "";
             this.elements.meaningDisplay.innerHTML = `
-                ${this.createToolbarHTML('edit-meaning-toolbar')}
                 <div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] text-left bg-white" contenteditable="true" placeholder="뜻">${currentMeaning}</div>
             `;
             
+            // 3. 설명 (Explanation) - 툴바 없이 contenteditable div만 배치
             const currentExplanation = wordData.explanation || "";
+            // 줄바꿈을 <br>로 변환하여 에디터에 표시
             const formattedExplanation = currentExplanation.replace(/\n/g, '<br>');
             this.elements.explanationDisplay.innerHTML = `
-                ${this.createToolbarHTML('edit-explanation-toolbar')}
                 <div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] text-left bg-white" contenteditable="true" placeholder="설명">${formattedExplanation}</div>
             `;
 
             setTimeout(() => {
-                this.bindToolbarEvents('edit-meaning-toolbar', 'edit-meaning-input');
-                this.bindToolbarEvents('edit-explanation-toolbar', 'edit-explanation-input');
+                // [이벤트 연결] 드래그 시 플로팅 툴바 표시
+                if (this.bindFloatingToolbarEvents) {
+                    this.bindFloatingToolbarEvents('edit-meaning-input');
+                    this.bindFloatingToolbarEvents('edit-explanation-input');
+                }
 
+                // AI 버튼 로직 (div contenteditable 호환되도록 수정됨)
                 const autoBtn = document.getElementById('auto-fill-btn');
                 const wordInput = document.getElementById('edit-word-input');
-                const meaningInput = document.getElementById('edit-meaning-input');
+                const meaningInput = document.getElementById('edit-meaning-input'); 
                 const explanationInput = document.getElementById('edit-explanation-input');
 
                 if (autoBtn) {
@@ -251,30 +329,33 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                        // [수정 1] 뜻 (Meaning) - 기존 값이 있으면 두 줄 띄우고 추가
+                            // 뜻 (Meaning) - innerHTML 사용
                             if (aiData.meaning) {
-                                const original = meaningInput.value.trim();
-                                if (original) {
-                                    // 중복되지 않을 때만 추가
-                                    if (!original.includes(aiData.meaning)) {
-                                        meaningInput.value = original + "\n\n" + aiData.meaning;
+                                const original = meaningInput.innerHTML; 
+                                const newContent = aiData.meaning.replace(/\n/g, '<br>'); // 줄바꿈 변환
+                                
+                                if (original && original.trim() && original !== '<br>') {
+                                    if (!original.includes(newContent)) {
+                                        meaningInput.innerHTML = original + "<br><br>" + newContent;
                                     }
                                 } else {
-                                    meaningInput.value = aiData.meaning;
+                                    meaningInput.innerHTML = newContent;
                                 }
                             }
 
-                            // [수정 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
+                            // 설명 (Explanation) - innerHTML 사용
                             if (aiData.explanation) {
-                                const original = explanationInput.value.trim();
-                                if (original) {
-                                    explanationInput.value = original + "\n\n" + aiData.explanation;
+                                const original = explanationInput.innerHTML;
+                                const newContent = aiData.explanation.replace(/\n/g, '<br>');
+                                
+                                if (original && original.trim() && original !== '<br>') {
+                                    explanationInput.innerHTML = original + "<br><br>" + newContent;
                                 } else {
-                                    explanationInput.value = aiData.explanation;
+                                    explanationInput.innerHTML = newContent;
                                 }
                             }
 
-                            // [수정 3] 예문 (Samples) - 기존 예문 뒤에 두 줄 띄우고 추가
+                            // 예문 (Samples) - 데이터(wordData)에만 저장
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
@@ -284,10 +365,7 @@ export const learningMode = {
                                 } else {
                                     wordData.sample = newSampleText;
                                 }
-                                
-                                // 동기화용 필드 업데이트
                                 wordData.manualSample = wordData.sample;
-
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
                             } else {
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료 (예문 없음)" } }));
@@ -307,7 +385,19 @@ export const learningMode = {
         } else {
             // 뒷면 편집 모드
             let currentSample = wordData.sample || "";
-            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
+            // 줄바꿈 처리
+            const formattedSample = currentSample.replace(/\n/g, '<br>');
+
+            this.elements.backContent.innerHTML = `
+                <div id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-left overflow-y-auto leading-relaxed" contenteditable="true" placeholder="예문" style="min-height: 200px;">${formattedSample}</div>
+            `;
+            
+            setTimeout(() => {
+                if (this.bindFloatingToolbarEvents) {
+                    this.bindFloatingToolbarEvents('edit-sample-input');
+                }
+            }, 0);
+
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
@@ -315,6 +405,7 @@ export const learningMode = {
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
     },
+    
 async saveAndExitEditMode() {
         // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
