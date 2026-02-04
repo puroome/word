@@ -1015,29 +1015,40 @@ async saveAndExitEditMode() {
     // [신규 추가] 여기서부터 아래 내용을 붙여넣으세요
     // ============================================================
 
-// [신규] 텍스트 선택 이벤트 초기화 (displayWord에서 호출됨)
+// [수정] 텍스트 선택 이벤트 초기화 (확실한 요소에 이벤트 연결)
     initTextSelectionEvents() {
-        const cardFront = document.getElementById('learning-card-front-content');
-        if (!cardFront) return;
+        // 1. 이미 this.elements에 저장된 확실한 요소들을 가져옵니다.
+        const targets = [this.elements.meaningDisplay, this.elements.explanationDisplay];
 
-        // 서식 적용 가능한 영역 (Meaning, Explanation)
-        const targetAreas = cardFront.querySelectorAll('.text-3xl.font-bold, .text-lg.text-gray-600');
+        targets.forEach(area => {
+            if (!area) return;
 
-        targetAreas.forEach(area => {
-            // 1. 텍스트 드래그가 끝났을 때
+            // 텍스트 드래그(선택)가 끝났을 때
             area.onmouseup = (e) => {
-                setTimeout(() => { // selection이 잡히는 시간 확보
+                setTimeout(() => { 
                     const selection = window.getSelection();
-                    if (!selection.isCollapsed && selection.rangeCount > 0) {
+                    // 선택된 텍스트가 있을 때만 실행
+                    if (!selection.isCollapsed && selection.toString().length > 0) {
                         const range = selection.getRangeAt(0);
                         const rect = range.getBoundingClientRect();
                         
-                        // 선택된 텍스트가 현재 영역 내부인지 확인
-                        if (area.contains(range.commonAncestorContainer) || range.commonAncestorContainer === area) {
-                            this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
-                        }
+                        // 툴팁 띄우기 (선택 영역 중앙 상단)
+                        this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
                     } else {
+                        // 선택이 해제되면 툴팁 숨기기
                         this.hideFormatTooltip();
+                    }
+                }, 10);
+            };
+
+            // [추가] 모바일 터치 환경에서도 작동하도록 touchend 추가
+            area.ontouchend = (e) => {
+                 setTimeout(() => { 
+                    const selection = window.getSelection();
+                    if (!selection.isCollapsed && selection.toString().length > 0) {
+                        const range = selection.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+                        this.showFormatTooltip(rect.left + rect.width / 2, rect.top - 10);
                     }
                 }, 10);
             };
@@ -1046,7 +1057,13 @@ async saveAndExitEditMode() {
         // 다른 곳 클릭하면 툴팁 닫기
         document.addEventListener('mousedown', (e) => {
             if (!e.target.closest('#text-selection-tooltip')) {
-                this.hideFormatTooltip();
+                // 툴팁 자체가 아닌 다른 곳을 클릭하면 닫기
+                // (단, 텍스트 선택 중에는 닫히면 안 되므로 selection 체크는 onmouseup에서 처리)
+                // 여기서는 selection이 없는 단순 클릭일 때 닫힘
+                const selection = window.getSelection();
+                if (selection.isCollapsed) {
+                    this.hideFormatTooltip();
+                }
             }
         });
     },
