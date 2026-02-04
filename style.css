@@ -128,3 +128,56 @@ body {
     -moz-appearance: textfield;
 }
 
+/* =========================================
+   [신규] Rich Text Editor 스타일
+   ========================================= */
+.rich-editor-wrapper {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.rich-editor-toolbar {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.rich-editor-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 14px;
+    border: 1px solid transparent;
+    transition: background-color 0.2s;
+}
+
+.rich-editor-btn:hover { background-color: #e5e7eb; }
+
+/* 색상 버튼 스타일 */
+.btn-bold { font-weight: 900; }
+.btn-italic { font-style: italic; font-family: serif; }
+.btn-red { color: #ef4444; font-weight: bold; }
+.btn-blue { color: #3b82f6; font-weight: bold; }
+.btn-yellow { color: #eab308; font-weight: bold; background-color: #fefce8; }
+
+.rich-editor-content {
+    min-height: 40px;
+    padding: 0.5rem;
+    outline: none;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #1f2937;
+}
+/* 빈 내용일 때 높이 유지 */
+.rich-editor-content:empty:before {
+    content: '\200b';
+}
