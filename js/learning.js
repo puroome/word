@@ -164,7 +164,7 @@ export const learningMode = {
     },
 
 // [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
-    async enterEditMode(side) {
+async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
@@ -173,32 +173,21 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            this.elements.wordDisplay.innerHTML = `
-                <div class="flex flex-col gap-2">
-                    <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
-                    <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
-                        🪄 AI 자동 완성
-                    </button>
-                </div>
-            `;
+            // [수정] 공백 문제 해결: HTML 태그를 한 줄로 작성
+            this.elements.wordDisplay.innerHTML = `<div class="flex flex-col gap-2"><input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]"><button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">🪄 AI 자동 완성</button></div>`;
             
-            // [수정] Textarea 대신 contentEditable DIV 사용 (서식 적용을 위해)
             const currentMeaning = wordData.meaning || "";
             // 줄바꿈을 <br>로 변환하여 에디터에 표시 (이미 HTML이면 그대로)
             const displayMeaning = currentMeaning.includes('<') ? currentMeaning : currentMeaning.replace(/\n/g, '<br>');
             
-            this.elements.meaningDisplay.innerHTML = `
-                <div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]" contenteditable="true">
-                    ${displayMeaning}
-                </div>`;
+            // [수정] 공백 문제 해결: div 태그와 내용 사이의 공백/줄바꿈 제거
+            this.elements.meaningDisplay.innerHTML = `<div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]" contenteditable="true">${displayMeaning}</div>`;
             
             const currentExplanation = wordData.explanation || "";
             const displayExplanation = currentExplanation.includes('<') ? currentExplanation : currentExplanation.replace(/\n/g, '<br>');
 
-            this.elements.explanationDisplay.innerHTML = `
-                <div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[150px]" contenteditable="true">
-                    ${displayExplanation}
-                </div>`;
+            // [수정] 공백 문제 해결: div 태그와 내용 사이의 공백/줄바꿈 제거
+            this.elements.explanationDisplay.innerHTML = `<div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[150px]" contenteditable="true">${displayExplanation}</div>`;
 
             // [핵심] 편집 모드가 된 요소들에만 서식 툴팁 이벤트 연결
             setTimeout(() => {
@@ -208,8 +197,7 @@ export const learningMode = {
                 // 이 두 요소에 대해서만 툴팁 작동
                 this.initTextSelectionEvents([meaningInput, explanationInput]);
 
-                // AI 자동완성 로직 (입력 방식이 div로 바뀌었으므로, 기존 로직 사용 시 값 읽어오는 부분 수정 필요)
-                // 현재는 서식 편집 UI 구현에 집중하기 위해 AI 버튼 로직은 단순 연결만 유지합니다.
+                // AI 자동완성 로직 (입력 방식이 div로 바뀌었으므로, 현재는 비활성화 메시지 출력)
                 const autoBtn = document.getElementById('auto-fill-btn');
                 if(autoBtn) {
                      autoBtn.onclick = () => {
@@ -219,7 +207,7 @@ export const learningMode = {
             }, 0);
 
         } else {
-            // 뒷면 편집 모드 (기존 유지)
+            // 뒷면 편집 모드 (Textarea는 공백 문제 없음)
             let currentSample = wordData.sample || "";
             this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
