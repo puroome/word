@@ -88,10 +88,11 @@ export const ui = {
         return fragment;
     },
     renderExplanationText(targetElement, text) {
-        // [수정] HTML 태그(<b>, <i>, <span ...>)가 감지되면 서식 적용을 위해 innerHTML 사용
-        // 단, 태그가 없을 때는 기존 로직(단어 클릭 기능 등)을 유지
+        // [수정] HTML 태그가 감지되면 createInteractiveFragment를 사용하여 
+        // 서식(Bold, Color 등)은 유지하되, 내부 영단어에 클릭 이벤트(TTS/팝업)를 연결함
         if (text && /<[a-z][\s\S]*>/i.test(text)) {
-            targetElement.innerHTML = text;
+            targetElement.innerHTML = '';
+            targetElement.appendChild(this.createInteractiveFragment(text));
             return;
         }
 
