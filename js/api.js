@@ -697,7 +697,8 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 ...cardData,
                 sample: cardData.manual_sample || cardData.sample || "", 
                 AISample: null,
-                index: Date.now() // Firebase는 나중에 시트 동기화로 덮어씌워지므로 임시값 유지
+                // [수정] Date.now() 대신 현재 리스트의 끝 번호+1을 부여하여 정렬 꼬임 방지
+                index: (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1
             };
             update(ref(database), updates).catch(e => console.warn(e));
         }
