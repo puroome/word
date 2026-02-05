@@ -614,21 +614,20 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
         }
     },
 
-    // [수정 1] 새 단어 생성 (캐시 도미노 업데이트 적용 완료)
+    // [수정된 createWord] : 앱에서 직접 순서를 계산하여 Firebase에 저장 (위치 이동 방지)
     async createWord(cardData, afterWord = null) {
         
-        // ▼▼▼ [추가된 코드] POS가 없으면 자동으로 'n/a' 설정 ▼▼▼
+        // 1. 데이터 유효성 검사 (POS 기본값 설정)
         if (!cardData.pos || !cardData.pos.trim()) {
             cardData.pos = "n/a";
         }
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-        // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
+        // 2. Google Sheets 저장 (백엔드 처리 - 기존 로직 유지)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
             scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || ""); // 위에서 n/a가 할당되었으므로 n/a가 전송됨
+            scriptUrl.searchParams.append('pos', cardData.pos);
             scriptUrl.searchParams.append('meaning', cardData.meaning || "");
             scriptUrl.searchParams.append('explanation', cardData.explanation || "");
             scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
@@ -637,6 +636,7 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 scriptUrl.searchParams.append('after_word', afterWord);
             }
 
+            // 시트 저장은 비동기로 던져놓고 기다리지 않음 (User Experience 최적화)
             fetch(scriptUrl.toString())
                 .then(r => r.json())
                 .then(d => {
@@ -645,62 +645,87 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. [핵심] LocalStorage 캐시 즉시 반영 (인덱스 도미노 업데이트)
-        try {
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                const words = parsedCache.words || [];
+        // ============================================================
+        // 3. Firebase 및 로컬 데이터 동시 업데이트 (핵심 수정)
+        // ============================================================
+        if (!database) return; 
 
-                // (1) 삽입할 위치 찾기
-                let insertIndex = words.length; // 기본: 맨 뒤
-                if (afterWord) {
-                    const afterIndex = words.findIndex(w => w.word === afterWord);
-                    if (afterIndex !== -1) {
-                        insertIndex = afterIndex + 1;
-                    }
-                }
+        const { ref, update } = window.firebaseSDK;
+        const safeKey = cardData.word.trim().replace(/[.#$\/\[\]]/g, "_");
+        const updates = {};
 
-                // (2) 도미노: 삽입 위치 뒤에 있는 모든 단어들의 index를 +1씩 밀어내기
-                for (let i = insertIndex; i < words.length; i++) {
-                    if (typeof words[i].index === 'number') {
-                        words[i].index += 1;
-                    }
-                }
+        // (1) 순서 계산을 위해 현재 단어 목록 정렬해서 가져오기
+        const allWords = [...state.wordList].sort((a, b) => (a.index || 0) - (b.index || 0));
 
-                // (3) 새 단어 객체 생성 (올바른 index 부여)
-                const newWordObj = {
-                    ...cardData,
-                    sample: cardData.manual_sample || cardData.sample || "",
-                    AISample: null,
-                    index: insertIndex
-                };
-
-                // (4) 배열에 끼워넣기 (splice 이용)
-                words.splice(insertIndex, 0, newWordObj);
-
-                // (5) 저장
-                parsedCache.words = words;
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                console.log(`✅ 캐시 업데이트 완료: ${newWordObj.word} (Index: ${insertIndex})`);
+        // (2) 들어갈 위치(Target Index) 계산
+        let targetIndex = 0;
+        
+        if (afterWord) {
+            // 특정 단어 뒤에 추가
+            const targetWordObj = allWords.find(w => w.word === afterWord);
+            if (targetWordObj) {
+                targetIndex = (targetWordObj.index || 0) + 1;
+            } else {
+                // 기준 단어를 못 찾으면 맨 뒤로
+                targetIndex = allWords.length > 0 ? (allWords[allWords.length - 1].index || 0) + 1 : 1;
             }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 중 오류:", e);
+        } else {
+            // 위치 지정 없으면 맨 뒤로
+            targetIndex = allWords.length > 0 ? (allWords[allWords.length - 1].index || 0) + 1 : 1;
         }
 
-        // 3. Firebase 업데이트
-        if (database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
-            const updates = {};
-            updates[`/vocabulary/${safeKey}`] = {
-                ...cardData,
-                sample: cardData.manual_sample || cardData.sample || "", 
-                AISample: null,
-                // [수정] Date.now() 대신 현재 리스트의 끝 번호+1을 부여하여 정렬 꼬임 방지
-                index: (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1
-            };
-            update(ref(database), updates).catch(e => console.warn(e));
+        // (3) 도미노 업데이트: 내 자리에 있거나 내 뒤에 있는 친구들을 한 칸씩 뒤로 밀기
+        // (주의: index 필드만 업데이트하여 데이터 전송량 최소화)
+        allWords.forEach(w => {
+            if ((w.index || 0) >= targetIndex && w.word !== cardData.word) {
+                const wKey = w.word.replace(/[.#$\/\[\]]/g, "_");
+                updates[`/vocabulary/${wKey}/index`] = (w.index || 0) + 1;
+            }
+        });
+
+        // (4) 새 단어 데이터 준비
+        updates[`/vocabulary/${safeKey}`] = {
+            ...cardData,
+            sample: cardData.manual_sample || cardData.sample || "", 
+            AISample: null,
+            index: targetIndex // 계산된 정확한 위치
+        };
+
+        // (5) Firebase에 한 번에 전송 (Atomic Update)
+        try {
+            await update(ref(database), updates);
+            console.log(`✅ Firebase 저장 완료: "${cardData.word}" (Index: ${targetIndex})`);
+            
+            // (6) 로컬 캐시(localStorage) & State 즉시 업데이트 (화면 깜빡임 방지)
+            // Firebase가 업데이트되면 리스너가 돌겠지만, 
+            // 새로고침 직전 공백을 메우기 위해 로컬 데이터도 수동으로 맞춰줍니다.
+            try {
+                // A. 메모리 상의 state 업데이트
+                // 기존 단어들 밀기
+                state.wordList.forEach(w => {
+                    if ((w.index || 0) >= targetIndex) w.index = (w.index || 0) + 1;
+                });
+                // 새 단어 추가
+                const newWordObj = { ...updates[`/vocabulary/${safeKey}`] };
+                state.wordList.push(newWordObj);
+                state.wordList.sort((a, b) => (a.index || 0) - (b.index || 0));
+
+                // B. 로컬 스토리지(캐시) 업데이트
+                const cachedData = localStorage.getItem('wordListCache');
+                if (cachedData) {
+                    const parsedCache = JSON.parse(cachedData);
+                    parsedCache.words = state.wordList; // 정렬된 최신 리스트로 덮어쓰기
+                    parsedCache.timestamp = Date.now();
+                    localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                    console.log("✅ 로컬 캐시 동기화 완료");
+                }
+            } catch (e) {
+                console.error("로컬 캐시 업데이트 중 오류:", e);
+            }
+
+        } catch (e) {
+            console.error("Firebase 저장 실패:", e);
+            alert("저장에 실패했습니다. 인터넷 연결을 확인해주세요.");
         }
     },
 
