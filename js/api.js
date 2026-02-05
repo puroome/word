@@ -614,21 +614,21 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
         }
     },
 
-    // [수정 1] 새 단어 생성 (캐시 도미노 업데이트 적용 완료)
+    // [수정된 createWord] : 구글 시트 동기화 완료 대기 방식 (안전 우선)
     async createWord(cardData, afterWord = null) {
         
-        // ▼▼▼ [추가된 코드] POS가 없으면 자동으로 'n/a' 설정 ▼▼▼
+        // 1. POS(품사) 기본값 처리
         if (!cardData.pos || !cardData.pos.trim()) {
             cardData.pos = "n/a";
         }
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-        // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
+        // 2. Google Sheets 저장 요청 및 '대기(Await)'
+        // 시트가 저장을 마치고 Firebase 정렬까지 끝낼 때까지 앱이 기다립니다.
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
             scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || ""); // 위에서 n/a가 할당되었으므로 n/a가 전송됨
+            scriptUrl.searchParams.append('pos', cardData.pos);
             scriptUrl.searchParams.append('meaning', cardData.meaning || "");
             scriptUrl.searchParams.append('explanation', cardData.explanation || "");
             scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
@@ -637,58 +637,55 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 scriptUrl.searchParams.append('after_word', afterWord);
             }
 
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 생성 실패:", d.message);
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
+            try {
+                // [핵심 변경] await를 사용하여 서버 작업이 끝날 때까지 기다립니다.
+                // 이 동안에는 코드가 멈춘 것처럼 보일 수 있으나, 이는 데이터 정합성을 위한 대기 시간입니다.
+                const response = await fetch(scriptUrl.toString());
+                const data = await response.json();
+
+                if (data.success) {
+                    console.log("✅ 서버 저장 및 정렬 완료. 최신 목록을 가져옵니다.");
+                    
+                    // 시트가 이미 정렬된 데이터를 Firebase에 올렸으므로,
+                    // 앱은 굳이 중복 저장을 하지 않고 최신 데이터만 받아오면 됩니다.
+                    await this.loadWordList(true); 
+                    
+                    // 성공했으면 여기서 함수를 종료합니다. (아래의 백업 저장 로직 실행 안 함)
+                    return;
+                } else {
+                    console.warn("⚠️ 서버 저장 실패 (백업 로직 실행):", data.message);
+                }
+            } catch (e) {
+                console.error("⚠️ 서버 통신 에러 (백업 로직 실행):", e);
+                // 인터넷 문제 등으로 서버 연결이 안 되면 아래 백업 로직(Firebase 직접 저장)으로 넘어갑니다.
+            }
         }
 
-        // 2. [핵심] LocalStorage 캐시 즉시 반영 (인덱스 도미노 업데이트)
+        // ============================================================
+        // 3. 백업 로직 (Fail-safe)
+        // 위에서 구글 시트 저장이 실패했을 경우에만 실행됩니다.
+        // 기존처럼 '맨 뒤에 추가'하는 임시 방식을 사용합니다.
+        // ============================================================
+        
+        // 로컬 캐시 임시 업데이트
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
                 const words = parsedCache.words || [];
-
-                // (1) 삽입할 위치 찾기
-                let insertIndex = words.length; // 기본: 맨 뒤
-                if (afterWord) {
-                    const afterIndex = words.findIndex(w => w.word === afterWord);
-                    if (afterIndex !== -1) {
-                        insertIndex = afterIndex + 1;
-                    }
-                }
-
-                // (2) 도미노: 삽입 위치 뒤에 있는 모든 단어들의 index를 +1씩 밀어내기
-                for (let i = insertIndex; i < words.length; i++) {
-                    if (typeof words[i].index === 'number') {
-                        words[i].index += 1;
-                    }
-                }
-
-                // (3) 새 단어 객체 생성 (올바른 index 부여)
                 const newWordObj = {
                     ...cardData,
                     sample: cardData.manual_sample || cardData.sample || "",
                     AISample: null,
-                    index: insertIndex
+                    index: (words.length > 0 ? words[words.length - 1].index : 0) + 1
                 };
-
-                // (4) 배열에 끼워넣기 (splice 이용)
-                words.splice(insertIndex, 0, newWordObj);
-
-                // (5) 저장
+                words.push(newWordObj);
                 parsedCache.words = words;
                 localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                console.log(`✅ 캐시 업데이트 완료: ${newWordObj.word} (Index: ${insertIndex})`);
             }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 중 오류:", e);
-        }
+        } catch (e) { console.error(e); }
 
-        // 3. Firebase 업데이트
+        // Firebase 임시 저장
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
@@ -697,7 +694,6 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
                 ...cardData,
                 sample: cardData.manual_sample || cardData.sample || "", 
                 AISample: null,
-                // [수정] Date.now() 대신 현재 리스트의 끝 번호+1을 부여하여 정렬 꼬임 방지
                 index: (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1
             };
             update(ref(database), updates).catch(e => console.warn(e));
