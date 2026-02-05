@@ -48,6 +48,13 @@ export const ui = {
         return fragment;
     },
     renderExplanationText(targetElement, text) {
+        // [수정] HTML 태그(<b>, <i>, <span ...>)가 감지되면 서식 적용을 위해 innerHTML 사용
+        // 단, 태그가 없을 때는 기존 로직(단어 클릭 기능 등)을 유지
+        if (text && /<[a-z][\s\S]*>/i.test(text)) {
+            targetElement.innerHTML = text;
+            return;
+        }
+
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
         const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
