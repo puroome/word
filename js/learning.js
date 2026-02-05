@@ -747,10 +747,15 @@ async saveAndExitEditMode() {
         
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
-        this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
+        // [수정] Meaning 영역도 Interactive Fragment를 사용하여 서식과 상호작용(TTS) 모두 지원
+        this.elements.meaningDisplay.innerHTML = '';
+        if (wordData.meaning) {
+            this.elements.meaningDisplay.appendChild(ui.createInteractiveFragment(wordData.meaning.replace(/\n/g, '<br>')));
+        }
+        
+        // [수정] Explanation 영역 처리 (기존 로직 유지하되, 필요 시 Fragment 사용 검토)
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.remove('hidden');
-
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
         const sampleImgUrl = 'images/cat-delivery.png';
         const noSampleImgUrl = 'images/cat-add.png';
