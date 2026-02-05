@@ -173,14 +173,21 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
+            // [수정] Rich Text 편집을 위해 input 대신 contenteditable div 사용
             this.elements.wordDisplay.innerHTML = `
-                <div class="flex flex-col gap-2">
-                    <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
+                <div class="flex flex-col gap-2 relative">
+                    <div id="edit-word-input" contenteditable="true" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white cursor-text min-h-[40px] flex items-center justify-center" placeholder="Word [POS]">${wordInputValue}</div>
                     <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
                         🪄 AI 자동 완성
                     </button>
                 </div>
             `;
+            
+            // [추가] 서식 편집 이벤트 연결
+            setTimeout(() => {
+                const editDiv = document.getElementById('edit-word-input');
+                if(editDiv) this.attachRichTextEvents(editDiv);
+            }, 0);
             
             const currentMeaning = wordData.meaning || "";
             this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
@@ -274,6 +281,69 @@ export const learningMode = {
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
     },
+
+// [신규 기능] 서식 편집(볼드, 이탤릭, 색상) 이벤트 핸들러
+    attachRichTextEvents(element) {
+        // 기존 저장 로직과의 호환성을 위해 value 프로퍼티 바인딩
+        element.value = element.innerHTML;
+        element.addEventListener('input', () => { element.value = element.innerHTML; });
+
+        // 단축키 (Ctrl+B, Ctrl+I)
+        element.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'i')) {
+                e.preventDefault();
+                document.execCommand(e.key === 'b' ? 'bold' : 'italic');
+            }
+        });
+
+        // 툴팁 표시 로직
+        const updateTooltip = () => {
+            const existing = document.getElementById('format-tooltip');
+            if (existing) existing.remove();
+
+            const selection = window.getSelection();
+            if (!selection.rangeCount || selection.isCollapsed || !element.contains(selection.anchorNode)) return;
+
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            
+            const tooltip = document.createElement('div');
+            tooltip.id = 'format-tooltip';
+            tooltip.className = 'format-tooltip';
+            tooltip.style.top = `${rect.top - 50}px`;
+            tooltip.style.left = `${rect.left}px`;
+
+            const actions = [
+                { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
+                { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
+                { label: '🟢', cmd: 'foreColor', val: '#008000' },
+                { label: '🚮', cmd: 'removeFormat', val: null }
+            ];
+
+            actions.forEach(act => {
+                const btn = document.createElement('button');
+                btn.textContent = act.label;
+                btn.className = 'format-btn';
+                btn.onmousedown = (e) => { // click 대신 mousedown 사용하여 포커스 유지
+                    e.preventDefault();
+                    document.execCommand(act.cmd, false, act.val);
+                    element.value = element.innerHTML; // 변경사항 동기화
+                };
+                tooltip.appendChild(btn);
+            });
+            document.body.appendChild(tooltip);
+        };
+
+        element.addEventListener('mouseup', () => setTimeout(updateTooltip, 10));
+        element.addEventListener('keyup', () => setTimeout(updateTooltip, 10));
+        document.addEventListener('mousedown', (e) => {
+            if (!e.target.closest('#format-tooltip') && !element.contains(e.target)) {
+                const existing = document.getElementById('format-tooltip');
+                if (existing) existing.remove();
+            }
+        });
+    },
+    
 async saveAndExitEditMode() {
         // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
