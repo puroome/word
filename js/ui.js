@@ -12,7 +12,8 @@ export const ui = {
         this.hideTranslationTooltip();
     },
 
-    createInteractiveFragment(content, isForSampleSentence = false) {
+    // [수정] treatAsPhrase 매개변수 추가 (true일 경우 단어 뭉치를 유지)
+    createInteractiveFragment(content, isForSampleSentence = false, treatAsPhrase = false) {
         const fragment = document.createDocumentFragment();
         if (!content || !content.trim()) return fragment;
 
@@ -27,11 +28,24 @@ export const ui = {
                 if (!text.trim()) return document.createTextNode(text);
 
                 const textFragment = document.createDocumentFragment();
-                // 기존의 단어 분리 로직 적용
-                const parts = text.split(/([a-zA-Z0-9'-]+)/g);
+                
+                // [수정] 모드에 따라 분리 정규식 선택 (단어 vs 뭉치)
+                // treatAsPhrase가 true면 explanation 영역의 뭉치 로직을 사용합니다.
+                const splitRegex = treatAsPhrase 
+                    ? /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g 
+                    : /([a-zA-Z0-9'-]+)/g;
+
+                const parts = text.split(splitRegex);
                 
                 parts.forEach(part => {
-                    if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
+                    if (!part) return; // 정규식 그룹 매칭으로 인한 빈 값 방지
+
+                    // 클릭 가능한 요소인지 판별
+                    const isInteractive = treatAsPhrase
+                        ? /^[a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*$/.test(part) // 뭉치 모드일 때
+                        : /([a-zA-Z0-9'-]+)/.test(part); // 단어 모드일 때
+
+                    if (isInteractive && !nonInteractiveWords.has(part.toLowerCase())) {
                         const span = document.createElement('span');
                         span.textContent = part;
                         span.className = 'interactive-word';
@@ -91,8 +105,8 @@ export const ui = {
         // [수정] 서식 태그(<...>)가 있어도 포기하지 않고 createInteractiveFragment를 사용
         if (text && /<[a-z][\s\S]*>/i.test(text)) {
             targetElement.innerHTML = '';
-            // 태그가 포함된 텍스트를 구조를 유지한 채로 클릭 가능한 요소로 변환
-            targetElement.appendChild(this.createInteractiveFragment(text));
+            // [수정] 3번째 인자로 true를 넘겨서 '뭉치(Phrase)' 단위 처리를 유지하도록 함
+            targetElement.appendChild(this.createInteractiveFragment(text, false, true));
             return;
         }
 
