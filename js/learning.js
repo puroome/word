@@ -185,7 +185,8 @@ async enterEditMode(side) {
                 </div>
             `;
             
-            const currentMeaning = wordData.meaning || "";
+            // [수정] DB의 줄바꿈(\n)을 HTML 태그(<br>)로 변환하여 에디터에 주입
+            const currentMeaning = (wordData.meaning || "").replace(/\n/g, '<br>');
             // [수정 2] 뜻(Meaning) -> 서식 적용 가능한 div 사용
             this.elements.meaningDisplay.innerHTML = `
                 <div id="edit-meaning-input" 
@@ -194,7 +195,8 @@ async enterEditMode(side) {
                      style="min-height: 80px; outline: none; white-space: pre-wrap; user-select: text;">${currentMeaning}</div>
             `;
             
-            const currentExplanation = wordData.explanation || "";
+            // [수정] DB의 줄바꿈(\n)을 HTML 태그(<br>)로 변환하여 에디터에 주입
+            const currentExplanation = (wordData.explanation || "").replace(/\n/g, '<br>');
             // [수정 3] 설명(Explanation) -> 서식 적용 가능한 div 사용
             this.elements.explanationDisplay.innerHTML = `
                 <div id="edit-explanation-input" 
@@ -202,7 +204,6 @@ async enterEditMode(side) {
                      class="select-text w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-text" 
                      style="min-height: 150px; outline: none; white-space: pre-wrap; user-select: text;">${currentExplanation}</div>
             `;
-
             // [핵심] 이벤트 연결 (Meaning, Explanation에만 적용)
             setTimeout(() => {
                 const autoBtn = document.getElementById('auto-fill-btn');
@@ -271,7 +272,7 @@ async enterEditMode(side) {
                     });
                     
                     editor.addEventListener('keydown', (e) => {
-                        // [재수정] Range API를 사용하여 커서 위치에 직접 줄바꿈(\n) 삽입
+                        // [재수정] 엔터키 입력 시 <br> 태그 삽입 (화면 줄바꿈 및 저장 호환성 확보)
                         if (e.key === 'Enter') {
                             e.preventDefault();
                             e.stopPropagation();
@@ -279,16 +280,20 @@ async enterEditMode(side) {
                             const selection = window.getSelection();
                             if (selection.rangeCount > 0) {
                                 const range = selection.getRangeAt(0);
-                                range.deleteContents(); // 블록 지정된 상태라면 삭제
-
-                                const textNode = document.createTextNode('\n');
-                                range.insertNode(textNode);
-
-                                // 커서를 줄바꿈 문자 바로 뒤로 이동
-                                range.setStartAfter(textNode);
-                                range.setEndAfter(textNode);
+                                range.deleteContents(); 
+                                
+                                // <br> 태그 생성 및 삽입
+                                const br = document.createElement("br");
+                                range.insertNode(br);
+                                
+                                // 커서를 <br> 바로 뒤로 이동
+                                range.setStartAfter(br);
+                                range.setEndAfter(br);
                                 selection.removeAllRanges();
                                 selection.addRange(range);
+                                
+                                // 값 동기화
+                                editor.value = editor.innerHTML; 
                             }
                             return;
                         }
@@ -397,8 +402,10 @@ async saveAndExitEditMode() {
             
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
-                const newMeaning = meaningInput.value;
-                const newExplanation = explanationInput.value;
+                
+                // [수정] 저장 시에는 HTML 태그 대신 순수 텍스트(innerText)를 사용하여 <br>을 \n으로 자동 변환
+                const newMeaning = meaningInput.innerText; 
+                const newExplanation = explanationInput.innerText;
                 
                 // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
