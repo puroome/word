@@ -16,7 +16,6 @@ export const learningMode = {
         editingSide: null, 
     },
     elements: {},
-
     init() {
         this.elements = {
             startScreen: document.getElementById('learning-start-screen'),
@@ -60,14 +59,8 @@ export const learningMode = {
             deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
             deleteCancelBtn: document.getElementById('delete-cancel-btn'),
         };
-
-        // [삭제됨] createFormatTooltip 호출 제거 (ui.js에서 관리)
-        
         this.bindEvents();
     },
-
-    // [삭제됨] createFormatTooltip, hideFormatTooltip 등 UI 관련 함수 제거 (ui.js 사용)
-
     bindEvents() {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.startWordInput.addEventListener('keydown', (e) => {
@@ -95,7 +88,9 @@ export const learningMode = {
             e.stopPropagation(); 
         };
 
+        // [수정] 표제어 영역 우클릭 시 동작 분기
         this.elements.wordHeader.addEventListener('contextmenu', (e) => {
+            // 1. 글자(word-display) 위에서 클릭했으면 -> 사전 팝업 (Explanation과 동일하게)
             if (e.target.closest('#word-display')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -104,6 +99,7 @@ export const learningMode = {
                     ui.showWordContextMenu(e, word);
                 }
             } 
+            // 2. 글자 밖의 빈 헤더 공간을 클릭했으면 -> 편집 메뉴 (기존 기능 유지)
             else {
                 preventCardMenu(e, 'front');
             }
@@ -133,8 +129,6 @@ export const learningMode = {
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#edit-context-menu')) ui.hideEditContextMenu();
             if (!e.target.closest('#card-context-menu')) ui.hideCardContextMenu();
-            // 서식 툴팁 닫기 추가
-            if (!e.target.closest('#format-tooltip') && !this.state.isEditing) ui.hideFormatTooltip();
         });
 
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
@@ -146,8 +140,6 @@ export const learningMode = {
         this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
         document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
-
-        // [삭제됨] 여기서 selectionchange 이벤트를 잡지 않고, enableEditField 내부에서 처리함.
     },
 
     handleEditContextMenu(e, side) {
@@ -171,88 +163,95 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
-    // [수정] 편집 모드 진입 (enableEditField 활용)
+// [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
     async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
         if (side === 'front') {
             const currentPos = wordData.pos || "";
-            const currentWord = wordData.word_html || wordData.word || "";
+            const currentWord = wordData.word || "";
+            const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            // HTML 구조 생성
             this.elements.wordDisplay.innerHTML = `
                 <div class="flex flex-col gap-2">
-                    <div id="edit-word-input" class="w-full text-center p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white" placeholder="Word">${currentWord}</div>
-                    <input type="text" id="edit-pos-input" class="w-1/2 self-center text-center p-1 border border-gray-300 rounded text-sm text-gray-500" value="${currentPos}" placeholder="POS (품사)">
+                    <input type="text" id="edit-word-input" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" value="${wordInputValue}" placeholder="Word [POS]">
                     <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
                         🪄 AI 자동 완성
                     </button>
                 </div>
             `;
             
-            const currentMeaning = wordData.meaning_html || wordData.meaning || "";
-            this.elements.meaningDisplay.innerHTML = `<div id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" style="min-height:3rem;">${currentMeaning}</div>`;
+            const currentMeaning = wordData.meaning || "";
+            this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
             
-            let currentExplanation = wordData.explanation || "";
-            if (!currentExplanation.includes('<')) {
-                currentExplanation = currentExplanation.replace(/\n/g, '<br>');
-            }
-            this.elements.explanationDisplay.innerHTML = `<div id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" style="min-height:8rem;">${currentExplanation}</div>`;
+            const currentExplanation = wordData.explanation || "";
+            this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="8" placeholder="[동의어]\nEnglish : Korean\n\n[파생어]\nEnglish : Korean">${currentExplanation}</textarea>`;
 
-            // [핵심 수정] 여기서 enableEditField를 호출하여 서식 기능 활성화
-            this.enableEditField(document.getElementById('edit-word-input'));
-            this.enableEditField(document.getElementById('edit-meaning-input'));
-            this.enableEditField(document.getElementById('edit-explanation-input'));
-
-            // AI 자동 완성 로직
             setTimeout(() => {
                 const autoBtn = document.getElementById('auto-fill-btn');
-                const wordDiv = document.getElementById('edit-word-input');
-                const meaningDiv = document.getElementById('edit-meaning-input');
-                const explanationDiv = document.getElementById('edit-explanation-input');
+                const wordInput = document.getElementById('edit-word-input');
+                const meaningInput = document.getElementById('edit-meaning-input');
+                const explanationInput = document.getElementById('edit-explanation-input');
 
                 if (autoBtn) {
                     autoBtn.onclick = async () => {
-                        let targetWord = wordDiv.innerText.trim(); 
+                        let targetWord = wordInput.value.trim();
+                        targetWord = targetWord.replace(/\s*\[.*?\]$/, '');
+
                         if (!targetWord) {
                             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "단어를 먼저 입력하세요.", isError: true } }));
                             return;
                         }
+
                         autoBtn.disabled = true;
                         autoBtn.innerHTML = `<span class="animate-spin inline-block">⏳</span> 분석 중...`;
+
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
+                            
+                        // [수정 1] 뜻 (Meaning) - 기존 값이 있으면 두 줄 띄우고 추가
                             if (aiData.meaning) {
-                                const original = meaningDiv.innerText.trim();
-                                if (original && !original.includes(aiData.meaning)) {
-                                    meaningDiv.innerHTML += "<br><br>" + aiData.meaning;
-                                } else if(!original) {
-                                    meaningDiv.innerHTML = aiData.meaning;
-                                }
-                            }
-                            if (aiData.explanation) {
-                                const original = explanationDiv.innerText.trim();
-                                const formattedExpl = aiData.explanation.replace(/\n/g, "<br>");
+                                const original = meaningInput.value.trim();
                                 if (original) {
-                                    explanationDiv.innerHTML += "<br><br>" + formattedExpl;
+                                    // 중복되지 않을 때만 추가
+                                    if (!original.includes(aiData.meaning)) {
+                                        meaningInput.value = original + "\n\n" + aiData.meaning;
+                                    }
                                 } else {
-                                    explanationDiv.innerHTML = formattedExpl;
+                                    meaningInput.value = aiData.meaning;
                                 }
                             }
+
+                            // [수정 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
+                            if (aiData.explanation) {
+                                const original = explanationInput.value.trim();
+                                if (original) {
+                                    explanationInput.value = original + "\n\n" + aiData.explanation;
+                                } else {
+                                    explanationInput.value = aiData.explanation;
+                                }
+                            }
+
+                            // [수정 3] 예문 (Samples) - 기존 예문 뒤에 두 줄 띄우고 추가
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
+                                
                                 if (originalSample.trim()) {
                                     wordData.sample = originalSample.trim() + "\n\n" + newSampleText;
                                 } else {
                                     wordData.sample = newSampleText;
                                 }
+                                
+                                // 동기화용 필드 업데이트
                                 wordData.manualSample = wordData.sample;
+
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
                             } else {
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료 (예문 없음)" } }));
                             }
+
                         } catch (e) {
                             console.error(e);
                             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "AI 요청 실패", isError: true } }));
@@ -265,9 +264,8 @@ export const learningMode = {
             }, 0);
 
         } else {
-            // 뒷면 편집 모드 (예문)
+            // 뒷면 편집 모드
             let currentSample = wordData.sample || "";
-            // 뒷면은 textarea 유지 (요청사항이 앞면 서식 변경이었으므로)
             this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
@@ -276,117 +274,107 @@ export const learningMode = {
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
     },
-
-    // [수정] 편집 내용 저장 및 서식 데이터 처리
 async saveAndExitEditMode() {
+        // 현재 편집 중인 카드 객체 (임시로 생성된 카드)
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
-        let updateData = {}; 
 
         if (side === 'front') {
-            const wordDiv = document.getElementById('edit-word-input');
-            const posInput = document.getElementById('edit-pos-input');
-            const meaningDiv = document.getElementById('edit-meaning-input');
-            const explanationDiv = document.getElementById('edit-explanation-input');
+            const wordInput = document.getElementById('edit-word-input');
+            const meaningInput = document.getElementById('edit-meaning-input');
+            const explanationInput = document.getElementById('edit-explanation-input');
             
-            if (wordDiv && meaningDiv && explanationDiv) {
-                // HTML과 Plain Text 모두 확보
-                const newWordHtml = wordDiv.innerHTML;
-                const newWordText = wordDiv.innerText.trim();
-                const newPos = posInput ? posInput.value.trim() : "";
-                const newMeaningHtml = meaningDiv.innerHTML;
-                const newMeaningText = meaningDiv.innerText.trim();
+            if (wordInput && meaningInput && explanationInput) {
+                const rawWordValue = wordInput.value.trim();
+                const newMeaning = meaningInput.value;
+                const newExplanation = explanationInput.value;
                 
-                // [수정됨] 설명(Explanation)도 서식(innerHTML)을 저장해야 합니다.
-                const newExplanationHtml = explanationDiv.innerHTML; 
-                const newExplanationText = explanationDiv.innerText.trim();
-                
+                // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
 
-                if (!newWordText) {
-                      window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "표제어를 입력해주세요.", isError: true } }));
-                      return;
+                const match = rawWordValue.match(/^(.*?)\s*\[(.*?)\]$/);
+                let newWord = rawWordValue;
+                let newPos = undefined; 
+
+                if (match) {
+                    newWord = match[1].trim();
+                    newPos = match[2].trim();
+                } else {
+                    if (wordData.isNew) newPos = ""; 
+                    else newPos = undefined; 
+                }
+                
+                if (!newWord) {
+                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "표제어를 입력해주세요.", isError: true } }));
+                     return;
                 }
 
-                // 중복 체크
-                if (newWordText !== wordData.word) {
-                    const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWordText.toLowerCase() && w !== wordData);
+                // 중복 체크 (자기 자신 제외)
+                if (newWord !== wordData.word) {
+                    const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWord.toLowerCase() && w !== wordData);
                     if (isDuplicate) {
                         window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "이미 존재하는 단어입니다.", isError: true } }));
                         return; 
                     }
                 }
 
-                // 업데이트할 데이터 객체 구성
-                const changes = {
-                    word: newWordText,
-                    word_html: newWordHtml,
-                    pos: newPos,
-                    meaning: newMeaningText,
-                    meaning_html: newMeaningHtml,
-                    explanation: newExplanationText,
-                    explanation_html: newExplanationHtml, // [추가됨] 설명 서식 저장
-                    manual_sample: newSample
-                };
-
                 if (wordData.isNew) {
-                    // [핵심 수정] 새 단어 추가 시, 바로 앞 단어(prevWord)를 찾아서 함께 보냄
-                    // 그래야 시트에서 해당 단어 뒤에 예쁘게 들어감
-                    const prevIndex = this.state.currentIndex - 1;
-                    const prevWord = (prevIndex >= 0) ? this.state.currentWordList[prevIndex].word : null;
+                    // [서버 통신] 새 단어 생성 요청
+                    const newCardData = {
+                        word: newWord,
+                        pos: newPos || "",
+                        meaning: newMeaning,
+                        explanation: newExplanation,
+                        manual_sample: newSample // 예문 포함 전송
+                    };
                     
-                    // changes 객체에 prevWord 포함
-                    changes.prevWord = prevWord;
-
-                    // 1. Firebase 저장
-                    await api.createWord(changes, prevWord);
-                    
-                    // 2. 구글 시트 저장 (create_word 액션 호출)
-                    if (config.SCRIPT_URL) {
-                         const scriptUrl = new URL(config.SCRIPT_URL);
-                         scriptUrl.searchParams.append('action', 'create_word');
-                         // 데이터를 통째로 JSON으로 보냄
-                         scriptUrl.searchParams.append('data', JSON.stringify(changes));
-                         // 비동기 전송 (결과 기다리지 않음)
-                         fetch(scriptUrl.toString()).catch(e => console.error("Sheet create failed", e));
+                    let afterWord = null;
+                    if (this.state.currentIndex > 0) {
+                        // 바로 앞 단어 찾기 (A단어)
+                        afterWord = this.state.currentWordList[this.state.currentIndex - 1].word;
                     }
 
-                    // 로컬 데이터 확정
-                    Object.assign(wordData, changes);
-                    delete wordData.isNew;
+                    // API 호출 (서버에 저장)
+                    await api.createWord(newCardData, afterWord);
+                    
+                    // [UI 데이터 갱신] 임시 카드를 정식 데이터로 확정 (새 카드를 추가하는 게 아님!)
+                    wordData.word = newWord;
+                    wordData.pos = newPos || "";
+                    wordData.meaning = newMeaning;
+                    wordData.explanation = newExplanation;
+                    wordData.sample = newSample; // 예문 확정
+                    delete wordData.isNew; // 이제 더 이상 임시 카드가 아님
                     
                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
 
                 } else {
-                    // 수정 (Update)
-                    await api.updateWordDetails(wordData.word, changes);
-
-                    if (config.SCRIPT_URL) {
-                        const scriptUrl = new URL(config.SCRIPT_URL);
-                        scriptUrl.searchParams.append('action', 'update_word_data');
-                        const payload = {
-                            originalWord: wordData.word, 
-                            ...changes,
-                            manualsample: newSample
-                        };
-                        scriptUrl.searchParams.append('data', JSON.stringify(payload));
-                        fetch(scriptUrl.toString(), { method: 'POST' }).catch(e => console.error("Sheet update failed", e));
-                    }
+                    // 기존 단어 수정 로직
+                    await api.updateWordDetails(wordData.word, {
+                        word: newWord,
+                        pos: newPos,
+                        meaning: newMeaning,
+                        explanation: newExplanation,
+                        manual_sample: newSample
+                    });
                     
-                    Object.assign(wordData, changes);
+                    wordData.word = newWord;
+                    if (newPos !== undefined) wordData.pos = newPos;
+                    wordData.meaning = newMeaning;
+                    wordData.explanation = newExplanation;
+                    wordData.sample = newSample;
                 }
             }
         } else { 
-            // 뒷면 편집 모드 저장 (기존 로직 유지)
+            // 뒷면 편집 모드 저장
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
                 const newSampleText = sampleInput.value;
                 if (wordData.isNew) {
-                      if (!wordData.word) {
-                          window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "앞면의 표제어를 먼저 입력해주세요.", isError: true } }));
-                          return;
-                      }
-                      wordData.sample = newSampleText;
+                     if (!wordData.word) {
+                         window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "앞면의 표제어를 먼저 입력해주세요.", isError: true } }));
+                         return;
+                     }
+                     wordData.sample = newSampleText;
                 } else {
                     await api.updateWordDetails(wordData.word, { manual_sample: newSampleText });
                     wordData.sample = newSampleText;
@@ -399,9 +387,8 @@ async saveAndExitEditMode() {
         // 편집 모드 종료
         this.state.isEditing = false;
         this.state.editingSide = null;
-        ui.hideFormatTooltip();
         
-        // 화면 갱신
+        // [화면 갱신] 변경된 내용으로 현재 카드를 다시 그리기
         if (side === 'front') {
             this.displayWord(this.state.currentIndex, true);
         } else {
@@ -409,49 +396,52 @@ async saveAndExitEditMode() {
         }
     },
     
-async createNewCard() {
+    async createNewCard() {
         const tempCard = {
             word: "", 
             pos: "",
             meaning: "",
             explanation: "",
             sample: "",
+            // sampleSource 제거됨
             isNew: true 
         };
         
-        // 현재 위치 바로 뒤(currentIndex + 1)에 삽입
         const insertIndex = this.state.currentIndex + 1;
         this.state.currentWordList.splice(insertIndex, 0, tempCard);
         
-        // 인덱스를 새 카드로 이동
         this.state.currentIndex = insertIndex;
         this.displayWord(this.state.currentIndex, true);
         
-        // 0.1초 뒤 바로 편집 모드 실행
         setTimeout(() => {
             this.state.editingSide = 'front';
             this.enterEditMode('front');
         }, 100);
     },
     
-async deleteCurrentCard() {
+    async deleteCurrentCard() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
         
-        // 1. 화면(로컬 데이터)에서 즉시 삭제
-        this.state.currentWordList.splice(this.state.currentIndex, 1);
-        
-        // 2. 서버(API) 삭제 요청 (새로 만들다가 취소한 카드가 아닐 경우에만)
-        if (!wordData.isNew) {
-            await api.deleteWord(wordData.word);
+        if (wordData.isNew) {
+            this.state.currentWordList.splice(this.state.currentIndex, 1);
+            if (this.state.currentIndex >= this.state.currentWordList.length) {
+                this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
+            }
+             if (this.state.currentWordList.length === 0) {
+                this.reset();
+            } else {
+                 this.displayWord(this.state.currentIndex, true);
+            }
+            return;
         }
 
-        // 3. 인덱스 조정 (마지막 카드를 지웠을 때 앞 카드로 이동)
+        await api.deleteWord(wordData.word);
+        
         if (this.state.currentIndex >= this.state.currentWordList.length) {
             this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
         }
         
-        // 4. 화면 갱신
         if (this.state.currentWordList.length === 0) {
             this.reset();
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "모든 카드가 삭제되었습니다." } }));
@@ -481,6 +471,7 @@ async deleteCurrentCard() {
 
         if (this.state.currentWordList.length === 0) { this.showError("학습할 단어가 없습니다."); return; }
 
+        // 검색어 없을 때: 기존 로직 (마지막 학습 위치로)
         if (!startWord) {
             try {
                 const savedIndex = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.LAST_INDEX) || '0');
@@ -495,6 +486,8 @@ async deleteCurrentCard() {
 
         const lowerCaseStartWord = startWord.toLowerCase();
         
+        // [최적화] 통합된 검색 루프 (Single Pass)
+        // 기존 4번의 순회를 1번으로 단축하고, Levenshtein 계산에 limit 적용
         const exactMatches = [];
         const startsWithMatches = [];
         const includesMatches = [];
@@ -503,11 +496,13 @@ async deleteCurrentCard() {
         const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
         const explanationMatches = [];
 
+        // 1. 단어 검색 & 설명 검색 동시 수행
         for (let index = 0; index < this.state.currentWordList.length; index++) {
             const item = this.state.currentWordList[index];
             const wordLower = item.word.toLowerCase();
             const wordObj = { word: item.word, index, distance: 0 };
             
+            // 표제어 검색
             if (wordLower === lowerCaseStartWord) {
                 exactMatches.push(wordObj);
             } else if (wordLower.startsWith(lowerCaseStartWord)) {
@@ -515,9 +510,13 @@ async deleteCurrentCard() {
             } else if (wordLower.includes(lowerCaseStartWord)) {
                 includesMatches.push(wordObj);
             } else {
+                // Fuzzy Logic (Optimized)
+                // 길이 차이가 2 이하인 경우에만 계산
                 const lenDiff = Math.abs(wordLower.length - lowerCaseStartWord.length);
                 if (lenDiff <= 2) {
+                    // limit=2 로 설정하여 조기 종료 유도
                     const dist = utils.levenshteinDistance(lowerCaseStartWord, wordLower, 2);
+                    // 거리 2 이하이고, 길이가 충분히 긴 단어(오탐 방지)인 경우만 추가
                     if (dist <= 2 && dist < Math.max(wordLower.length, lowerCaseStartWord.length) * 0.4) {
                         wordObj.distance = dist;
                         fuzzyMatches.push(wordObj);
@@ -525,6 +524,7 @@ async deleteCurrentCard() {
                 }
             }
 
+            // 설명 검색
             if (item.explanation) {
                 const cleanedExplanation = item.explanation.replace(/\[.*?\]|\*/g, '');
                 if (searchRegex.test(cleanedExplanation)) {
@@ -533,8 +533,10 @@ async deleteCurrentCard() {
             }
         }
 
+        // Fuzzy 결과 정렬 (거리 순)
         fuzzyMatches.sort((a, b) => a.distance - b.distance);
 
+        // 결과 통합
         const vocabSuggestions = [
             ...exactMatches,
             ...startsWithMatches,
@@ -542,6 +544,7 @@ async deleteCurrentCard() {
             ...fuzzyMatches
         ].slice(0, 50);
 
+        // 3. 결과 표시
         let title = `<strong>'${startWord}'</strong> 검색 결과`;
         if (vocabSuggestions.length === 0 && explanationMatches.length === 0) {
             title = `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
@@ -603,8 +606,6 @@ async deleteCurrentCard() {
         populateList(this.elements.suggestionsExplanationList, explanationSuggestions);
         this.elements.suggestionsContainer.classList.remove('hidden');
     },
-
-    // [수정] 단어 표시 (HTML 서식 지원)
     async displayWord(index, silent = false) {
         this.state.isEditing = false;
         
@@ -622,22 +623,12 @@ async deleteCurrentCard() {
             } catch (e) { console.error(e); }
         }
 
-        // Word (HTML or Text) - ui.createInteractiveFragment 사용
-        this.elements.wordDisplay.innerHTML = '';
-        // 저장된 HTML이 있으면 그것을, 없으면 일반 텍스트를 사용
-        const wordContent = wordData.word_html || wordData.word;
-        this.elements.wordDisplay.appendChild(ui.createInteractiveFragment(wordContent));
-
+        this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
         
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
-        // Meaning (HTML or Text)
-        this.elements.meaningDisplay.innerHTML = '';
-        const meaningContent = wordData.meaning_html || wordData.meaning.replace(/\n/g, '<br>');
-        this.elements.meaningDisplay.appendChild(ui.createInteractiveFragment(meaningContent));
-        
-        // Explanation
+        this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.remove('hidden');
 
@@ -648,7 +639,6 @@ async deleteCurrentCard() {
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
     },
-
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
         const container = wordDisplay.parentElement;
@@ -776,7 +766,7 @@ async deleteCurrentCard() {
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         if (this.state.isEditing) return;
-        if (document.activeElement.tagName.match(/INPUT|TEXTAREA/) || document.activeElement.contentEditable === "true") return;
+        if (document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); this.navigate(-1); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); this.navigate(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); this.navigate(1); }
@@ -997,51 +987,5 @@ async deleteCurrentCard() {
         });
         p.appendChild(sentenceContent);
         container.appendChild(p);
-    },
-
-    // [신규] 편집 필드 활성화 및 서식/툴팁 기능 연결
-    enableEditField(element) {
-        element.contentEditable = true;
-        state.activeEditingElement = element;
-
-        // 1. 단축키 (Ctrl+B / Ctrl+I)
-        element.onkeydown = (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'b' || e.key === 'B') {
-                    e.preventDefault();
-                    document.execCommand('bold');
-                } else if (e.key === 'i' || e.key === 'I') {
-                    e.preventDefault();
-                    document.execCommand('italic');
-                }
-            }
-        };
-
-        // 2. 텍스트 선택 감지 (툴팁 표시)
-        const handleSelection = () => {
-            const selection = window.getSelection();
-            if (!selection.rangeCount || selection.isCollapsed || !element.contains(selection.anchorNode)) {
-                ui.hideFormatTooltip(); // ui.js의 함수 호출
-                return;
-            }
-
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-            
-            // 툴팁 표시
-            ui.showFormatTooltip(rect.left + rect.width / 2, rect.top);
-        };
-
-        element.onmouseup = handleSelection;
-        element.onkeyup = (e) => {
-            if (e.key === 'Shift' || e.key.startsWith('Arrow')) {
-                handleSelection();
-            }
-        };
-        
-        element.onblur = () => {
-             setTimeout(() => {
-             }, 200);
-        };
-    },
+    }
 };

@@ -4,116 +4,17 @@ import { nonInteractiveWords } from './utils.js';
 import { learningMode } from './learning.js'; 
 
 export const ui = {
-    // ============================================================
-    // [신규] 서식 편집 툴팁 (여기만 추가됨)
-    // ============================================================
-    createFormatTooltip() {
-        if (document.getElementById('format-tooltip')) return;
-
-        const tooltip = document.createElement('div');
-        tooltip.id = 'format-tooltip';
-        // 스타일은 style.css에 정의됨
-        tooltip.style.display = 'none'; 
-        tooltip.style.position = 'absolute';
-        tooltip.style.zIndex = '1000';
-        tooltip.style.gap = '8px';
-        tooltip.style.backgroundColor = 'white';
-        tooltip.style.padding = '8px 12px';
-        tooltip.style.borderRadius = '8px';
-        tooltip.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
-        tooltip.style.border = '1px solid #e5e7eb';
-        
-        const colors = [
-            { cmd: '#ef4444', label: '🔴' },
-            { cmd: '#3b82f6', label: '🔵' },
-            { cmd: '#22c55e', label: '🟢' }
-        ];
-
-        colors.forEach(c => {
-            const btn = document.createElement('button');
-            btn.textContent = c.label;
-            btn.style.fontSize = '18px';
-            btn.style.cursor = 'pointer';
-            btn.style.marginRight = '5px';
-            btn.onmousedown = (e) => { 
-                e.preventDefault(); 
-                document.execCommand('foreColor', false, c.cmd);
-                this.hideFormatTooltip();
-            };
-            tooltip.appendChild(btn);
-        });
-
-        const btnClear = document.createElement('button');
-        btnClear.textContent = '🚮';
-        btnClear.style.fontSize = '18px';
-        btnClear.style.cursor = 'pointer';
-        btnClear.onmousedown = (e) => {
-            e.preventDefault();
-            document.execCommand('removeFormat', false, null);
-            document.execCommand('foreColor', false, '#000000');
-            this.hideFormatTooltip();
-        };
-        tooltip.appendChild(btnClear);
-
-        document.body.appendChild(tooltip);
-    },
-
-    showFormatTooltip(x, y) {
-        this.createFormatTooltip();
-        const tooltip = document.getElementById('format-tooltip');
-        tooltip.style.display = 'flex';
-        
-        // 위치 조정
-        const rect = tooltip.getBoundingClientRect();
-        let top = y - rect.height - 10;
-        let left = x - (rect.width / 2);
-        
-        if (top < 10) top = y + 20;
-        if (left < 10) left = 10;
-        if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 10;
-
-        tooltip.style.top = `${top}px`;
-        tooltip.style.left = `${left}px`;
-    },
-
-    hideFormatTooltip() {
-        const tooltip = document.getElementById('format-tooltip');
-        if (tooltip) tooltip.style.display = 'none';
-    },
-
-    // ============================================================
-    // [기존 기능 복원] 메뉴 닫기 및 인터랙티브 단어 생성
-    // ============================================================
-
+    // [신규] 모든 팝업/메뉴 닫기
     hideAllMenus() {
         this.hideWordContextMenu();
         this.hideEditContextMenu();
         this.hideCardContextMenu();
         this.hideTranslationTooltip();
-        this.hideFormatTooltip(); // 이것만 추가
     },
 
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
-
-        // HTML 태그가 이미 포함된 경우(서식 적용된 텍스트) 단순 텍스트 분리 대신 HTML 파싱 필요
-        // 하지만 기존 로직 유지를 위해, 태그가 없는 경우만 분리하거나 
-        // 태그 내부의 텍스트만 발음 가능하게 하는 복잡한 로직이 필요함.
-        // 여기서는 간단히 HTML 태그가 있으면 innerHTML로 처리하고, 클릭 이벤트는 상위에서 위임받거나
-        // 서식이 있는 경우 개별 단어 클릭(발음) 기능을 일부 포기하고 서식 보여주기에 집중하는 절충안을 씁니다.
-        // *편집된 서식(HTML)이 들어오면 태그를 유지해서 보여줌*
-        if (text.includes('<') && text.includes('>')) {
-            const span = document.createElement('span');
-            span.innerHTML = text; // HTML 태그 그대로 렌더링
-            
-            // HTML 내부의 텍스트 노드에 대해 클릭 이벤트를 걸어주고 싶지만 복잡하므로
-            // 여기서는 통째로 렌더링만 합니다. (서식 우선)
-            // 대신 우클릭/클릭 시 전체 문장이나 단어가 잡힐 수 있습니다.
-            return span;
-        }
-
-        // 기존 로직 (태그가 없는 일반 텍스트)
         const parts = text.split(/([a-zA-Z0-9'-]+)/g);
         parts.forEach(part => {
             if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
@@ -146,15 +47,7 @@ export const ui = {
         });
         return fragment;
     },
-
     renderExplanationText(targetElement, text) {
-        // [수정] 서식(HTML)이 포함된 경우 그대로 렌더링
-        if (text && (text.includes('<b>') || text.includes('span style'))) {
-            targetElement.innerHTML = text;
-            return;
-        }
-
-        // 기존 로직 유지
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
         const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
@@ -205,6 +98,7 @@ export const ui = {
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
 
         (sentences || []).forEach((sentence, index) => {
+            // 빈 줄(Spacer) 처리
             if (!sentence || !sentence.trim()) {
                 const spacer = document.createElement('div');
                 spacer.className = 'h-6 w-full'; 
@@ -306,6 +200,7 @@ export const ui = {
         document.getElementById('translation-tooltip').classList.add('hidden');
     },
 
+    // [수정] 사전 메뉴 표시
     showWordContextMenu(event, word, options = {}) {
         this.hideAllMenus(); 
 
@@ -316,52 +211,48 @@ export const ui = {
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
-        
+
+        menu.style.left = `0px`;
+        menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
-        
-        // 위치 조정
-        const menuRect = menu.getBoundingClientRect();
-        let finalX = x;
-        let finalY = y;
-        if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
-        if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
-        if (finalX < 10) finalX = 10;
-        if (finalY < 10) finalY = 10;
-        
-        menu.style.left = `${finalX}px`;
-        menu.style.top = `${finalY}px`;
+
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) {
+                finalX = window.innerWidth - menuRect.width - 10;
+            }
+            if (y + menuRect.height > window.innerHeight - 10) {
+                 finalY = window.innerHeight - menuRect.height - 10;
+            }
+             if (finalX < 10) finalX = 10;
+             if (finalY < 10) finalY = 10;
+
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
 
         const encodedWord = encodeURIComponent(word);
+
         document.getElementById('search-app-context-btn').onclick = () => {
-            document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
-            this.hideWordContextMenu();
+             document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
+             this.hideWordContextMenu();
         };
-        document.getElementById('search-daum-context-btn').onclick = () => {
-            window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum');
-            this.hideWordContextMenu();
-        };
-        document.getElementById('search-naver-context-btn').onclick = () => {
-            window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver');
-            this.hideWordContextMenu();
-        };
-        document.getElementById('search-etym-context-btn').onclick = () => {
-            window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym');
-            this.hideWordContextMenu();
-        };
-        document.getElementById('search-google-img-context-btn').onclick = () => {
-            window.open(`https://www.google.com/search?tbm=isch&q=${encodedWord}`, 'dict_google_img');
-            this.hideWordContextMenu();
-        };
+        document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
+        document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
+        document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
+        document.getElementById('search-longman-context-btn').onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); this.hideWordContextMenu(); };
     },
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-    
-    // ... 나머지 기존 Edit/Card Context Menu 관련 코드 ...
+
+    // [수정] 편집 메뉴 표시
     showEditContextMenu(event) {
-        this.hideAllMenus();
-        event.preventDefault();
+        this.hideAllMenus(); 
+
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
         const touch = event.touches ? event.touches[0] : null;
@@ -370,25 +261,147 @@ export const ui = {
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
     },
     hideEditContextMenu() {
         const menu = document.getElementById('edit-context-menu');
         if (menu) menu.classList.add('hidden');
     },
+    
+    // [중복 메시지 제거 및 삭제 기능 수정 완료]
     showCardContextMenu(event) {
-        this.hideAllMenus();
-        event.preventDefault();
+        this.hideAllMenus(); // 메뉴 닫기
+
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
+
+        // 1. 현재 카드 데이터 가져오기
+        const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
+
+        // 2. HTML에 있는 삭제 버튼 찾기 (ID: delete-card-btn)
+        let deleteBtn = document.getElementById('delete-card-btn');
+
+        // 3. 버튼이 있고 단어도 있다면?
+        if (deleteBtn && currentWord) {
+            // [핵심] 기존 버튼을 복제해서 교체합니다.
+            // 이렇게 하면 기존 코드(main.js 등)에서 붙여놓은 '빨간 모달(2번째 창)' 이벤트가 싹 사라집니다.
+            const newDeleteBtn = deleteBtn.cloneNode(true);
+            deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
+            deleteBtn = newDeleteBtn; // 참조 변수 업데이트
+
+            // 4. 이제 깨끗해진 버튼에 "우리가 원하는 동작(1번째 창)"만 붙입니다.
+            deleteBtn.onclick = () => {
+                this.hideAllMenus();
+
+                // 1. 예쁜 팝업창이 없으면 자동으로 만들기 (CSS + HTML 자동 주입)
+                if (!document.getElementById('nice-alert-modal')) {
+                    const style = document.createElement('style');
+                    style.innerHTML = `
+                        .nice-modal-overlay { position: fixed; inset:0; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:9999; backdrop-filter: blur(2px); }
+                        .nice-modal-box { background: white; padding: 24px; border-radius: 16px; width: 85%; max-width: 300px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out; }
+                        .nice-modal-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 8px; color: #1f2937; }
+                        .nice-modal-desc { color: #4b5563; margin-bottom: 20px; line-height: 1.5; font-size: 1rem; }
+                        .nice-modal-btns { display: flex; gap: 10px; }
+                        .nice-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.1s; font-size: 1rem; }
+                        .nice-btn:active { transform: scale(0.96); }
+                        .nice-btn-cancel { background: #f3f4f6; color: #4b5563; }
+                        .nice-btn-del { background: #ef4444; color: white; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+                        @keyframes popIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
+                    `;
+                    document.head.appendChild(style);
+
+                    const html = `
+                        <div id="nice-alert-modal" class="nice-modal-overlay" style="display:none">
+                            <div class="nice-modal-box">
+                                <div class="nice-modal-title">🗑️ 카드 삭제</div>
+                                <div id="nice-msg" class="nice-modal-desc"></div>
+                                <div class="nice-modal-btns">
+                                    <button id="nice-cancel" class="nice-btn nice-btn-cancel">취소</button>
+                                    <button id="nice-confirm" class="nice-btn nice-btn-del">삭제</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    document.body.insertAdjacentHTML('beforeend', html);
+                }
+
+                // 2. 팝업창 띄우기
+                const modal = document.getElementById('nice-alert-modal');
+                const msgEl = document.getElementById('nice-msg');
+                const confirmBtn = document.getElementById('nice-confirm');
+                const cancelBtn = document.getElementById('nice-cancel');
+
+                // 메시지 설정 (현재 단어 이름 넣기)
+                msgEl.innerHTML = `'<b>${currentWord.word}</b>' 단어를<br>정말 삭제하시겠습니까?`;
+                modal.style.display = 'flex';
+
+                // 기존 이벤트 제거를 위해 버튼 재생성 (중복 클릭 방지)
+                const newConfirm = confirmBtn.cloneNode(true);
+                const newCancel = cancelBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+                cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+                // [취소] 버튼 클릭 시
+                newCancel.onclick = () => { modal.style.display = 'none'; };
+                
+                // [삭제] 버튼 클릭 시 (실제 삭제 로직)
+                newConfirm.onclick = async () => {
+                    modal.style.display = 'none'; // 창 닫기
+                    
+                    // (1) 서버 데이터 삭제
+                    await api.deleteWord(currentWord.word);
+
+                    // (2) 리스트 갱신
+                    const currentList = learningMode.state.currentWordList;
+                    learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
+
+                    // (3) 인덱스 조정 (마지막 카드였을 경우 앞 카드로)
+                    if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
+                        learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
+                    }
+
+                    // (4) 화면 즉시 갱신 (다음 카드로 이동)
+                    if (learningMode.state.currentWordList.length === 0) {
+                        alert("모든 단어가 삭제되었습니다.");
+                        location.reload(); 
+                    } else {
+                        // 바로 다음 단어 보여주기
+                        learningMode.displayWord(learningMode.state.currentIndex, true); 
+                    }
+                };
+            };
+        }
+
+        // 메뉴 위치 지정 (원본 UI 코드 그대로)
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top = `${finalY}px`;
+        });
     },
     hideCardContextMenu() {
         const menu = document.getElementById('card-context-menu');
         if (menu) menu.classList.add('hidden');
-    }
+    },
 };
