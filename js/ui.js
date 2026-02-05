@@ -88,10 +88,10 @@ export const ui = {
         return fragment;
     },
     renderExplanationText(targetElement, text) {
-        // [수정] HTML 태그가 감지되면 createInteractiveFragment를 사용하여 
-        // 서식(Bold, Color 등)은 유지하되, 내부 영단어에 클릭 이벤트(TTS/팝업)를 연결함
+        // [수정] 서식 태그(<...>)가 있어도 포기하지 않고 createInteractiveFragment를 사용
         if (text && /<[a-z][\s\S]*>/i.test(text)) {
             targetElement.innerHTML = '';
+            // 태그가 포함된 텍스트를 구조를 유지한 채로 클릭 가능한 요소로 변환
             targetElement.appendChild(this.createInteractiveFragment(text));
             return;
         }
