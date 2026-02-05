@@ -403,9 +403,10 @@ async saveAndExitEditMode() {
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
                 
-                // [수정] 저장 시에는 HTML 태그 대신 순수 텍스트(innerText)를 사용하여 <br>을 \n으로 자동 변환
-                const newMeaning = meaningInput.innerText; 
-                const newExplanation = explanationInput.innerText;
+                // [재수정] 서식(HTML)은 유지하되, <br> 태그만 줄바꿈 문자(\n)로 변환하여 저장
+                // 이렇게 해야 <b>, <span> 등의 서식 태그가 보존됩니다.
+                const newMeaning = meaningInput.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+                const newExplanation = explanationInput.innerHTML.replace(/<br\s*\/?>/gi, '\n');
                 
                 // [중요] AI가 생성한 예문(sample)이 있다면 가져오고, 없으면 빈칸
                 const newSample = wordData.sample || "";
