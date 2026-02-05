@@ -747,13 +747,15 @@ async saveAndExitEditMode() {
         
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
-        // [수정] Meaning 영역도 Interactive Fragment를 사용하여 서식과 상호작용(TTS) 모두 지원
+        // [수정] 뜻(Meaning)도 UI 전용 도구를 사용해 서식+클릭기능 모두 살림
         this.elements.meaningDisplay.innerHTML = '';
         if (wordData.meaning) {
-            this.elements.meaningDisplay.appendChild(ui.createInteractiveFragment(wordData.meaning.replace(/\n/g, '<br>')));
+            // 줄바꿈을 <br>로 바꾼 뒤, 클릭 가능한 조각(InteractiveFragment)으로 변환하여 추가
+            const meaningHtml = wordData.meaning.replace(/\n/g, '<br>');
+            this.elements.meaningDisplay.appendChild(ui.createInteractiveFragment(meaningHtml));
         }
         
-        // [수정] Explanation 영역 처리 (기존 로직 유지하되, 필요 시 Fragment 사용 검토)
+        // 설명(Explanation)은 기존처럼 ui.js에 위임
         ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.remove('hidden');
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
