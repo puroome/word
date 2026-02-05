@@ -278,7 +278,7 @@ export const learningMode = {
     },
 
     // [수정] 편집 내용 저장 및 서식 데이터 처리
-    async saveAndExitEditMode() {
+async saveAndExitEditMode() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
         let updateData = {}; 
@@ -297,8 +297,9 @@ export const learningMode = {
                 const newMeaningHtml = meaningDiv.innerHTML;
                 const newMeaningText = meaningDiv.innerText.trim();
                 
-                // 설명은 텍스트 저장, 필요시 HTML도 저장 가능
-                const newExplanation = explanationDiv.innerText.trim(); 
+                // [수정됨] 설명(Explanation)도 서식(innerHTML)을 저장해야 합니다.
+                const newExplanationHtml = explanationDiv.innerHTML; 
+                const newExplanationText = explanationDiv.innerText.trim();
                 
                 const newSample = wordData.sample || "";
 
@@ -307,6 +308,7 @@ export const learningMode = {
                       return;
                 }
 
+                // 중복 체크
                 if (newWordText !== wordData.word) {
                     const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWordText.toLowerCase() && w !== wordData);
                     if (isDuplicate) {
@@ -315,55 +317,67 @@ export const learningMode = {
                     }
                 }
 
+                // 업데이트할 데이터 객체 구성
                 const changes = {
                     word: newWordText,
-                    word_html: newWordHtml, // HTML 저장
+                    word_html: newWordHtml,
                     pos: newPos,
                     meaning: newMeaningText,
-                    meaning_html: newMeaningHtml, // HTML 저장
-                    explanation: newExplanation, 
+                    meaning_html: newMeaningHtml,
+                    explanation: newExplanationText,
+                    explanation_html: newExplanationHtml, // [추가됨] 설명 서식 저장
                     manual_sample: newSample
                 };
 
                 if (wordData.isNew) {
-                    await api.createWord(changes, this.state.currentIndex > 0 ? this.state.currentWordList[this.state.currentIndex - 1].word : null);
+                    // [핵심 수정] 새 단어 추가 시, 바로 앞 단어(prevWord)를 찾아서 함께 보냄
+                    // 그래야 시트에서 해당 단어 뒤에 예쁘게 들어감
+                    const prevIndex = this.state.currentIndex - 1;
+                    const prevWord = (prevIndex >= 0) ? this.state.currentWordList[prevIndex].word : null;
                     
+                    // changes 객체에 prevWord 포함
+                    changes.prevWord = prevWord;
+
+                    // 1. Firebase 저장
+                    await api.createWord(changes, prevWord);
+                    
+                    // 2. 구글 시트 저장 (create_word 액션 호출)
+                    if (config.SCRIPT_URL) {
+                         const scriptUrl = new URL(config.SCRIPT_URL);
+                         scriptUrl.searchParams.append('action', 'create_word');
+                         // 데이터를 통째로 JSON으로 보냄
+                         scriptUrl.searchParams.append('data', JSON.stringify(changes));
+                         // 비동기 전송 (결과 기다리지 않음)
+                         fetch(scriptUrl.toString()).catch(e => console.error("Sheet create failed", e));
+                    }
+
+                    // 로컬 데이터 확정
                     Object.assign(wordData, changes);
-                    wordData.sample = newSample;
                     delete wordData.isNew;
                     
                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
 
                 } else {
+                    // 수정 (Update)
                     await api.updateWordDetails(wordData.word, changes);
 
                     if (config.SCRIPT_URL) {
                         const scriptUrl = new URL(config.SCRIPT_URL);
                         scriptUrl.searchParams.append('action', 'update_word_data');
-                        const originalWord = wordData.word; 
-                        
-                        // Apps Script로 보낼 데이터 (HTML 포함)
                         const payload = {
-                            originalWord: originalWord,
-                            word: newWordText,
-                            word_html: newWordHtml,
-                            pos: newPos,
-                            meaning: newMeaningText,
-                            meaning_html: newMeaningHtml,
-                            explanation: newExplanation,
+                            originalWord: wordData.word, 
+                            ...changes,
                             manualsample: newSample
                         };
-                        
                         scriptUrl.searchParams.append('data', JSON.stringify(payload));
                         fetch(scriptUrl.toString(), { method: 'POST' }).catch(e => console.error("Sheet update failed", e));
                     }
                     
                     Object.assign(wordData, changes);
-                    wordData.sample = newSample;
                 }
             }
         } else { 
-            // 뒷면 저장
+            // 뒷면 편집 모드 저장 (기존 로직 유지)
             const sampleInput = document.getElementById('edit-sample-input');
             if (sampleInput) {
                 const newSampleText = sampleInput.value;
@@ -382,10 +396,12 @@ export const learningMode = {
              if(aiSection) aiSection.style.display = 'block';
         }
 
+        // 편집 모드 종료
         this.state.isEditing = false;
         this.state.editingSide = null;
-        ui.hideFormatTooltip(); // 툴팁 숨기기
+        ui.hideFormatTooltip();
         
+        // 화면 갱신
         if (side === 'front') {
             this.displayWord(this.state.currentIndex, true);
         } else {
@@ -393,7 +409,7 @@ export const learningMode = {
         }
     },
     
-    async createNewCard() {
+async createNewCard() {
         const tempCard = {
             word: "", 
             pos: "",
@@ -403,41 +419,39 @@ export const learningMode = {
             isNew: true 
         };
         
+        // 현재 위치 바로 뒤(currentIndex + 1)에 삽입
         const insertIndex = this.state.currentIndex + 1;
         this.state.currentWordList.splice(insertIndex, 0, tempCard);
         
+        // 인덱스를 새 카드로 이동
         this.state.currentIndex = insertIndex;
         this.displayWord(this.state.currentIndex, true);
         
+        // 0.1초 뒤 바로 편집 모드 실행
         setTimeout(() => {
             this.state.editingSide = 'front';
             this.enterEditMode('front');
         }, 100);
     },
     
-    async deleteCurrentCard() {
+async deleteCurrentCard() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
         
-        if (wordData.isNew) {
-            this.state.currentWordList.splice(this.state.currentIndex, 1);
-            if (this.state.currentIndex >= this.state.currentWordList.length) {
-                this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
-            }
-             if (this.state.currentWordList.length === 0) {
-                this.reset();
-            } else {
-                 this.displayWord(this.state.currentIndex, true);
-            }
-            return;
+        // 1. 화면(로컬 데이터)에서 즉시 삭제
+        this.state.currentWordList.splice(this.state.currentIndex, 1);
+        
+        // 2. 서버(API) 삭제 요청 (새로 만들다가 취소한 카드가 아닐 경우에만)
+        if (!wordData.isNew) {
+            await api.deleteWord(wordData.word);
         }
 
-        await api.deleteWord(wordData.word);
-        
+        // 3. 인덱스 조정 (마지막 카드를 지웠을 때 앞 카드로 이동)
         if (this.state.currentIndex >= this.state.currentWordList.length) {
             this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
         }
         
+        // 4. 화면 갱신
         if (this.state.currentWordList.length === 0) {
             this.reset();
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "모든 카드가 삭제되었습니다." } }));
