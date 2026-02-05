@@ -4,13 +4,80 @@ import { nonInteractiveWords } from './utils.js';
 import { learningMode } from './learning.js'; 
 
 export const ui = {
-    // [수정] 모든 팝업/메뉴 닫기 (서식 툴팁 추가)
+// [신규] 서식 툴팁 요소 생성
+    createFormatTooltip() {
+        if (document.getElementById('format-tooltip')) return;
+
+        const tooltip = document.createElement('div');
+        tooltip.id = 'format-tooltip';
+        tooltip.className = 'hidden';
+        
+        // 🔴 Red
+        const btnRed = document.createElement('button');
+        btnRed.className = 'format-btn btn-red';
+        btnRed.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#ef4444'); };
+        
+        // 🔵 Blue
+        const btnBlue = document.createElement('button');
+        btnBlue.className = 'format-btn btn-blue';
+        btnBlue.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#3b82f6'); };
+
+        // 🟢 Green
+        const btnGreen = document.createElement('button');
+        btnGreen.className = 'format-btn btn-green';
+        btnGreen.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#22c55e'); };
+
+        // 🚮 Clear
+        const btnClear = document.createElement('button');
+        btnClear.className = 'format-btn btn-clear';
+        btnClear.innerHTML = '🗑️'; 
+        btnClear.onmousedown = (e) => { e.preventDefault(); this.applyFormat('removeFormat'); };
+
+        tooltip.append(btnRed, btnBlue, btnGreen, btnClear);
+        document.body.appendChild(tooltip);
+    },
+
+    // [신규] 서식 적용 실행
+    applyFormat(command, value = null) {
+        document.execCommand(command, false, value);
+        this.hideFormatTooltip();
+        // 편집 내용 변경 이벤트 트리거
+        if (state.activeEditingElement) {
+            state.activeEditingElement.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    },
+
+    // [신규] 서식 툴팁 표시
+    showFormatTooltip(x, y) {
+        this.createFormatTooltip();
+        const tooltip = document.getElementById('format-tooltip');
+        tooltip.classList.remove('hidden');
+        
+        const rect = tooltip.getBoundingClientRect();
+        let top = y - rect.height - 10;
+        let left = x - (rect.width / 2);
+
+        if (top < 10) top = y + 20; 
+        if (left < 10) left = 10;
+        if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 10;
+
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+    },
+
+    // [신규] 서식 툴팁 숨기기
+    hideFormatTooltip() {
+        const tooltip = document.getElementById('format-tooltip');
+        if (tooltip) tooltip.classList.add('hidden');
+    },
+
+    // [수정] 모든 메뉴 닫기 (기존 함수가 있다면 이걸로 덮어씌워줘)
     hideAllMenus() {
-        this.hideWordContextMenu();
-        this.hideEditContextMenu();
-        this.hideCardContextMenu();
-        this.hideTranslationTooltip();
-        learningMode.hideFormatTooltip(); 
+        if(this.hideWordContextMenu) this.hideWordContextMenu();
+        if(this.hideEditContextMenu) this.hideEditContextMenu();
+        if(this.hideCardContextMenu) this.hideCardContextMenu();
+        if(this.hideTranslationTooltip) this.hideTranslationTooltip();
+        this.hideFormatTooltip(); // 👈 이게 추가된 핵심이야
     },
 
     // [수정] HTML 태그 지원 및 단어 클릭 기능 통합
