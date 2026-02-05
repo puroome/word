@@ -271,12 +271,25 @@ async enterEditMode(side) {
                     });
                     
                     editor.addEventListener('keydown', (e) => {
-                        // [추가] 엔터키 입력 시 기본 동작(div/br 생성)을 막고 줄바꿈 문자(\n) 삽입
+                        // [재수정] Range API를 사용하여 커서 위치에 직접 줄바꿈(\n) 삽입
                         if (e.key === 'Enter') {
                             e.preventDefault();
-                            e.stopPropagation(); // 상위 이벤트 전파 방지
-                            document.execCommand('insertText', false, '\n');
-                            editor.value = editor.innerHTML; // 동기화
+                            e.stopPropagation();
+
+                            const selection = window.getSelection();
+                            if (selection.rangeCount > 0) {
+                                const range = selection.getRangeAt(0);
+                                range.deleteContents(); // 블록 지정된 상태라면 삭제
+
+                                const textNode = document.createTextNode('\n');
+                                range.insertNode(textNode);
+
+                                // 커서를 줄바꿈 문자 바로 뒤로 이동
+                                range.setStartAfter(textNode);
+                                range.setEndAfter(textNode);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                            }
                             return;
                         }
 
@@ -284,12 +297,10 @@ async enterEditMode(side) {
                             if (e.key === 'b') { 
                                 e.preventDefault(); 
                                 document.execCommand('bold'); 
-                                editor.value = editor.innerHTML;
                             }
                             if (e.key === 'i') { 
                                 e.preventDefault(); 
                                 document.execCommand('italic'); 
-                                editor.value = editor.innerHTML;
                             }
                         }
                     });
