@@ -720,7 +720,7 @@ async saveAndExitEditMode() {
         if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
         
         this.elements.meaningDisplay.innerHTML = wordData.meaning.replace(/\n/g, '<br>');
-        this.elements.explanationDisplay.innerHTML = (wordData.explanation || "").replace(/\n/g, '<br>');
+        ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
         this.elements.explanationContainer.classList.remove('hidden');
 
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
