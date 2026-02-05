@@ -271,6 +271,15 @@ async enterEditMode(side) {
                     });
                     
                     editor.addEventListener('keydown', (e) => {
+                        // [추가] 엔터키 입력 시 기본 동작(div/br 생성)을 막고 줄바꿈 문자(\n) 삽입
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation(); // 상위 이벤트 전파 방지
+                            document.execCommand('insertText', false, '\n');
+                            editor.value = editor.innerHTML; // 동기화
+                            return;
+                        }
+
                         if (e.ctrlKey || e.metaKey) {
                             if (e.key === 'b') { 
                                 e.preventDefault(); 
