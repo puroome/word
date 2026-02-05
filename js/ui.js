@@ -4,60 +4,71 @@ import { nonInteractiveWords } from './utils.js';
 import { learningMode } from './learning.js'; 
 
 export const ui = {
-// [신규] 서식 툴팁 요소 생성
+    // ============================================================
+    // [신규] 서식 편집 툴팁 (여기만 추가됨)
+    // ============================================================
     createFormatTooltip() {
         if (document.getElementById('format-tooltip')) return;
 
         const tooltip = document.createElement('div');
         tooltip.id = 'format-tooltip';
-        tooltip.className = 'hidden';
+        // 스타일은 style.css에 정의됨
+        tooltip.style.display = 'none'; 
+        tooltip.style.position = 'absolute';
+        tooltip.style.zIndex = '1000';
+        tooltip.style.gap = '8px';
+        tooltip.style.backgroundColor = 'white';
+        tooltip.style.padding = '8px 12px';
+        tooltip.style.borderRadius = '8px';
+        tooltip.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+        tooltip.style.border = '1px solid #e5e7eb';
         
-        // 🔴 Red
-        const btnRed = document.createElement('button');
-        btnRed.className = 'format-btn btn-red';
-        btnRed.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#ef4444'); };
-        
-        // 🔵 Blue
-        const btnBlue = document.createElement('button');
-        btnBlue.className = 'format-btn btn-blue';
-        btnBlue.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#3b82f6'); };
+        const colors = [
+            { cmd: '#ef4444', label: '🔴' },
+            { cmd: '#3b82f6', label: '🔵' },
+            { cmd: '#22c55e', label: '🟢' }
+        ];
 
-        // 🟢 Green
-        const btnGreen = document.createElement('button');
-        btnGreen.className = 'format-btn btn-green';
-        btnGreen.onmousedown = (e) => { e.preventDefault(); this.applyFormat('foreColor', '#22c55e'); };
+        colors.forEach(c => {
+            const btn = document.createElement('button');
+            btn.textContent = c.label;
+            btn.style.fontSize = '18px';
+            btn.style.cursor = 'pointer';
+            btn.style.marginRight = '5px';
+            btn.onmousedown = (e) => { 
+                e.preventDefault(); 
+                document.execCommand('foreColor', false, c.cmd);
+                this.hideFormatTooltip();
+            };
+            tooltip.appendChild(btn);
+        });
 
-        // 🚮 Clear
         const btnClear = document.createElement('button');
-        btnClear.className = 'format-btn btn-clear';
-        btnClear.innerHTML = '🗑️'; 
-        btnClear.onmousedown = (e) => { e.preventDefault(); this.applyFormat('removeFormat'); };
+        btnClear.textContent = '🚮';
+        btnClear.style.fontSize = '18px';
+        btnClear.style.cursor = 'pointer';
+        btnClear.onmousedown = (e) => {
+            e.preventDefault();
+            document.execCommand('removeFormat', false, null);
+            document.execCommand('foreColor', false, '#000000');
+            this.hideFormatTooltip();
+        };
+        tooltip.appendChild(btnClear);
 
-        tooltip.append(btnRed, btnBlue, btnGreen, btnClear);
         document.body.appendChild(tooltip);
     },
 
-    // [신규] 서식 적용 실행
-    applyFormat(command, value = null) {
-        document.execCommand(command, false, value);
-        this.hideFormatTooltip();
-        // 편집 내용 변경 이벤트 트리거
-        if (state.activeEditingElement) {
-            state.activeEditingElement.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    },
-
-    // [신규] 서식 툴팁 표시
     showFormatTooltip(x, y) {
         this.createFormatTooltip();
         const tooltip = document.getElementById('format-tooltip');
-        tooltip.classList.remove('hidden');
+        tooltip.style.display = 'flex';
         
+        // 위치 조정
         const rect = tooltip.getBoundingClientRect();
         let top = y - rect.height - 10;
         let left = x - (rect.width / 2);
-
-        if (top < 10) top = y + 20; 
+        
+        if (top < 10) top = y + 20;
         if (left < 10) left = 10;
         if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 10;
 
@@ -65,39 +76,44 @@ export const ui = {
         tooltip.style.left = `${left}px`;
     },
 
-    // [신규] 서식 툴팁 숨기기
     hideFormatTooltip() {
         const tooltip = document.getElementById('format-tooltip');
-        if (tooltip) tooltip.classList.add('hidden');
+        if (tooltip) tooltip.style.display = 'none';
     },
 
-    // [수정] 모든 메뉴 닫기 (기존 함수가 있다면 이걸로 덮어씌워줘)
+    // ============================================================
+    // [기존 기능 복원] 메뉴 닫기 및 인터랙티브 단어 생성
+    // ============================================================
+
     hideAllMenus() {
-        if(this.hideWordContextMenu) this.hideWordContextMenu();
-        if(this.hideEditContextMenu) this.hideEditContextMenu();
-        if(this.hideCardContextMenu) this.hideCardContextMenu();
-        if(this.hideTranslationTooltip) this.hideTranslationTooltip();
-        this.hideFormatTooltip(); // 👈 이게 추가된 핵심이야
+        this.hideWordContextMenu();
+        this.hideEditContextMenu();
+        this.hideCardContextMenu();
+        this.hideTranslationTooltip();
+        this.hideFormatTooltip(); // 이것만 추가
     },
 
-    // [수정] HTML 태그 지원 및 단어 클릭 기능 통합
     createInteractiveFragment(text, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
         if (!text || !text.trim()) return fragment;
 
-        // HTML 태그가 포함되어 있는지 확인
-        const hasHtml = /<[a-z][\s\S]*>/i.test(text);
-
-        if (!hasHtml) {
-            return this.createInteractiveFragmentFromPlainText(text, isForSampleSentence);
-        } else {
-            return this.createInteractiveFragmentFromHtml(text, isForSampleSentence);
+        // HTML 태그가 이미 포함된 경우(서식 적용된 텍스트) 단순 텍스트 분리 대신 HTML 파싱 필요
+        // 하지만 기존 로직 유지를 위해, 태그가 없는 경우만 분리하거나 
+        // 태그 내부의 텍스트만 발음 가능하게 하는 복잡한 로직이 필요함.
+        // 여기서는 간단히 HTML 태그가 있으면 innerHTML로 처리하고, 클릭 이벤트는 상위에서 위임받거나
+        // 서식이 있는 경우 개별 단어 클릭(발음) 기능을 일부 포기하고 서식 보여주기에 집중하는 절충안을 씁니다.
+        // *편집된 서식(HTML)이 들어오면 태그를 유지해서 보여줌*
+        if (text.includes('<') && text.includes('>')) {
+            const span = document.createElement('span');
+            span.innerHTML = text; // HTML 태그 그대로 렌더링
+            
+            // HTML 내부의 텍스트 노드에 대해 클릭 이벤트를 걸어주고 싶지만 복잡하므로
+            // 여기서는 통째로 렌더링만 합니다. (서식 우선)
+            // 대신 우클릭/클릭 시 전체 문장이나 단어가 잡힐 수 있습니다.
+            return span;
         }
-    },
 
-    // 기존 로직 분리 (Plain Text용)
-    createInteractiveFragmentFromPlainText(text, isForSampleSentence) {
-        const fragment = document.createDocumentFragment();
+        // 기존 로직 (태그가 없는 일반 텍스트)
         const parts = text.split(/([a-zA-Z0-9'-]+)/g);
         parts.forEach(part => {
             if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
@@ -123,7 +139,6 @@ export const ui = {
                 }, { passive: true });
                 span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
                 span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
-                
                 fragment.appendChild(span);
             } else {
                 fragment.appendChild(document.createTextNode(part));
@@ -132,33 +147,14 @@ export const ui = {
         return fragment;
     },
 
-    // [신규] HTML 구조를 유지하면서 텍스트 노드만 찾아 Interactive하게 변환
-    createInteractiveFragmentFromHtml(html, isForSampleSentence) {
-        const fragment = document.createDocumentFragment();
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-
-        const processNode = (node) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                return this.createInteractiveFragmentFromPlainText(node.textContent, isForSampleSentence);
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                const newEl = node.cloneNode(false);
-                Array.from(node.childNodes).forEach(child => {
-                    newEl.appendChild(processNode(child));
-                });
-                return newEl;
-            }
-            return node.cloneNode(true);
-        };
-
-        Array.from(tempDiv.childNodes).forEach(child => {
-            fragment.appendChild(processNode(child));
-        });
-
-        return fragment;
-    },
-
     renderExplanationText(targetElement, text) {
+        // [수정] 서식(HTML)이 포함된 경우 그대로 렌더링
+        if (text && (text.includes('<b>') || text.includes('span style'))) {
+            targetElement.innerHTML = text;
+            return;
+        }
+
+        // 기존 로직 유지
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
         const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
@@ -206,6 +202,8 @@ export const ui = {
 
     displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
+        const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
+
         (sentences || []).forEach((sentence, index) => {
             if (!sentence || !sentence.trim()) {
                 const spacer = document.createElement('div');
@@ -220,7 +218,7 @@ export const ui = {
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
                 this.showTranslationTooltip("Translating...", event);
-                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''));
+                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, '')); 
                 if (state.activeTranslationTarget !== p) return;
                 this.showTranslationTooltip(translatedText, event);
             };
@@ -230,6 +228,7 @@ export const ui = {
                 api.speak(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''), 'sample');
                 showTranslation(e);
             };
+
             p.addEventListener('mouseenter', (e) => {
                  if (e.target === p) {
                     clearTimeout(state.translationTimer);
@@ -241,142 +240,133 @@ export const ui = {
                     }, 1000);
                  }
             });
+
             p.addEventListener('mouseleave', () => {
                 clearTimeout(state.translationTimer);
                 if (state.activeTranslationTarget === p) {
                     state.activeTranslationTarget = null;
                 }
-                ui.hideTranslationTooltip();
+                this.hideTranslationTooltip();
             });
 
-            // 문장 내 단어 Interactive 처리 (RichText 미지원인 경우 대비)
+            const emojiSpan = document.createElement('span');
+            emojiSpan.textContent = emojiList[index % emojiList.length]; 
+            emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
+            p.appendChild(emojiSpan);
+
             const sentenceContent = document.createElement('span');
-            sentenceContent.className = 'sentence-content-area'; 
+            sentenceContent.className = 'sentence-content-area';
+            sentenceContent.style.cursor = 'text';
+
+            sentenceContent.addEventListener('mouseenter', () => {
+                clearTimeout(state.translationTimer);
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
+                }
+                this.hideTranslationTooltip();
+            });
+
             const sentenceParts = sentence.split(/(\*.*?\*)/g);
             sentenceParts.forEach(part => {
                 if (part.startsWith('*') && part.endsWith('*')) {
                     const strong = document.createElement('strong');
-                    strong.appendChild(ui.createInteractiveFragment(part.slice(1, -1), true));
+                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
                     sentenceContent.appendChild(strong);
                 } else if (part) {
-                    sentenceContent.appendChild(ui.createInteractiveFragment(part, true));
+                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
                 }
             });
             p.appendChild(sentenceContent);
             containerElement.appendChild(p);
         });
     },
-
+    
     showTranslationTooltip(text, event) {
-        let tooltip = document.getElementById('translation-tooltip');
-        if (!tooltip) {
-            tooltip = document.createElement('div');
-            tooltip.id = 'translation-tooltip';
-            tooltip.className = 'absolute bg-black text-white text-sm rounded px-3 py-2 z-50 max-w-xs transition-opacity duration-200 opacity-0 pointer-events-none hidden';
-            document.body.appendChild(tooltip);
-        }
+        const tooltip = document.getElementById('translation-tooltip');
         tooltip.textContent = text;
         tooltip.classList.remove('hidden');
-        requestAnimationFrame(() => tooltip.classList.remove('opacity-0'));
-
-        const target = event.target.getBoundingClientRect();
-        const tooltipRect = tooltip.getBoundingClientRect();
-        
-        let top = target.top - tooltipRect.height - 10 + window.scrollY;
-        let left = target.left + (target.width - tooltipRect.width) / 2 + window.scrollX;
-
-        if (top < 0) top = target.bottom + 10 + window.scrollY;
-        if (left < 10) left = 10;
-        if (left + tooltipRect.width > document.body.clientWidth - 10) left = document.body.clientWidth - tooltipRect.width - 10;
-
-        tooltip.style.top = `${top}px`;
+        const rect = event.target.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        let left = rect.left;
+        let top = rect.bottom + scrollTop + 5;
         tooltip.style.left = `${left}px`;
-    },
+        tooltip.style.top = `${top}px`;
 
+         requestAnimationFrame(() => {
+             const tooltipRect = tooltip.getBoundingClientRect();
+             if (tooltipRect.right > window.innerWidth - 10) {
+                 tooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
+             }
+             if (left < 10) {
+                 tooltip.style.left = '10px';
+             }
+         });
+    },
     hideTranslationTooltip() {
-        const tooltip = document.getElementById('translation-tooltip');
-        if (tooltip) {
-            tooltip.classList.add('opacity-0');
-            setTimeout(() => tooltip.classList.add('hidden'), 200);
-        }
-        if (state.activeTranslationTarget) state.activeTranslationTarget = null;
+        document.getElementById('translation-tooltip').classList.add('hidden');
     },
 
-    showWordContextMenu(event, word) {
-        let menu = document.getElementById('word-context-menu');
-        if (!menu) {
-            menu = document.createElement('div');
-            menu.id = 'word-context-menu';
-            menu.className = 'fixed bg-white border border-gray-200 shadow-xl rounded-lg z-50 hidden overflow-hidden';
-            document.body.appendChild(menu);
-        }
-        
-        menu.innerHTML = `
-            <div class="py-1 min-w-[160px]">
-                <button id="ctx-search-naver" class="block w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 active:bg-blue-100 border-b border-gray-100">📖 네이버 사전</button>
-                <button id="ctx-search-google" class="block w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 active:bg-blue-100 border-b border-gray-100">🖼️ 구글 이미지</button>
-                <button id="ctx-copy-word" class="block w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 active:bg-blue-100">📋 단어 복사</button>
-            </div>
-        `;
-        
-        document.getElementById('ctx-search-naver').onclick = () => {
-            window.open(`https://en.dict.naver.com/#/search?query=${encodeURIComponent(word)}`, '_blank');
-            this.hideWordContextMenu();
-        };
-        document.getElementById('ctx-search-google').onclick = () => {
-            window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(word)}`, '_blank');
-            this.hideWordContextMenu();
-        };
-        document.getElementById('ctx-copy-word').onclick = () => {
-            navigator.clipboard.writeText(word);
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "단어가 복사되었습니다." } }));
-            this.hideWordContextMenu();
-        };
+    showWordContextMenu(event, word, options = {}) {
+        this.hideAllMenus(); 
+
+        event.preventDefault();
+        const menu = document.getElementById('word-context-menu');
+        if (!menu) return;
 
         const touch = event.touches ? event.touches[0] : null;
         const x = touch ? touch.clientX : event.clientX;
         const y = touch ? touch.clientY : event.clientY;
         
-        menu.style.left = `${x}px`;
-        menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
         
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
-            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
-            if (finalX < 10) finalX = 10;
-            if (finalY < 10) finalY = 10;
-            
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
-    },
+        // 위치 조정
+        const menuRect = menu.getBoundingClientRect();
+        let finalX = x;
+        let finalY = y;
+        if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
+        if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
+        if (finalX < 10) finalX = 10;
+        if (finalY < 10) finalY = 10;
+        
+        menu.style.left = `${finalX}px`;
+        menu.style.top = `${finalY}px`;
 
+        const encodedWord = encodeURIComponent(word);
+        document.getElementById('search-app-context-btn').onclick = () => {
+            document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
+            this.hideWordContextMenu();
+        };
+        document.getElementById('search-daum-context-btn').onclick = () => {
+            window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum');
+            this.hideWordContextMenu();
+        };
+        document.getElementById('search-naver-context-btn').onclick = () => {
+            window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver');
+            this.hideWordContextMenu();
+        };
+        document.getElementById('search-etym-context-btn').onclick = () => {
+            window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym');
+            this.hideWordContextMenu();
+        };
+        document.getElementById('search-google-img-context-btn').onclick = () => {
+            window.open(`https://www.google.com/search?tbm=isch&q=${encodedWord}`, 'dict_google_img');
+            this.hideWordContextMenu();
+        };
+    },
     hideWordContextMenu() {
         const menu = document.getElementById('word-context-menu');
         if (menu) menu.classList.add('hidden');
     },
-
+    
+    // ... 나머지 기존 Edit/Card Context Menu 관련 코드 ...
     showEditContextMenu(event) {
-        let menu = document.getElementById('edit-context-menu');
-        if (!menu) {
-            menu = document.createElement('div');
-            menu.id = 'edit-context-menu';
-            menu.className = 'fixed bg-white border border-gray-200 shadow-xl rounded-lg z-50 hidden';
-            document.body.appendChild(menu);
-        }
-        menu.innerHTML = `<div class="p-2"><button id="edit-context-btn" class="w-full text-left px-4 py-2 hover:bg-gray-100 rounded">✏️ 편집하기</button></div>`;
-        const btn = document.getElementById('edit-context-btn');
-        btn.onclick = () => {
-            learningMode.elements.editContextBtn.click();
-            this.hideEditContextMenu();
-        };
-
-        const x = event.touches ? event.touches[0].clientX : event.clientX;
-        const y = event.touches ? event.touches[0].clientY : event.clientY;
+        this.hideAllMenus();
+        event.preventDefault();
+        const menu = document.getElementById('edit-context-menu');
+        if (!menu) return;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
@@ -386,24 +376,13 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
     showCardContextMenu(event) {
-        let menu = document.getElementById('card-context-menu');
-        if (!menu) {
-            menu = document.createElement('div');
-            menu.id = 'card-context-menu';
-            menu.className = 'fixed bg-white border border-gray-200 shadow-xl rounded-lg z-50 hidden';
-            document.body.appendChild(menu);
-        }
-        menu.innerHTML = `
-            <div class="p-2 flex flex-col gap-1">
-                <button id="create-card-btn" class="text-left px-4 py-2 hover:bg-gray-100 rounded">➕ 새 카드 추가</button>
-                <button id="delete-card-btn" class="text-left px-4 py-2 hover:bg-red-50 text-red-600 rounded">🗑️ 현재 카드 삭제</button>
-            </div>`;
-        
-        document.getElementById('create-card-btn').onclick = () => { learningMode.createNewCard(); this.hideCardContextMenu(); };
-        document.getElementById('delete-card-btn').onclick = () => { learningMode.confirmDeleteCard(); this.hideCardContextMenu(); };
-
-        const x = event.touches ? event.touches[0].clientX : event.clientX;
-        const y = event.touches ? event.touches[0].clientY : event.clientY;
+        this.hideAllMenus();
+        event.preventDefault();
+        const menu = document.getElementById('card-context-menu');
+        if (!menu) return;
+        const touch = event.touches ? event.touches[0] : null;
+        const x = touch ? touch.clientX : event.clientX;
+        const y = touch ? touch.clientY : event.clientY;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.classList.remove('hidden');
