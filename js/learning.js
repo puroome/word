@@ -164,7 +164,7 @@ export const learningMode = {
     },
 
 // [수정] 편집 모드 (AI 자동 완성 시 기존 데이터 보존 & 추가)
-    async enterEditMode(side) {
+async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
 
@@ -173,37 +173,115 @@ export const learningMode = {
             const currentWord = wordData.word || "";
             const wordInputValue = currentPos ? `${currentWord} [${currentPos}]` : currentWord;
             
-            // [수정] Rich Text 편집을 위해 input 대신 contenteditable div 사용
+            // [수정] 1. 편집 UI 렌더링 (select-text 클래스와 인라인 스타일로 드래그 강제 허용)
             this.elements.wordDisplay.innerHTML = `
                 <div class="flex flex-col gap-2 relative">
-                    <div id="edit-word-input" contenteditable="true" class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white cursor-text min-h-[40px] flex items-center justify-center" placeholder="Word [POS]">${wordInputValue}</div>
+                    <div id="edit-word-input" 
+                         contenteditable="true" 
+                         class="select-text w-full text-center p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white cursor-text min-h-[40px] flex items-center justify-center" 
+                         style="user-select: text; -webkit-user-select: text; outline: none;">${wordInputValue}</div>
+                    
+                    <p class="text-xs text-gray-400 text-center mt-1">
+                        💡 텍스트 선택 시 서식 도구(🔴🔵🟢)가 나타납니다 (단축키: Ctrl+B, Ctrl+I)
+                    </p>
+
                     <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
                         🪄 AI 자동 완성
                     </button>
                 </div>
             `;
             
-            // [추가] 서식 편집 이벤트 연결
-            setTimeout(() => {
-                const editDiv = document.getElementById('edit-word-input');
-                if(editDiv) this.attachRichTextEvents(editDiv);
-            }, 0);
+            // [수정] 2. 요소 확보 및 이벤트 리스너 직접 연결
+            const editDiv = document.getElementById('edit-word-input');
+            const autoBtn = document.getElementById('auto-fill-btn');
+
+            if (editDiv) {
+                // 2-1. 기존 저장 로직 호환 (innerHTML을 value에 바인딩)
+                editDiv.value = editDiv.innerHTML;
+                editDiv.addEventListener('input', () => { editDiv.value = editDiv.innerHTML; });
+
+                // 2-2. 툴팁 표시 함수 (내부 정의)
+                const showFormatTooltip = () => {
+                    const existing = document.getElementById('format-tooltip');
+                    if (existing) existing.remove();
+
+                    const selection = window.getSelection();
+                    if (!selection.rangeCount || selection.isCollapsed) return;
+
+                    const range = selection.getRangeAt(0);
+                    // 선택된 영역이 에디터 내부인지 확인 (텍스트 노드 포함)
+                    if (!editDiv.contains(range.commonAncestorContainer) && editDiv !== range.commonAncestorContainer) return;
+
+                    const rect = range.getBoundingClientRect();
+                    const tooltip = document.createElement('div');
+                    tooltip.id = 'format-tooltip';
+                    tooltip.className = 'format-tooltip'; // style.css 적용
+                    
+                    // 위치 계산
+                    tooltip.style.top = `${rect.top - 50}px`;
+                    tooltip.style.left = `${rect.left}px`;
+
+                    const actions = [
+                        { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
+                        { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
+                        { label: '🟢', cmd: 'foreColor', val: '#008000' },
+                        { label: '🚮', cmd: 'removeFormat', val: null }
+                    ];
+
+                    actions.forEach(act => {
+                        const btn = document.createElement('button');
+                        btn.textContent = act.label;
+                        btn.className = 'format-btn';
+                        // 중요: mousedown을 써야 텍스트 선택이 풀리지 않음
+                        btn.onmousedown = (e) => {
+                            e.preventDefault();
+                            document.execCommand(act.cmd, false, act.val);
+                            editDiv.value = editDiv.innerHTML; // 데이터 동기화
+                            editDiv.focus();
+                        };
+                        tooltip.appendChild(btn);
+                    });
+                    document.body.appendChild(tooltip);
+                };
+
+                // 2-3. 이벤트 바인딩
+                // 드래그 끝났을 때
+                editDiv.addEventListener('mouseup', () => setTimeout(showFormatTooltip, 10));
+                // 키보드 선택 시
+                editDiv.addEventListener('keyup', (e) => {
+                    if (e.shiftKey) setTimeout(showFormatTooltip, 10);
+                });
+                // 단축키 (Ctrl+B, I)
+                editDiv.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        if (e.key === 'b') { e.preventDefault(); document.execCommand('bold'); }
+                        if (e.key === 'i') { e.preventDefault(); document.execCommand('italic'); }
+                    }
+                });
+                // 툴팁 닫기
+                document.addEventListener('mousedown', (e) => {
+                    const tooltip = document.getElementById('format-tooltip');
+                    if (tooltip && !tooltip.contains(e.target) && !editDiv.contains(e.target)) {
+                        tooltip.remove();
+                    }
+                });
+            } // end of if(editDiv)
             
+            // 나머지 입력 필드 렌더링
             const currentMeaning = wordData.meaning || "";
             this.elements.meaningDisplay.innerHTML = `<textarea id="edit-meaning-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="뜻">${currentMeaning}</textarea>`;
             
             const currentExplanation = wordData.explanation || "";
             this.elements.explanationDisplay.innerHTML = `<textarea id="edit-explanation-input" class="w-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" rows="8" placeholder="[동의어]\nEnglish : Korean\n\n[파생어]\nEnglish : Korean">${currentExplanation}</textarea>`;
 
+            // AI 자동완성 로직 연결
             setTimeout(() => {
-                const autoBtn = document.getElementById('auto-fill-btn');
-                const wordInput = document.getElementById('edit-word-input');
                 const meaningInput = document.getElementById('edit-meaning-input');
                 const explanationInput = document.getElementById('edit-explanation-input');
 
-                if (autoBtn) {
+                if (autoBtn && editDiv) {
                     autoBtn.onclick = async () => {
-                        let targetWord = wordInput.value.trim();
+                        let targetWord = editDiv.innerText.trim(); // innerText로 태그 제외한 텍스트만 추출
                         targetWord = targetWord.replace(/\s*\[.*?\]$/, '');
 
                         if (!targetWord) {
@@ -217,42 +295,28 @@ export const learningMode = {
                         try {
                             const aiData = await api.fetchWordInfoFromAI(targetWord);
                             
-                        // [수정 1] 뜻 (Meaning) - 기존 값이 있으면 두 줄 띄우고 추가
+                            // 뜻 (Meaning) 추가 로직
                             if (aiData.meaning) {
                                 const original = meaningInput.value.trim();
-                                if (original) {
-                                    // 중복되지 않을 때만 추가
-                                    if (!original.includes(aiData.meaning)) {
-                                        meaningInput.value = original + "\n\n" + aiData.meaning;
-                                    }
-                                } else {
+                                if (original && !original.includes(aiData.meaning)) {
+                                    meaningInput.value = original + "\n\n" + aiData.meaning;
+                                } else if (!original) {
                                     meaningInput.value = aiData.meaning;
                                 }
                             }
 
-                            // [수정 2] 설명 (Explanation) - 기존 값이 있으면 두 줄 띄우고 추가
+                            // 설명 (Explanation) 추가 로직
                             if (aiData.explanation) {
                                 const original = explanationInput.value.trim();
-                                if (original) {
-                                    explanationInput.value = original + "\n\n" + aiData.explanation;
-                                } else {
-                                    explanationInput.value = aiData.explanation;
-                                }
+                                explanationInput.value = original ? (original + "\n\n" + aiData.explanation) : aiData.explanation;
                             }
 
-                            // [수정 3] 예문 (Samples) - 기존 예문 뒤에 두 줄 띄우고 추가
+                            // 예문 (Samples) 추가 로직
                             if (aiData.samples && Array.isArray(aiData.samples) && aiData.samples.length > 0) {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
-                                
-                                if (originalSample.trim()) {
-                                    wordData.sample = originalSample.trim() + "\n\n" + newSampleText;
-                                } else {
-                                    wordData.sample = newSampleText;
-                                }
-                                
-                                // 동기화용 필드 업데이트
-                                wordData.manualSample = wordData.sample;
+                                wordData.sample = originalSample.trim() ? (originalSample.trim() + "\n\n" + newSampleText) : newSampleText;
+                                wordData.manualSample = wordData.sample; // 동기화
 
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `정보가 추가되었습니다! (예문 ${aiData.samples.length}개 추가됨)` } }));
                             } else {
@@ -280,68 +344,6 @@ export const learningMode = {
 
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
-    },
-
-// [신규 기능] 서식 편집(볼드, 이탤릭, 색상) 이벤트 핸들러
-    attachRichTextEvents(element) {
-        // 기존 저장 로직과의 호환성을 위해 value 프로퍼티 바인딩
-        element.value = element.innerHTML;
-        element.addEventListener('input', () => { element.value = element.innerHTML; });
-
-        // 단축키 (Ctrl+B, Ctrl+I)
-        element.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'i')) {
-                e.preventDefault();
-                document.execCommand(e.key === 'b' ? 'bold' : 'italic');
-            }
-        });
-
-        // 툴팁 표시 로직
-        const updateTooltip = () => {
-            const existing = document.getElementById('format-tooltip');
-            if (existing) existing.remove();
-
-            const selection = window.getSelection();
-            if (!selection.rangeCount || selection.isCollapsed || !element.contains(selection.anchorNode)) return;
-
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-            
-            const tooltip = document.createElement('div');
-            tooltip.id = 'format-tooltip';
-            tooltip.className = 'format-tooltip';
-            tooltip.style.top = `${rect.top - 50}px`;
-            tooltip.style.left = `${rect.left}px`;
-
-            const actions = [
-                { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
-                { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
-                { label: '🟢', cmd: 'foreColor', val: '#008000' },
-                { label: '🚮', cmd: 'removeFormat', val: null }
-            ];
-
-            actions.forEach(act => {
-                const btn = document.createElement('button');
-                btn.textContent = act.label;
-                btn.className = 'format-btn';
-                btn.onmousedown = (e) => { // click 대신 mousedown 사용하여 포커스 유지
-                    e.preventDefault();
-                    document.execCommand(act.cmd, false, act.val);
-                    element.value = element.innerHTML; // 변경사항 동기화
-                };
-                tooltip.appendChild(btn);
-            });
-            document.body.appendChild(tooltip);
-        };
-
-        element.addEventListener('mouseup', () => setTimeout(updateTooltip, 10));
-        element.addEventListener('keyup', () => setTimeout(updateTooltip, 10));
-        document.addEventListener('mousedown', (e) => {
-            if (!e.target.closest('#format-tooltip') && !element.contains(e.target)) {
-                const existing = document.getElementById('format-tooltip');
-                if (existing) existing.remove();
-            }
-        });
     },
     
 async saveAndExitEditMode() {
