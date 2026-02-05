@@ -128,3 +128,26 @@ body {
     -moz-appearance: textfield;
 }
 
+/* [추가] 서식 편집 툴팁 스타일 */
+.format-tooltip {
+    position: fixed;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    padding: 8px 12px;
+    display: flex;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    z-index: 9999;
+    animation: fadeIn 0.2s ease-out;
+}
+.format-btn {
+    font-size: 1.2rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    transition: transform 0.1s;
+}
+.format-btn:hover { transform: scale(1.2); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
