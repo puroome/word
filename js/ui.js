@@ -12,39 +12,79 @@ export const ui = {
         this.hideTranslationTooltip();
     },
 
-    createInteractiveFragment(text, isForSampleSentence = false) {
+    createInteractiveFragment(content, isForSampleSentence = false) {
         const fragment = document.createDocumentFragment();
-        if (!text || !text.trim()) return fragment;
-        const parts = text.split(/([a-zA-Z0-9'-]+)/g);
-        parts.forEach(part => {
-            if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
-                 const span = document.createElement('span');
-                span.textContent = part;
-                span.className = 'interactive-word';
-                span.onclick = (e) => {
-                    if (isForSampleSentence) e.stopPropagation();
-                    clearTimeout(state.longPressTimer);
-                    api.speak(part, 'word');
-                };
-                span.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    if (isForSampleSentence) e.stopPropagation();
-                    this.showWordContextMenu(e, part);
-                };
-                 let touchMove = false;
-                span.addEventListener('touchstart', (e) => {
-                    if (isForSampleSentence) e.stopPropagation();
-                    touchMove = false;
-                    clearTimeout(state.longPressTimer);
-                    state.longPressTimer = setTimeout(() => { if (!touchMove) { this.showWordContextMenu(e, part); } }, 700);
-                }, { passive: true });
-                span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
-                fragment.appendChild(span);
-            } else {
-                fragment.appendChild(document.createTextNode(part));
+        if (!content || !content.trim()) return fragment;
+
+        // 1. 임시 컨테이너를 만들어 HTML 구조 파싱
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = content;
+
+        // 2. 재귀적으로 노드를 탐색하며 텍스트만 Interactive 하게 변환하는 함수
+        const walkAndProcess = (node) => {
+            if (node.nodeType === 3) { // 텍스트 노드인 경우
+                const text = node.nodeValue;
+                if (!text.trim()) return document.createTextNode(text);
+
+                const textFragment = document.createDocumentFragment();
+                // 기존의 단어 분리 로직 적용
+                const parts = text.split(/([a-zA-Z0-9'-]+)/g);
+                
+                parts.forEach(part => {
+                    if (/([a-zA-Z0-9'-]+)/.test(part) && !nonInteractiveWords.has(part.toLowerCase())) {
+                        const span = document.createElement('span');
+                        span.textContent = part;
+                        span.className = 'interactive-word';
+                        
+                        // 클릭 이벤트 (TTS)
+                        span.onclick = (e) => {
+                            if (isForSampleSentence) e.stopPropagation();
+                            clearTimeout(state.longPressTimer);
+                            api.speak(part, 'word');
+                        };
+                        // 우클릭 이벤트 (메뉴)
+                        span.oncontextmenu = (e) => {
+                            e.preventDefault();
+                            if (isForSampleSentence) e.stopPropagation();
+                            this.showWordContextMenu(e, part);
+                        };
+                        // 터치 이벤트
+                        let touchMove = false;
+                        span.addEventListener('touchstart', (e) => {
+                            if (isForSampleSentence) e.stopPropagation();
+                            touchMove = false;
+                            state.longPressTimer = setTimeout(() => {
+                                this.showWordContextMenu(e, part);
+                            }, 800);
+                        });
+                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+                        span.addEventListener('touchend', () => { 
+                            clearTimeout(state.longPressTimer);
+                            if(!touchMove) api.speak(part, 'word'); 
+                        });
+
+                        textFragment.appendChild(span);
+                    } else {
+                        textFragment.appendChild(document.createTextNode(part));
+                    }
+                });
+                return textFragment;
+
+            } else if (node.nodeType === 1) { // 요소 노드(태그)인 경우 (예: <b>, <span style...>)
+                const newElement = node.cloneNode(false); // 껍데기만 복사 (속성 유지)
+                node.childNodes.forEach(child => {
+                    newElement.appendChild(walkAndProcess(child)); // 자식들도 재귀적으로 처리
+                });
+                return newElement;
             }
+            return node.cloneNode(true); // 그 외 노드는 그냥 복사
+        };
+
+        // 3. 변환된 노드들을 fragment에 추가
+        tempDiv.childNodes.forEach(child => {
+            fragment.appendChild(walkAndProcess(child));
         });
+
         return fragment;
     },
     renderExplanationText(targetElement, text) {
