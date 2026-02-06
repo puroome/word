@@ -692,13 +692,21 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
         if (database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
+            
+            // [수정] 위치 보정: 기준 단어(afterWord)가 있으면 그 다음 번호 사용 (임시 중복 허용)
+            // 없으면 맨 뒤 번호 부여
+            let nextIndex = (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1;
+            if (afterWord) {
+                const targetItem = state.wordList.find(w => w.word === afterWord);
+                if (targetItem) nextIndex = (targetItem.index || 0) + 1;
+            }
+
             const updates = {};
             updates[`/vocabulary/${safeKey}`] = {
                 ...cardData,
                 sample: cardData.manual_sample || cardData.sample || "", 
                 AISample: null,
-                // [수정] Date.now() 대신 현재 리스트의 끝 번호+1을 부여하여 정렬 꼬임 방지
-                index: (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1
+                index: nextIndex
             };
             update(ref(database), updates).catch(e => console.warn(e));
         }
