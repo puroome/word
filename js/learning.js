@@ -248,7 +248,7 @@ async enterEditMode(side) {
                             { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
                             { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
                             { label: '🟢', cmd: 'foreColor', val: '#008000' },
-                            { label: '🚮', cmd: 'removeFormat', val: null }
+                            { label: '🚫', cmd: 'removeFormat', val: null }
                         ];
 
                         actions.forEach(act => {
