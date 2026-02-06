@@ -732,6 +732,7 @@ async createWord(cardData, afterWord = null) {
 },
 
     async deleteWord(word) {
+        // 1. Google Sheets 삭제 요청 (백엔드)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'delete_word');
@@ -746,8 +747,10 @@ async createWord(cardData, afterWord = null) {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
+        // 2. 로컬 메모리(State)에서 즉시 삭제 (UI 반영용)
         state.wordList = state.wordList.filter(w => w.word !== word);
 
+        // 3. 로컬 캐시(LocalStorage) 삭제
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
@@ -757,5 +760,17 @@ async createWord(cardData, afterWord = null) {
             }
         } catch (e) {}
 
+        // ============================================================
+        // [누락된 코드 추가] Firebase에서도 즉시 삭제해야 다시 안 살아남
+        // ============================================================
+        if (database) {
+            const { ref, remove } = window.firebaseSDK;
+            const safeKey = word.replace(/[.#$[\]/]/g, '_');
+            
+            // Firebase의 해당 단어 경로를 찾아서 제거
+            remove(ref(database, `/vocabulary/${safeKey}`))
+                .then(() => console.log("✅ Firebase 삭제 성공"))
+                .catch(e => console.warn("Firebase 삭제 실패:", e));
+        }
     }
 };
