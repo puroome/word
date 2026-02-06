@@ -615,102 +615,121 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
     },
 
     // [수정 1] 새 단어 생성 (캐시 도미노 업데이트 적용 완료)
-    async createWord(cardData, afterWord = null) {
+    // [수정] 새 단어 생성 (소수점 인덱싱 적용: 100% 위치 보장)
+async createWord(cardData, afterWord = null) {
+    
+    // POS가 없으면 자동으로 'n/a' 설정
+    if (!cardData.pos || !cardData.pos.trim()) {
+        cardData.pos = "n/a";
+    }
+
+    // ============================================================
+    // [핵심 수정] 소수점 인덱스 계산 (사이값 찾기)
+    // ============================================================
+    let newFirebaseIndex = 0;
+    
+    // 정확한 계산을 위해 현재 리스트를 순서대로 정렬
+    const sortedList = [...state.wordList].sort((a, b) => (a.index || 0) - (b.index || 0));
+
+    if (afterWord) {
+        const prevIdx = sortedList.findIndex(w => w.word === afterWord);
         
-        // ▼▼▼ [추가된 코드] POS가 없으면 자동으로 'n/a' 설정 ▼▼▼
-        if (!cardData.pos || !cardData.pos.trim()) {
-            cardData.pos = "n/a";
-        }
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
-        // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || ""); // 위에서 n/a가 할당되었으므로 n/a가 전송됨
-            scriptUrl.searchParams.append('meaning', cardData.meaning || "");
-            scriptUrl.searchParams.append('explanation', cardData.explanation || "");
-            scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
-
-            if (afterWord) {
-                scriptUrl.searchParams.append('after_word', afterWord);
-            }
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 생성 실패:", d.message);
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
-
-        // 2. [핵심] LocalStorage 캐시 즉시 반영 (인덱스 도미노 업데이트)
-        try {
-            const cachedData = localStorage.getItem('wordListCache');
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                const words = parsedCache.words || [];
-
-                // (1) 삽입할 위치 찾기
-                let insertIndex = words.length; // 기본: 맨 뒤
-                if (afterWord) {
-                    const afterIndex = words.findIndex(w => w.word === afterWord);
-                    if (afterIndex !== -1) {
-                        insertIndex = afterIndex + 1;
-                    }
-                }
-
-                // (2) 도미노: 삽입 위치 뒤에 있는 모든 단어들의 index를 +1씩 밀어내기
-                for (let i = insertIndex; i < words.length; i++) {
-                    if (typeof words[i].index === 'number') {
-                        words[i].index += 1;
-                    }
-                }
-
-                // (3) 새 단어 객체 생성 (올바른 index 부여)
-                const newWordObj = {
-                    ...cardData,
-                    sample: cardData.manual_sample || cardData.sample || "",
-                    AISample: null,
-                    index: insertIndex
-                };
-
-                // (4) 배열에 끼워넣기 (splice 이용)
-                words.splice(insertIndex, 0, newWordObj);
-
-                // (5) 저장
-                parsedCache.words = words;
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
-                console.log(`✅ 캐시 업데이트 완료: ${newWordObj.word} (Index: ${insertIndex})`);
-            }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 중 오류:", e);
-        }
-
-        // 3. Firebase 업데이트
-        if (database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
+        if (prevIdx !== -1) {
+            const prevVal = sortedList[prevIdx].index || 0;
             
-            // [수정] 위치 보정: 기준 단어(afterWord)가 있으면 그 다음 번호 사용 (임시 중복 허용)
-            // 없으면 맨 뒤 번호 부여
-            let nextIndex = (state.wordList.length > 0 ? Math.max(...state.wordList.map(w => w.index || 0)) : 0) + 1;
+            // 다음 단어가 있는지 확인
+            if (prevIdx < sortedList.length - 1) {
+                const nextVal = sortedList[prevIdx + 1].index || (prevVal + 1);
+                // [핵심] 5와 6 사이면 5.5를 부여 (절대 안 겹침)
+                newFirebaseIndex = (prevVal + nextVal) / 2;
+            } else {
+                // 맨 마지막 단어 뒤라면 그냥 +1
+                newFirebaseIndex = prevVal + 1;
+            }
+        } else {
+            // 기준 단어를 못 찾았으면 맨 뒤로
+            newFirebaseIndex = (sortedList.length > 0 ? sortedList[sortedList.length - 1].index : 0) + 1;
+        }
+    } else {
+        // 기준 단어가 없으면(맨 뒤 추가)
+        newFirebaseIndex = (sortedList.length > 0 ? sortedList[sortedList.length - 1].index : 0) + 1;
+    }
+    // ============================================================
+
+    // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
+    if (config.SCRIPT_URL) {
+        const scriptUrl = new URL(config.SCRIPT_URL);
+        scriptUrl.searchParams.append('action', 'create_word');
+        scriptUrl.searchParams.append('word', cardData.word);
+        scriptUrl.searchParams.append('pos', cardData.pos || ""); 
+        scriptUrl.searchParams.append('meaning', cardData.meaning || "");
+        scriptUrl.searchParams.append('explanation', cardData.explanation || "");
+        scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || ""); 
+
+        if (afterWord) {
+            scriptUrl.searchParams.append('after_word', afterWord);
+        }
+
+        fetch(scriptUrl.toString())
+            .then(r => r.json())
+            .then(d => {
+                if (!d.success) console.warn("시트 생성 실패:", d.message);
+            })
+            .catch(e => console.error("시트 통신 에러:", e));
+    }
+
+    // 2. LocalStorage 캐시 업데이트 (로컬에서는 도미노 방식 유지해도 됨)
+    // 하지만 일관성을 위해 로컬 상태도 업데이트
+    try {
+        const cachedData = localStorage.getItem('wordListCache');
+        if (cachedData) {
+            const parsedCache = JSON.parse(cachedData);
+            const words = parsedCache.words || [];
+
+            // 로컬 배열에서의 삽입 위치 찾기
+            let localInsertPos = words.length;
             if (afterWord) {
-                const targetItem = state.wordList.find(w => w.word === afterWord);
-                if (targetItem) nextIndex = (targetItem.index || 0) + 1;
+                const fIndex = words.findIndex(w => w.word === afterWord);
+                if (fIndex !== -1) localInsertPos = fIndex + 1;
             }
 
-            const updates = {};
-            updates[`/vocabulary/${safeKey}`] = {
+            // 새 객체 생성 (Firebase용 인덱스 사용)
+            const newWordObj = {
                 ...cardData,
-                sample: cardData.manual_sample || cardData.sample || "", 
+                sample: cardData.manual_sample || cardData.sample || "",
                 AISample: null,
-                index: nextIndex
+                index: newFirebaseIndex // 계산된 소수점 인덱스 저장
             };
-            update(ref(database), updates).catch(e => console.warn(e));
+
+            // 배열 삽입
+            words.splice(localInsertPos, 0, newWordObj);
+            
+            // 저장
+            parsedCache.words = words;
+            localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            
+            // 앱 상태 즉시 동기화 (화면 갱신용)
+            state.wordList = words;
         }
-    },
+    } catch (e) {
+        console.error("로컬 캐시 업데이트 중 오류:", e);
+    }
+
+    // 3. Firebase 업데이트 (소수점 인덱스로 저장)
+    if (database) {
+        const { ref, update } = window.firebaseSDK;
+        const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
+        
+        const updates = {};
+        updates[`/vocabulary/${safeKey}`] = {
+            ...cardData,
+            sample: cardData.manual_sample || cardData.sample || "", 
+            AISample: null,
+            index: newFirebaseIndex // [5.5] 같은 소수점 값이 저장됨 -> 정렬 보장
+        };
+        update(ref(database), updates).catch(e => console.warn(e));
+    }
+},
 
     async deleteWord(word) {
         if (config.SCRIPT_URL) {
