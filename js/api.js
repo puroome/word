@@ -56,12 +56,9 @@ export const api = {
     },
 
     // ==========================================================================
-    // [수정됨] 무료 TTS (Microsoft Natural Voice 우선 적용)
-    // 1순위: 요청하신 Christopher(US) / Maisie(UK)
-    // 2순위: 그 외 Microsoft 계열
-    // 3순위: Google 및 기타 브라우저 기본 음성
+    // 무료 TTS (Microsoft Natural Voice 우선 적용)
     // ==========================================================================
-speak(text, contentType = 'word') {
+    speak(text, contentType = 'word') {
         return new Promise((resolve) => {
             const myRequestId = ++activeSpeakId;
             if (!text || !text.trim()) return resolve();
@@ -73,39 +70,23 @@ speak(text, contentType = 'word') {
 
             window.speechSynthesis.cancel();
 
-            // [유지] 발음 치환
             const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
-
-            // 발화 객체 생성
             const utterance = new SpeechSynthesisUtterance(processedText);
 
-            // [중요] 목소리 세팅 함수
             const setVoice = () => {
                 if (myRequestId !== activeSpeakId) return;
                 const voices = window.speechSynthesis.getVoices();
                 const isUK = state.currentVoiceSet === 'UK';
-                
-                // 목표: 영국이면 'en-GB', 미국이면 'en-US'
-                // (안드로이드는 en_GB 처럼 언더바를 쓰기도 하므로 정규화 필요)
                 const targetLang = isUK ? 'en-gb' : 'en-us';
-
-                // ==============================================================
-                // [안드로이드 삼성/구글 TTS 맞춤형 목소리 찾기]
-                // 이름(Name)보다 언어코드(Lang) 일치를 최우선으로 봅니다.
-                // ==============================================================
                 
-let selectedVoice = null;
+                let selectedVoice = null;
 
-                // [신규] 0단계: UK일 경우 최우선 순위 'Microsoft Ryan' 찾기
-                // 정확한 이름: "Microsoft Ryan Online (Natural) - English (United Kingdom)"
                 if (isUK) {
                     selectedVoice = voices.find(v => 
                         v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
                     );
                 }
 
-                // 1단계: 아직 못 찾았다면, 언어 코드가 정확히 일치하는 것 찾기 (대소문자/언더바 무시)
-                // (주의: 0단계에서 찾았다면 이 단계는 건너뛰어야 하므로 if (!selectedVoice) 추가)
                 if (!selectedVoice) {
                     selectedVoice = voices.find(v => {
                         const vLang = v.lang.replace('_', '-').toLowerCase();
@@ -113,7 +94,6 @@ let selectedVoice = null;
                     });
                 }
 
-                // 2단계: 만약 못 찾았다면, 해당 국가 코드를 포함하는 것 찾기
                 if (!selectedVoice) {
                     selectedVoice = voices.find(v => {
                         const vLang = v.lang.replace('_', '-').toLowerCase();
@@ -121,23 +101,16 @@ let selectedVoice = null;
                     });
                 }
 
-                // 3단계: 그래도 없다면 PC용 Microsoft Natural Voice 시도 (PC 환경 대비)
                 if (!selectedVoice) {
                     const naturalName = isUK ? "United Kingdom" : "United States";
                     selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
                 }
-
-                // ==============================================================
                  
-                // 목소리 적용
                 if (selectedVoice) {
                     utterance.voice = selectedVoice;
                     utterance.lang = selectedVoice.lang;
-                    // console.log(`[TTS] 적용된 목소리: ${selectedVoice.name} (${selectedVoice.lang})`);
                 } else {
-                    // 목소리 객체를 못 찾아도 언어 코드는 강제로 박아넣음
                     utterance.lang = isUK ? 'en-GB' : 'en-US';
-                    // console.log(`[TTS] 목소리 못 찾음. 언어 코드만 적용: ${utterance.lang}`);
                 }
 
                 utterance.rate = (contentType === 'word') ? 1.0 : 0.9;
@@ -158,11 +131,9 @@ let selectedVoice = null;
                 window.speechSynthesis.speak(utterance);
             };
 
-// [안드로이드 필수] voices가 비어있으면 로드될 때까지 대기
             if (window.speechSynthesis.getVoices().length === 0) {
-                // [수정됨] 이벤트가 한 번 발생하면 즉시 리스너를 제거하여 중복 실행(3번 반복) 및 섞임 방지
                 const voiceChangedHandler = () => {
-                    window.speechSynthesis.onvoiceschanged = null; // 중요: 리스너 연결 해제
+                    window.speechSynthesis.onvoiceschanged = null;
                     setVoice();
                 };
                 window.speechSynthesis.onvoiceschanged = voiceChangedHandler;
@@ -172,14 +143,10 @@ let selectedVoice = null;
         });
     },
 
-// api.js 파일 내의 translate 함수 교체
-
     async translate(text) {
         if (!text) return "";
 
-        // 1. 캐시 확인 (기존 로직 유지)
         try {
-            // 캐시 객체가 있는지 확인 후 가져오기
             if (typeof translationCache !== 'undefined') {
                 const cached = await translationCache.get(text);
                 if (cached) return cached;
@@ -188,9 +155,7 @@ let selectedVoice = null;
             console.warn("Cache check failed:", e); 
         }
 
-        // 2. GAS(Google Apps Script) 무료 번역 호출
         try {
-            // config.js에 있는 SCRIPT_URL을 가져옵니다.
             const scriptBaseUrl = config.SCRIPT_URL;
             
             if (!scriptBaseUrl) {
@@ -198,8 +163,6 @@ let selectedVoice = null;
                 return "설정 오류: 서버 주소 없음";
             }
 
-            // URL 생성 (action=translate)
-            // 주의: 보내주신 GAS 코드에 맞춰 action 이름을 'translate'로 설정했습니다.
             const url = new URL(scriptBaseUrl);
             url.searchParams.append('action', 'translate');
             url.searchParams.append('text', text);
@@ -212,11 +175,8 @@ let selectedVoice = null;
 
             const data = await response.json();
 
-            // 3. 결과 처리
             if (data.success) {
                 const translatedText = data.translatedText;
-
-                // 캐시에 저장
                 try {
                     if (typeof translationCache !== 'undefined' && translatedText) {
                         translationCache.save(text, translatedText);
@@ -235,7 +195,7 @@ let selectedVoice = null;
     },
     
     // ==========================================================================
-    // [아래부터는 원본 코드 100% 동일 유지]
+    // 기존 로직 유지
     // ==========================================================================
 
      async updateWordStatus(word, quizType, result) {
@@ -367,13 +327,21 @@ let selectedVoice = null;
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
+    // ==========================================================================
+    // [보안 패치] 1. AI 예문 생성 (GAS 경유 방식으로 완전 수정)
+    // ==========================================================================
     async generateAIExamples(wordData, currentMeaning, count = 2) {
         const word = wordData.word;
         if (!word) return [];
 
+        console.log(`🚀 AI 예문 생성 요청 (GAS 경유): ${word}`);
+
         try {
             const scriptBaseUrl = config.SCRIPT_URL;
-            if (!scriptBaseUrl) return [];
+            if (!scriptBaseUrl) {
+                console.error("Config Error: SCRIPT_URL is missing.");
+                return [];
+            }
 
             const url = new URL(scriptBaseUrl);
             url.searchParams.append('action', 'generate_ai_examples');
@@ -381,32 +349,52 @@ let selectedVoice = null;
             url.searchParams.append('count', count);
 
             const response = await fetch(url.toString());
-            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+
             const data = await response.json();
 
-            return data.success ? data.results : [];
+            if (data.success) {
+                console.log("✅ 예문 생성 완료 (GAS 응답):", data.results);
+                return data.results;
+            } else {
+                console.warn("AI 응답 형식 오류(GAS 측):", data.message);
+                return [];
+            }
         } catch (error) {
             console.error("AI 예문 생성 실패:", error);
             return [];
         }
     },
     
+    // ==========================================================================
+    // [보안 패치] 2. 단어 정보 가져오기 (GAS 경유 방식으로 완전 수정)
+    // ==========================================================================
     async fetchWordInfoFromAI(word) {
         try {
             const scriptBaseUrl = config.SCRIPT_URL;
-            if (!scriptBaseUrl) throw new Error("Config Error: SCRIPT_URL is missing.");
+            if (!scriptBaseUrl) {
+                throw new Error("Config Error: SCRIPT_URL is missing.");
+            }
 
             const url = new URL(scriptBaseUrl);
             url.searchParams.append('action', 'fetch_word_info_from_ai');
             url.searchParams.append('word', word);
 
             const response = await fetch(url.toString());
-            if (!response.ok) throw new Error(`API Error (${response.status})`);
+            
+            if (!response.ok) {
+                throw new Error(`API Error (${response.status})`);
+            }
 
             const data = await response.json();
             
             if (data.success) {
                 const cleanJson = data.result;
+                
+                // 배열로 들어온 뜻(meaning)을 줄바꿈 문자(\n)로 합쳐서 문자열로 변환
                 if (Array.isArray(cleanJson.meaning)) {
                     cleanJson.meaning = cleanJson.meaning.join('\n');
                 }
@@ -414,6 +402,7 @@ let selectedVoice = null;
             } else {
                 throw new Error(data.message || "AI 정보 가져오기 실패");
             }
+
         } catch (error) {
             console.error("AI 단어 정보 가져오기 실패:", error);
             throw error;
@@ -466,9 +455,7 @@ let selectedVoice = null;
         }
     },
 
-    // [수정] 단어 정보 수정 (Source 개념 제거, sample로 통일)
     async updateWordDetails(originalWord, updateData) {
-        // 1. Google Sheets 저장 (백엔드)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'update_word_data');
@@ -479,8 +466,6 @@ let selectedVoice = null;
             if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
             if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
             
-            // [핵심 Fix] sample 또는 manual_sample 키가 들어오면 manual_sample 파라미터로 전송
-            // learning.js에서 manual_sample로 보내는 경우를 대비하여 OR 연산(||) 추가
             if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
                 scriptUrl.searchParams.append('manual_sample', updateData.manual_sample || updateData.sample);
             }
@@ -494,7 +479,6 @@ let selectedVoice = null;
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 로컬 메모리 & 캐시 업데이트 (프론트엔드)
         const updateLocalList = (list) => {
              const targetIndex = list.findIndex(w => w.word === originalWord);
              if (targetIndex !== -1) {
@@ -505,7 +489,6 @@ let selectedVoice = null;
                 if (updateData.meaning !== undefined) targetWord.meaning = updateData.meaning;
                 if (updateData.explanation !== undefined) targetWord.explanation = updateData.explanation;
                 
-                // [핵심 Fix] Sample 수정 (manual_sample도 반영)
                 if (updateData.sample !== undefined) targetWord.sample = updateData.sample;
                 if (updateData.manual_sample !== undefined) targetWord.sample = updateData.manual_sample;
              }
@@ -524,38 +507,27 @@ let selectedVoice = null;
             console.error("캐시 업데이트 오류:", e);
         }
         
-        // 3. Firebase 업데이트 (혹시 모를 동기화 누락 방지)
         if (typeof database !== 'undefined' && database) {
             const { ref, update } = window.firebaseSDK;
             const safeKey = originalWord.replace(/[.#$[\]/]/g, '_');
-            // updateData를 그대로 활용하되 manual_sample을 sample로 매핑
             const firebaseUpdates = { ...updateData };
             if (firebaseUpdates.manual_sample) {
                 firebaseUpdates.sample = firebaseUpdates.manual_sample;
                 delete firebaseUpdates.manual_sample;
             }
-            // word 키가 바뀌는 경우는 복잡하므로 여기서는 필드 업데이트만 수행
             if (!updateData.word || updateData.word === originalWord) {
                  update(ref(database, `/vocabulary/${safeKey}`), firebaseUpdates).catch(e => console.warn(e));
             }
         }
     },
 
-    // [수정 1] 새 단어 생성 (캐시 도미노 업데이트 적용 완료)
-    // [수정] 새 단어 생성 (소수점 인덱싱 적용: 100% 위치 보장)
 async createWord(cardData, afterWord = null) {
-    
-    // POS가 없으면 자동으로 'n/a' 설정
     if (!cardData.pos || !cardData.pos.trim()) {
         cardData.pos = "n/a";
     }
 
-    // ============================================================
-    // [핵심 수정] 소수점 인덱스 계산 (사이값 찾기)
-    // ============================================================
     let newFirebaseIndex = 0;
     
-    // 정확한 계산을 위해 현재 리스트를 순서대로 정렬
     const sortedList = [...state.wordList].sort((a, b) => (a.index || 0) - (b.index || 0));
 
     if (afterWord) {
@@ -564,26 +536,19 @@ async createWord(cardData, afterWord = null) {
         if (prevIdx !== -1) {
             const prevVal = sortedList[prevIdx].index || 0;
             
-            // 다음 단어가 있는지 확인
             if (prevIdx < sortedList.length - 1) {
                 const nextVal = sortedList[prevIdx + 1].index || (prevVal + 1);
-                // [핵심] 5와 6 사이면 5.5를 부여 (절대 안 겹침)
                 newFirebaseIndex = (prevVal + nextVal) / 2;
             } else {
-                // 맨 마지막 단어 뒤라면 그냥 +1
                 newFirebaseIndex = prevVal + 1;
             }
         } else {
-            // 기준 단어를 못 찾았으면 맨 뒤로
             newFirebaseIndex = (sortedList.length > 0 ? sortedList[sortedList.length - 1].index : 0) + 1;
         }
     } else {
-        // 기준 단어가 없으면(맨 뒤 추가)
         newFirebaseIndex = (sortedList.length > 0 ? sortedList[sortedList.length - 1].index : 0) + 1;
     }
-    // ============================================================
 
-    // 1. 서버로 보낼 URL 파라미터 구성 (Google Sheet)
     if (config.SCRIPT_URL) {
         const scriptUrl = new URL(config.SCRIPT_URL);
         scriptUrl.searchParams.append('action', 'create_word');
@@ -605,44 +570,36 @@ async createWord(cardData, afterWord = null) {
             .catch(e => console.error("시트 통신 에러:", e));
     }
 
-    // 2. LocalStorage 캐시 업데이트 (로컬에서는 도미노 방식 유지해도 됨)
-    // 하지만 일관성을 위해 로컬 상태도 업데이트
     try {
         const cachedData = localStorage.getItem('wordListCache');
         if (cachedData) {
             const parsedCache = JSON.parse(cachedData);
             const words = parsedCache.words || [];
 
-            // 로컬 배열에서의 삽입 위치 찾기
             let localInsertPos = words.length;
             if (afterWord) {
                 const fIndex = words.findIndex(w => w.word === afterWord);
                 if (fIndex !== -1) localInsertPos = fIndex + 1;
             }
 
-            // 새 객체 생성 (Firebase용 인덱스 사용)
             const newWordObj = {
                 ...cardData,
                 sample: cardData.manual_sample || cardData.sample || "",
                 AISample: null,
-                index: newFirebaseIndex // 계산된 소수점 인덱스 저장
+                index: newFirebaseIndex 
             };
 
-            // 배열 삽입
             words.splice(localInsertPos, 0, newWordObj);
             
-            // 저장
             parsedCache.words = words;
             localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
             
-            // 앱 상태 즉시 동기화 (화면 갱신용)
             state.wordList = words;
         }
     } catch (e) {
         console.error("로컬 캐시 업데이트 중 오류:", e);
     }
 
-    // 3. Firebase 업데이트 (소수점 인덱스로 저장)
     if (database) {
         const { ref, update } = window.firebaseSDK;
         const safeKey = cardData.word.replace(/[.#$[\]/]/g, '_');
@@ -652,14 +609,13 @@ async createWord(cardData, afterWord = null) {
             ...cardData,
             sample: cardData.manual_sample || cardData.sample || "", 
             AISample: null,
-            index: newFirebaseIndex // [5.5] 같은 소수점 값이 저장됨 -> 정렬 보장
+            index: newFirebaseIndex 
         };
         update(ref(database), updates).catch(e => console.warn(e));
     }
 },
 
     async deleteWord(word) {
-        // 1. Google Sheets 삭제 요청 (백엔드)
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'delete_word');
@@ -674,10 +630,8 @@ async createWord(cardData, afterWord = null) {
                 .catch(e => console.error("시트 통신 에러:", e));
         }
 
-        // 2. 로컬 메모리(State)에서 즉시 삭제 (UI 반영용)
         state.wordList = state.wordList.filter(w => w.word !== word);
 
-        // 3. 로컬 캐시(LocalStorage) 삭제
         try {
             const cachedData = localStorage.getItem('wordListCache');
             if (cachedData) {
@@ -687,14 +641,10 @@ async createWord(cardData, afterWord = null) {
             }
         } catch (e) {}
 
-        // ============================================================
-        // [누락된 코드 추가] Firebase에서도 즉시 삭제해야 다시 안 살아남
-        // ============================================================
         if (database) {
             const { ref, remove } = window.firebaseSDK;
             const safeKey = word.replace(/[.#$[\]/]/g, '_');
             
-            // Firebase의 해당 단어 경로를 찾아서 제거
             remove(ref(database, `/vocabulary/${safeKey}`))
                 .then(() => console.log("✅ Firebase 삭제 성공"))
                 .catch(e => console.warn("Firebase 삭제 실패:", e));
