@@ -422,7 +422,7 @@ async generateAIExamples(wordData, currentMeaning, count = 2) {
     async fetchWordInfoFromAI(word) {
         
         // 품질을 위해 2.5-flash 모델 유지
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
         const prompt = `
             Act as a linguistics expert for US high school students.
