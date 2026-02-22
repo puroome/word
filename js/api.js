@@ -4,7 +4,6 @@ import { translationCache, utils } from './utils.js';
 let db = null; // Firestore
 let database = null; // Realtime DB
 let activeSpeakId = 0;
-const GEMINI_API_KEY = "AIzaSyAdXvE2SkyEbPmU" + "XtLUeVi7f-niGpXUu_0";
 
 export const api = {
     
@@ -368,125 +367,53 @@ let selectedVoice = null;
          try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
      },
 
-// 1. AI 예문 생성 (GAS 안 거치고 바로 Gemini 호출)
-// --------------------------------------------------------------------------
-async generateAIExamples(wordData, currentMeaning, count = 2) {
-    const word = wordData.word;
-    if (!word) return [];
-
-    console.log(`🚀 AI 예문 생성 요청 (Direct Gemini): ${word}`);
-
-    // 모델명: gemini-1.5-flash (빠르고 저렴함)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-    const prompt = `
-        Word: "${word}"
-        Task: Write ${count} simple sentences suitable for children using this word.
-        Format: Return ONLY a JSON array of strings. Example: ["Sentence 1.", "Sentence 2."]
-        No markdown, no explanations.
-    `;
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-
-        const data = await response.json();
-
-        // 응답 데이터 검증
-        if (!data.candidates || !data.candidates[0].content) {
-            console.warn("AI 응답 형식 오류:", data);
-            return [];
-        }
-
-        const text = data.candidates[0].content.parts[0].text;
-        
-        // 마크다운 제거 및 JSON 파싱
-        const cleanJson = JSON.parse(text.replace(/```json|```/g, '').trim());
-
-        // 배열인지 확인 후 반환
-        const results = Array.isArray(cleanJson) ? cleanJson : [cleanJson];
-        console.log("✅ 예문 생성 완료:", results);
-        
-        return results;
-
-    } catch (error) {
-        console.error("AI 예문 생성 실패:", error);
-        return [];
-    }
-},
-    
-// [Gemini 2.5 Flash] 타동사 조사 포함, 뜻 번호 매기기 + [줄바꿈 해결]
-    async fetchWordInfoFromAI(word) {
-        
-        // 품질을 위해 2.5-flash 모델 유지
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-        const prompt = `
-            Act as a linguistics expert for US high school students.
-            Analyze the English word: "${word}"
-
-            Output pure JSON with three fields:
-            
-            1. "meaning": 
-               - Return an ARRAY of strings.
-               - FORMATTING RULES:
-                 1. If there are multiple meanings, number them clearly (e.g., "1. ...", "2. ...").
-                 2. **DO NOT** use part-of-speech tags like (vt), (vi), (n), (adj).
-                 3. Instead, use the Korean particle to imply the verb type:
-                    * Transitive (Vt): MUST start with "~(Object)Particle" (e.g., "1. ~을 관찰하다", "2. ~(법)을 준수하다").
-                    * Intransitive (Vi): Do not use a particle (e.g., "1. 살아남다").
-                    * If a word is both Vi and Vt (like 'survive'), list BOTH separately:
-                      (e.g., "1. 살아남다", "2. ~에서 살아남다").
-                 4. Mark (slang) or (informal) if applicable.
-
-            2. "explanation": 
-               - Generate a structured text with these KOREAN headers: [동의어], [반의어], [파생어], [용례], [심화].
-               - FORMAT RULES:
-                 Rule 1 [동의어/반의어]: Group by specific meanings. 
-                        Format: "word1, word2, ... : [Korean Definition]"
-                        Max 7 words per group.
-                        * Ensure the Korean definition follows the 'meaning' formatting rules (particles included, no POS tags).
-                 Rule 2 [용례]: Focus on Collocations or Idioms. Format: "Expression : Korean Meaning".
-                 Rule 3 [심화]: List high-frequency words sharing the SAME ETYMOLOGICAL ROOT. 
-                        Format: "Word : Korean Meaning".
-                        Example: "preserve : ~을 보존하다"
-                 Rule 4: Insert an empty line between categories. If a category is empty, omit it.
-            
-            3. "samples": An array of English example sentences.
-               - QUANTITY LOGIC:
-                 Case A: Single meaning -> 1 sentence.
-                 Case B: Distinct meanings -> 1 sentence per meaning (Max 5).
-               - No translations.
-
-            Do not include Markdown code blocks. Just the JSON string.
-        `;
+    async generateAIExamples(wordData, currentMeaning, count = 2) {
+        const word = wordData.word;
+        if (!word) return [];
 
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
+            const scriptBaseUrl = config.SCRIPT_URL;
+            if (!scriptBaseUrl) return [];
 
+            const url = new URL(scriptBaseUrl);
+            url.searchParams.append('action', 'generate_ai_examples');
+            url.searchParams.append('word', word);
+            url.searchParams.append('count', count);
+
+            const response = await fetch(url.toString());
+            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+            const data = await response.json();
+
+            return data.success ? data.results : [];
+        } catch (error) {
+            console.error("AI 예문 생성 실패:", error);
+            return [];
+        }
+    },
+    
+    async fetchWordInfoFromAI(word) {
+        try {
+            const scriptBaseUrl = config.SCRIPT_URL;
+            if (!scriptBaseUrl) throw new Error("Config Error: SCRIPT_URL is missing.");
+
+            const url = new URL(scriptBaseUrl);
+            url.searchParams.append('action', 'fetch_word_info_from_ai');
+            url.searchParams.append('word', word);
+
+            const response = await fetch(url.toString());
             if (!response.ok) throw new Error(`API Error (${response.status})`);
 
             const data = await response.json();
-            const textResponse = data.candidates[0].content.parts[0].text;
             
-            // JSON 파싱
-            const cleanJson = JSON.parse(textResponse.replace(/```json|```/g, '').trim());
-
-            // [핵심 수정] 배열로 들어온 뜻(meaning)을 줄바꿈 문자(\n)로 합쳐서 문자열로 변환
-            // 이렇게 해야 화면에서 1번, 2번이 아래로 떨어져서 보입니다.
-            if (Array.isArray(cleanJson.meaning)) {
-                cleanJson.meaning = cleanJson.meaning.join('\n');
+            if (data.success) {
+                const cleanJson = data.result;
+                if (Array.isArray(cleanJson.meaning)) {
+                    cleanJson.meaning = cleanJson.meaning.join('\n');
+                }
+                return cleanJson;
+            } else {
+                throw new Error(data.message || "AI 정보 가져오기 실패");
             }
-
-            return cleanJson;
-
         } catch (error) {
             console.error("AI 단어 정보 가져오기 실패:", error);
             throw error;
