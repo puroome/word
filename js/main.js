@@ -1,133 +1,93 @@
 import { config, state } from './config.js';
-import { utils, translationCache } from './utils.js';
+import { utils, translationCache, imageDBCache, audioCache } from './utils.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
 import { learningMode } from './learning.js';
 import { quizMode } from './quiz.js';
 import { dashboard } from './dashboard.js';
 
-const imageDBCache = {
-  db: null,
-  dbName: 'imageCacheDB',
-  storeName: 'imageStore',
-  init() {
-    return new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) { console.warn('IndexedDB for images not supported.'); return resolve(); }
-      const request = indexedDB.open(this.dbName, 1);
-      request.onupgradeneeded = e => e.target.result.createObjectStore(this.storeName);
-      request.onsuccess = e => { this.db = e.target.result; resolve(); };
-      request.onerror = e => reject(e.target.error);
-    });
-  },
-  async loadImage(url) {
-    if (!this.db || !url) return url;
-    const cachedBlob = await this.getImage(url);
-    if (cachedBlob) return URL.createObjectURL(cachedBlob);
-    try {
-      const response = await fetch(url);
-      if (!response.ok) return url;
-      const blob = await response.blob();
-      this.saveImage(url, blob);
-      return URL.createObjectURL(blob);
-    } catch(e) { return url; }
-  },
-  getImage(key) {
-    return new Promise(resolve => {
-      if (!imageDBCache.db) return resolve(null);
-      const request = imageDBCache.db.transaction(imageDBCache.storeName).objectStore(imageDBCache.storeName).get(key);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
-    });
-  },
-  saveImage(key, blob) {
-    if (!imageDBCache.db) return;
-    try {
-      imageDBCache.db.transaction(imageDBCache.storeName, 'readwrite').objectStore(imageDBCache.storeName).put(blob, key);
-    } catch(e) { console.error('Failed to save image to IndexedDB', e); }
-  }
-};
-
-window.imageDBCache = imageDBCache;
+// #18 fix: 모듈 레벨 상수
+const INACTIVITY_LIMIT = 30_000;
 
 const studyTracker = {
   sessionSeconds: 0,
   lastActivityTimestamp: 0,
   timerInterval: null,
   saveInterval: null,
-  INACTIVITY_LIMIT: 30000,
+
   start() {
     if (this.timerInterval) return;
     this.lastActivityTimestamp = Date.now();
     this.sessionSeconds = 0;
     this.timerInterval = setInterval(() => {
       if (document.hidden) return;
-      const now = Date.now();
-      if (now - this.lastActivityTimestamp < this.INACTIVITY_LIMIT) this.sessionSeconds += 1;
+      if (Date.now() - this.lastActivityTimestamp < INACTIVITY_LIMIT) { // #18 fix
+        this.sessionSeconds++;
+      }
     }, 1000);
     this.saveInterval = setInterval(() => {
       if (this.sessionSeconds > 0) {
         try {
-          const currentLocalTime = parseInt(localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME) || '0', 10);
-          localStorage.setItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME, currentLocalTime + this.sessionSeconds);
+          const current = parseInt(localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME) || '0', 10);
+          localStorage.setItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME, current + this.sessionSeconds);
           this.sessionSeconds = 0;
         } catch(e) { console.error(e); }
       }
     }, 10000);
-    ['click', 'keydown', 'touchstart'].forEach(event => {
-      document.body.addEventListener(event, this.recordActivity, true);
-    });
+    ['click', 'keydown', 'touchstart'].forEach(ev =>
+      document.body.addEventListener(ev, this.recordActivity, true)
+    );
   },
+
   stopAndSave() {
     if (!this.timerInterval) return;
     clearInterval(this.timerInterval);
     clearInterval(this.saveInterval);
     this.timerInterval = null;
-    this.saveInterval = null;
+    this.saveInterval  = null;
     try {
       if (this.sessionSeconds > 0) {
-        const currentLocalTime = parseInt(localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME) || '0', 10);
-        localStorage.setItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME, currentLocalTime + this.sessionSeconds);
+        const current = parseInt(localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME) || '0', 10);
+        localStorage.setItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME, current + this.sessionSeconds);
       }
     } catch(e) { console.error(e); }
     this.sessionSeconds = 0;
-    ['click', 'keydown', 'touchstart'].forEach(event => {
-      document.body.removeEventListener(event, this.recordActivity, true);
-    });
+    ['click', 'keydown', 'touchstart'].forEach(ev =>
+      document.body.removeEventListener(ev, this.recordActivity, true)
+    );
   },
+
   recordActivity() {
     studyTracker.lastActivityTimestamp = Date.now();
-  }
+  },
 };
 
 const app = {
-  _toastTimeout: null,
-  imeWarningTimeout: null,
-
   elements: {
-    loginScreen: document.getElementById('login-screen'),
-    googleLoginBtn: document.getElementById('google-login-btn'),
-    loginError: document.getElementById('login-error'),
-    logoutBtn: document.getElementById('logout-btn'),
-    appWrapper: document.getElementById('app-wrapper'),
-    selectionScreen: document.getElementById('selection-screen'),
-    homeBtn: document.getElementById('home-btn'),
-    refreshBtn: document.getElementById('refresh-btn'),
-    ttsToggleBtn: document.getElementById('tts-toggle-btn'),
-    ttsToggleText: document.getElementById('tts-toggle-text'),
-    quizModeContainer: document.getElementById('quiz-mode-container'),
-    learningModeContainer: document.getElementById('learning-mode-container'),
-    dashboardContainer: document.getElementById('dashboard-container'),
-    imeWarning: document.getElementById('ime-warning'),
-    globalLoader: document.getElementById('global-loader'),
-    wordContextMenu: document.getElementById('word-context-menu'),
-    selectLearningBtn: document.getElementById('select-learning-btn'),
-    selectQuizBtn: document.getElementById('select-quiz-btn'),
-    selectDashboardBtn: document.getElementById('select-dashboard-btn'),
-    selectMistakesBtn: document.getElementById('select-mistakes-btn'),
-    selectFavoritesBtn: document.getElementById('select-favorites-btn'),
+    loginScreen:          document.getElementById('login-screen'),
+    googleLoginBtn:       document.getElementById('google-login-btn'),
+    loginError:           document.getElementById('login-error'),
+    logoutBtn:            document.getElementById('logout-btn'),
+    appWrapper:           document.getElementById('app-wrapper'),
+    selectionScreen:      document.getElementById('selection-screen'),
+    homeBtn:              document.getElementById('home-btn'),
+    refreshBtn:           document.getElementById('refresh-btn'),
+    ttsToggleBtn:         document.getElementById('tts-toggle-btn'),
+    ttsToggleText:        document.getElementById('tts-toggle-text'),
+    quizModeContainer:    document.getElementById('quiz-mode-container'),
+    learningModeContainer:document.getElementById('learning-mode-container'),
+    dashboardContainer:   document.getElementById('dashboard-container'),
+    imeWarning:           document.getElementById('ime-warning'),
+    globalLoader:         document.getElementById('global-loader'),
+    wordContextMenu:      document.getElementById('word-context-menu'),
+    selectLearningBtn:    document.getElementById('select-learning-btn'),
+    selectQuizBtn:        document.getElementById('select-quiz-btn'),
+    selectDashboardBtn:   document.getElementById('select-dashboard-btn'),
+    selectMistakesBtn:    document.getElementById('select-mistakes-btn'),
+    selectFavoritesBtn:   document.getElementById('select-favorites-btn'),
     progressBarContainer: document.getElementById('progress-bar-container'),
-    lastUpdatedText: document.getElementById('last-updated-text'),
-    practiceModeControl: document.getElementById('practice-mode-control'),
+    lastUpdatedText:      document.getElementById('last-updated-text'),
+    practiceModeControl:  document.getElementById('practice-mode-control'),
     practiceModeCheckbox: document.getElementById('practice-mode-checkbox'),
   },
 
@@ -135,36 +95,29 @@ const app = {
     const startFirebaseApp = () => {
       const {
         initializeApp, getDatabase, getAuth, getFirestore,
-        onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup
+        onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
       } = window.firebaseSDK;
-      const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
-      const database = getDatabase(firebaseApp);
-      const auth = getAuth(firebaseApp);
-      const db = getFirestore(firebaseApp);
+      const firebaseApp = initializeApp(config.FIREBASECONFIG);
+      const database    = getDatabase(firebaseApp);
+      const auth        = getAuth(firebaseApp);
+      const db          = getFirestore(firebaseApp);
       api.init(db, database);
 
-      onAuthStateChanged(auth, async (user) => {
-        if (user && user.email === config.ALLOWED_USER_EMAIL) {
+      onAuthStateChanged(auth, async user => {
+        if (user && user.email === config.ALLOWEDUSEREMAIL) {
           state.userId = user.uid;
-          if (!state.isAppStarted) {
-            const { doc, setDoc } = window.firebaseSDK;
-            const userRef = doc(db, 'users', user.uid);
-            await setDoc(userRef, { displayName: user.displayName, email: user.email }, { merge: true });
-          }
+          const { doc, setDoc } = window.firebaseSDK;
+          await setDoc(doc(db, 'users', user.uid),
+            { displayName: user.displayName, email: user.email }, { merge: true });
           this.elements.loginScreen.classList.add('hidden');
           this.elements.appWrapper.classList.remove('hidden');
           if (!state.isAppStarted) await this.startApp();
         } else {
           this.elements.loginScreen.classList.remove('hidden');
           this.elements.appWrapper.classList.add('hidden');
-          if (user) {
-            signOut(auth);
-            this.elements.loginError.textContent = '허가되지 않은 계정입니다.';
-            setTimeout(() => { this.elements.loginError.textContent = ''; }, 3000);
-          }
+          if (user) signOut(auth);
         }
       });
-
       this.bindGlobalEvents(auth, signInWithPopup, GoogleAuthProvider, signOut);
     };
 
@@ -174,39 +127,50 @@ const app = {
 
   async startApp() {
     state.isAppStarted = true;
+
+    // 설정 복원
     try {
       const savedVoice = localStorage.getItem(state.LOCALSTORAGEKEYS.TTSVOICE);
       if (savedVoice) {
         state.currentVoiceSet = savedVoice;
         this.elements.ttsToggleText.textContent = savedVoice;
-        this.elements.ttsToggleBtn.classList.toggle('bg-indigo-700', savedVoice === 'UK');
-        this.elements.ttsToggleBtn.classList.toggle('hover:bg-indigo-800', savedVoice === 'UK');
-        this.elements.ttsToggleBtn.classList.toggle('bg-red-500', savedVoice === 'US');
-        this.elements.ttsToggleBtn.classList.toggle('hover:bg-red-600', savedVoice === 'US');
+        this._setTtsButtonStyle(savedVoice); // #21 fix
       }
-      const savedPracticeMode = localStorage.getItem(state.LOCALSTORAGEKEYS.PRACTICEMODE);
-      if (savedPracticeMode === 'true') {
+      const savedPractice = localStorage.getItem(state.LOCALSTORAGEKEYS.PRACTICEMODE);
+      if (savedPractice === 'true') {
         quizMode.state.isPracticeMode = true;
         this.elements.practiceModeCheckbox.checked = true;
       }
-    } catch(e) { console.error('설정 로딩 오류:', e); }
+    } catch(e) { console.error(e); }
 
+    // #10 fix: utils.js 캐시 객체를 window에 바인딩
+    window.imageDBCache = imageDBCache;
+    window.audioCache   = audioCache;
     try {
-      await Promise.all([translationCache.init(), imageDBCache.init()]);
+      await Promise.all([
+        translationCache.init(),
+        imageDBCache.init(),
+        audioCache.init(),
+      ]);
     } catch(e) { console.error('캐시 초기화 실패:', e); }
 
     await this.syncOfflineData();
 
+    // #15 fix: 단어 목록 로드 실패 시 명시적 처리 (앱은 계속 실행)
     try {
-      await Promise.all([api.loadWordList(), api.loadUserProgress()]);
+      await api.loadWordList();
+      await api.loadUserProgress();
       this.updateLastUpdatedText();
-    } catch(e) { return; }
+    } catch(e) {
+      console.error('단어 목록 로드 실패:', e);
+      this.showToast('단어 목록을 불러오지 못했습니다. 새로고침 해주세요.', true);
+    }
 
     quizMode.init();
     learningMode.init();
     dashboard.init();
     quizMode.preloadAllQuizTypesBasedOnSavedRange();
-    this.loadInitialImages();
+    await this.loadInitialImages();
 
     const initialMode = window.location.hash.replace('#', '') || 'selection';
     history.replaceState({ mode: initialMode, options: {} }, '', window.location.href);
@@ -220,88 +184,88 @@ const app = {
       try {
         await signInWithPopup(auth, provider);
       } catch(error) {
-        if (error.code !== 'auth/popup-closed-by-user') {
-          this.elements.loginError.textContent = 'Google 로그인에 실패했습니다.';
-        }
+        this.elements.loginError.textContent =
+          error.code === 'auth/popup-closed-by-user'
+            ? '로그인이 취소되었습니다.'
+            : 'Google 로그인에 실패했습니다.';
       }
     });
     this.elements.logoutBtn.addEventListener('click', () => signOut(auth));
 
-    const unlockAudioContext = async () => {
+    // AudioContext 잠금 해제
+    const unlockAudio = async () => {
       if (!state.audioContext) {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        state.audioContext = new AudioContext();
+        const AC = window.AudioContext || window.webkitAudioContext;
+        state.audioContext = new AC();
       }
       if (state.audioContext.state === 'suspended') {
-        try { await state.audioContext.resume(); } catch(e) { console.error('Audio unlock failed', e); }
+        try { await state.audioContext.resume(); } catch(e) {}
       }
-      ['click', 'touchstart', 'keydown'].forEach(event => {
-        document.body.removeEventListener(event, unlockAudioContext, { capture: true });
-      });
     };
-    ['click', 'touchstart', 'keydown'].forEach(event => {
-      document.body.addEventListener(event, unlockAudioContext, { capture: true, once: true });
-    });
+    ['click', 'touchstart', 'keydown'].forEach(ev =>
+      document.body.addEventListener(ev, unlockAudio, { capture: true, once: true })
+    );
 
-    this.elements.selectQuizBtn.addEventListener('click', () => this.navigateTo('quiz'));
+    this.elements.selectQuizBtn.addEventListener('click',     () => this.navigateTo('quiz'));
     this.elements.selectLearningBtn.addEventListener('click', () => this.navigateTo('learning'));
-    this.elements.selectDashboardBtn.addEventListener('click', () => this.navigateTo('dashboard'));
-    this.elements.selectFavoritesBtn.addEventListener('click', () => this.navigateTo('favorites'));
+    this.elements.selectDashboardBtn.addEventListener('click',() => this.navigateTo('dashboard'));
+    this.elements.selectFavoritesBtn.addEventListener('click',() => this.navigateTo('favorites'));
     this.elements.selectMistakesBtn.addEventListener('click', async () => {
-      const allWords = state.wordList;
-      const mistakeWords = allWords
-        .filter(wordObj => utils.getWordStatus(wordObj.word) === 'review')
-        .map(wordObj => wordObj.word);
-      if (mistakeWords.length === 0) { this.showToast('오답 단어가 없습니다.', true); return; }
+      const mistakeWords = state.wordList
+        .filter(w => utils.getWordStatus(w.word) === 'review')
+        .map(w => w.word);
+      if (mistakeWords.length === 0) { this.showToast('복습할 단어가 없습니다.', true); return; }
       this.navigateTo('mistakeReview', { mistakeWords });
     });
-    this.elements.homeBtn.addEventListener('click', () => this.navigateTo('selection'));
+    this.elements.homeBtn.addEventListener('click',    () => this.navigateTo('selection'));
     this.elements.refreshBtn.addEventListener('click', () => this.forceReload());
     this.elements.ttsToggleBtn.addEventListener('click', () => this.toggleVoiceSet());
     this.elements.practiceModeCheckbox.addEventListener('change', e => {
       quizMode.state.isPracticeMode = e.target.checked;
-      try {
-        localStorage.setItem(state.LOCALSTORAGEKEYS.PRACTICEMODE, quizMode.state.isPracticeMode);
-      } catch(err) { console.error(err); }
-      if (history.state?.mode === 'quiz-play') { quizMode.reset(false); quizMode.displayNextQuiz(); }
+      try { localStorage.setItem(state.LOCALSTORAGEKEYS.PRACTICEMODE, e.target.checked); }
+      catch(err) { console.error(err); }
+      if (history.state?.mode === 'quiz-play') {
+        quizMode.reset(false);
+        quizMode.displayNextQuiz();
+      }
     });
 
     document.addEventListener('click', e => {
-      if (this.elements.wordContextMenu && !this.elements.wordContextMenu.contains(e.target)) {
+      if (this.elements.wordContextMenu && !this.elements.wordContextMenu.contains(e.target))
         ui.hideWordContextMenu();
-      }
     });
 
     window.addEventListener('popstate', e => {
       this.syncOfflineData();
-      const mode = e.state?.mode || 'selection';
-      const options = e.state?.options;
-      this.renderMode(mode, options);
+      this.renderMode(e.state?.mode || 'selection', e.state?.options || {});
     });
 
     document.addEventListener('contextmenu', e => {
-      const target = e.target;
-      const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
-      const isCustomContextMenu = target.closest('#word-context-menu, #edit-context-menu, #card-context-menu');
-      const isEditTrigger = target.closest('#meaning-container, #explanation-container');
-      if (!isInteractiveTrigger && !isCustomContextMenu && !isEditTrigger) e.preventDefault();
+      const t = e.target;
+      if (!t.closest('.interactive-word, #word-display, #word-context-menu, #edit-context-menu, #meaning-container, #explanation-container'))
+        e.preventDefault();
     });
 
-    window.addEventListener('beforeunload', () => studyTracker.stopAndSave());
-    window.addEventListener('navigate', e => this.navigateTo(e.detail.mode, e.detail.options));
-    window.addEventListener('showToast', e => this.showToast(e.detail.message, e.detail.isError));
+    // #13 fix: beforeunload는 동기 함수만 호출
+    window.addEventListener('beforeunload', () => {
+      studyTracker.stopAndSave();
+      this.syncOfflineDataSync();
+    });
+
+    window.addEventListener('navigate',       e => this.navigateTo(e.detail.mode, e.detail.options));
+    window.addEventListener('showToast',      e => this.showToast(e.detail.message, e.detail.isError));
     window.addEventListener('showImeWarning', () => this.showImeWarning());
-    window.addEventListener('syncRequest', () => this.syncOfflineData());
-    document.addEventListener('searchWord', e => this.searchWordInLearningMode(e.detail));
+    window.addEventListener('syncRequest',    () => this.syncOfflineData());
+    document.addEventListener('searchWord',   e => this.searchWordInLearningMode(e.detail));
   },
 
   async syncOfflineData() {
     if (!state.userId) return;
     try {
-      const timeKey = state.LOCALSTORAGEKEYS.UNSYNCEDTIME;
-      const quizKey = state.LOCALSTORAGEKEYS.UNSYNCEDQUIZ;
+      const timeKey     = state.LOCALSTORAGEKEYS.UNSYNCEDTIME;
+      const quizKey     = state.LOCALSTORAGEKEYS.UNSYNCEDQUIZ;
       const progressKey = state.LOCALSTORAGEKEYS.UNSYNCEDPROGRESSUPDATES;
-      const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
+      const timeToSync  = parseInt(localStorage.getItem(timeKey) || '0', 10);
       if (timeToSync > 0) {
         await api.updateStudyTime(timeToSync);
         localStorage.removeItem(timeKey);
@@ -316,18 +280,33 @@ const app = {
         await api.syncProgressUpdates(progressToSync);
         localStorage.removeItem(progressKey);
       }
-    } catch(error) { console.error('오프라인 데이터 동기화 실패:', error); }
+    } catch(error) { console.error('오프라인 동기화 실패:', error); }
+  },
+
+  // #13 fix: beforeunload용 — localStorage 보존만 확인 (async 불가)
+  syncOfflineDataSync() {
+    if (!state.userId) return;
+    const hasPending =
+      localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDTIME)            ||
+      localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDQUIZ)            ||
+      localStorage.getItem(state.LOCALSTORAGEKEYS.UNSYNCEDPROGRESSUPDATES);
+    if (hasPending) console.log('미동기 데이터 존재 — 다음 접속 시 자동 동기화됩니다.');
   },
 
   navigateTo(mode, options = {}) {
-    const currentState = history.state;
-    if (currentState?.mode !== mode) this.syncOfflineData();
-    if (currentState?.mode === mode &&
-      JSON.stringify(currentState?.options) === JSON.stringify(options) &&
-      !['learning', 'mistakeReview', 'favorites', 'quiz-play'].includes(mode)) return;
+    const currentMode    = history.state?.mode;
+    const currentOptions = history.state?.options;
+    if (currentMode !== mode) this.syncOfflineData();
+
+    // #20 fix: 반복 재진입 허용 모드 목록 명시
+    const allowRepeat = ['learning', 'mistakeReview', 'favorites', 'quiz-play'];
+    if (currentMode === mode &&
+        JSON.stringify(currentOptions) === JSON.stringify(options) &&
+        !allowRepeat.includes(mode)) return;
+
     const newPath = mode === 'selection'
       ? window.location.pathname + window.location.search
-      : '#' + mode;
+      : `#${mode}`;
     history.pushState({ mode, options }, '', newPath);
     this.renderMode(mode, options);
   },
@@ -336,58 +315,56 @@ const app = {
     studyTracker.stopAndSave();
     if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
 
-    this.elements.selectionScreen.classList.add('hidden');
-    this.elements.quizModeContainer.classList.add('hidden');
-    this.elements.learningModeContainer.classList.add('hidden');
-    this.elements.dashboardContainer.classList.add('hidden');
-    this.elements.homeBtn.classList.add('hidden');
-    this.elements.logoutBtn.classList.add('hidden');
-    this.elements.ttsToggleBtn.classList.add('hidden');
-    this.elements.progressBarContainer.classList.add('hidden');
-    this.elements.practiceModeControl.classList.add('hidden');
-    learningMode.elements.fixedButtons.classList.add('hidden');
-    learningMode.elements.appContainer.classList.add('hidden');
-    learningMode.elements.startScreen.classList.add('hidden');
+    // 전체 숨기기
+    [
+      this.elements.selectionScreen, this.elements.quizModeContainer,
+      this.elements.learningModeContainer, this.elements.dashboardContainer,
+      this.elements.homeBtn, this.elements.logoutBtn, this.elements.ttsToggleBtn,
+      this.elements.progressBarContainer, this.elements.practiceModeControl,
+      learningMode.elements.fixedButtons, learningMode.elements.appContainer,
+      learningMode.elements.startScreen,
+    ].forEach(el => el?.classList.add('hidden'));
 
-    const showCommonButtons = () => {
+    const showCommon = () => {
       this.elements.homeBtn.classList.remove('hidden');
       this.elements.ttsToggleBtn.classList.remove('hidden');
     };
 
-    if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode)) studyTracker.start();
+    if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode))
+      studyTracker.start();
 
     if (mode === 'quiz') {
       this.elements.homeBtn.classList.remove('hidden');
       this.elements.quizModeContainer.classList.remove('hidden');
       this.elements.practiceModeControl.classList.remove('hidden');
       quizMode.reset();
-      await quizMode.updateRangeInputs();
+      await quizMode.updateRangeInputs(); // #16 fix
     } else if (mode === 'quiz-play') {
-      showCommonButtons();
+      showCommon();
       this.elements.quizModeContainer.classList.remove('hidden');
       this.elements.practiceModeControl.classList.remove('hidden');
       quizMode.reset(false);
       if (!state.isWordListReady) await api.loadWordList();
       quizMode.displayNextQuiz();
     } else if (mode === 'learning') {
-      showCommonButtons();
+      showCommon();
       this.elements.learningModeContainer.classList.remove('hidden');
-      if (options.startIndex !== undefined && options.startIndex !== -1) {
-        learningMode.state.isMistakeMode = false;
-        learningMode.state.isFavoriteMode = false;
+      if (options?.startIndex !== undefined && options.startIndex !== -1) {
+        learningMode.state.isMistakeMode   = false;
+        learningMode.state.isFavoriteMode  = false;
         learningMode.state.currentWordList = state.wordList;
-        learningMode.state.currentIndex = options.startIndex;
+        learningMode.state.currentIndex    = options.startIndex;
         learningMode.launchApp();
       } else {
-        this.elements.learningModeContainer.querySelector('#learning-start-screen').classList.remove('hidden');
+        learningMode.elements.startScreen.classList.remove('hidden');
         learningMode.resetStartScreen();
       }
     } else if (mode === 'mistakeReview') {
-      showCommonButtons();
+      showCommon();
       this.elements.learningModeContainer.classList.remove('hidden');
-      learningMode.startMistakeReview(options.mistakeWords);
+      learningMode.startMistakeReview(options?.mistakeWords || []);
     } else if (mode === 'favorites') {
-      showCommonButtons();
+      showCommon();
       this.elements.learningModeContainer.classList.remove('hidden');
       learningMode.startFavoriteMode();
     } else if (mode === 'dashboard') {
@@ -395,6 +372,7 @@ const app = {
       this.elements.dashboardContainer.classList.remove('hidden');
       dashboard.render();
     } else {
+      // selection
       this.elements.selectionScreen.classList.remove('hidden');
       this.elements.logoutBtn.classList.remove('hidden');
       if (this.elements.refreshBtn) this.elements.refreshBtn.classList.remove('hidden');
@@ -405,37 +383,35 @@ const app = {
 
   async forceReload() {
     this.elements.globalLoader.classList.remove('hidden');
-    const elementsToDisable = [
-      this.elements.refreshBtn, this.elements.selectDashboardBtn,
-      this.elements.selectMistakesBtn, this.elements.selectLearningBtn, this.elements.selectQuizBtn
+    // #25 fix: 비활성화 대상 배열로 DRY 처리
+    const toDisable = [
+      this.elements.refreshBtn,     this.elements.selectDashboardBtn,
+      this.elements.selectMistakesBtn, this.elements.selectLearningBtn,
+      this.elements.selectQuizBtn,
     ];
-    elementsToDisable.forEach(el => { if (el) el.classList.add('pointer-events-none', 'opacity-50'); });
+    toDisable.forEach(el => el?.classList.add('pointer-events-none', 'opacity-50'));
     try {
       await api.loadWordList(true);
       await api.loadUserProgress();
       this.updateLastUpdatedText();
-      this.showToast('단어 목록을 새로 불러왔습니다!');
+      this.showToast('단어 목록이 새로고침되었습니다!');
     } catch(e) {
       this.showToast(e.message, true);
     } finally {
-      elementsToDisable.forEach(el => { if (el) el.classList.remove('pointer-events-none', 'opacity-50'); });
+      toDisable.forEach(el => el?.classList.remove('pointer-events-none', 'opacity-50'));
       this.elements.globalLoader.classList.add('hidden');
     }
   },
 
   showToast(message, isError = false) {
-    let toast = document.getElementById('app-toast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.id = 'app-toast';
-      document.body.appendChild(toast);
-    }
-    clearTimeout(this._toastTimeout);
+    const toast = document.createElement('div');
     toast.textContent = message;
-    toast.className = `fixed top-20 left-1/2 -translate-x-1/2 text-white py-2 px-5 rounded-lg shadow-xl z-[200] text-lg font-semibold transition-opacity ${isError ? 'bg-red-500' : 'bg-green-500'}`;
-    toast.style.opacity = '1';
-    this._toastTimeout = setTimeout(() => {
-      toast.style.opacity = '0';
+    toast.className = `fixed top-20 left-1/2 -translate-x-1/2 text-white py-2 px-5 rounded-lg shadow-xl z-[200] text-lg font-semibold ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.transition = 'opacity 0.5s';
+      toast.style.opacity    = '0';
+      setTimeout(() => toast.remove(), 500);
     }, 2500);
   },
 
@@ -443,65 +419,56 @@ const app = {
     if (!this.elements.lastUpdatedText) return;
     if (state.lastCacheTimestamp) {
       const d = new Date(state.lastCacheTimestamp);
-      const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-      this.elements.lastUpdatedText.textContent = dateString;
-      this.elements.lastUpdatedText.classList.remove('hidden');
+      const pad = n => String(n).padStart(2, '0');
+      this.elements.lastUpdatedText.textContent =
+        `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } else {
       this.elements.lastUpdatedText.textContent = '';
-      this.elements.lastUpdatedText.classList.remove('hidden');
     }
+    this.elements.lastUpdatedText.classList.remove('hidden');
+  },
+
+  // #21 fix: TTS 버튼 스타일 헬퍼
+  _setTtsButtonStyle(voiceSet) {
+    const btn  = this.elements.ttsToggleBtn;
+    const isUK = voiceSet === 'UK';
+    btn.classList.toggle('bg-indigo-700',      isUK);
+    btn.classList.toggle('hover:bg-indigo-800', isUK);
+    btn.classList.toggle('bg-red-500',         !isUK);
+    btn.classList.toggle('hover:bg-red-600',   !isUK);
   },
 
   toggleVoiceSet() {
-    const btn = this.elements.ttsToggleBtn;
-    btn.classList.toggle('is-flipped');
+    this.elements.ttsToggleBtn.classList.toggle('is-flipped');
     setTimeout(() => {
       state.currentVoiceSet = state.currentVoiceSet === 'UK' ? 'US' : 'UK';
       this.elements.ttsToggleText.textContent = state.currentVoiceSet;
-      btn.classList.toggle('bg-indigo-700', state.currentVoiceSet === 'UK');
-      btn.classList.toggle('hover:bg-indigo-800', state.currentVoiceSet === 'UK');
-      btn.classList.toggle('bg-red-500', state.currentVoiceSet === 'US');
-      btn.classList.toggle('hover:bg-red-600', state.currentVoiceSet === 'US');
-      try {
-        localStorage.setItem(state.LOCALSTORAGEKEYS.TTSVOICE, state.currentVoiceSet);
-      } catch(e) { console.error(e); }
+      this._setTtsButtonStyle(state.currentVoiceSet); // #21 fix
+      try { localStorage.setItem(state.LOCALSTORAGEKEYS.TTSVOICE, state.currentVoiceSet); }
+      catch(e) { console.error(e); }
     }, 250);
   },
 
   showImeWarning() {
     this.elements.imeWarning.classList.remove('hidden');
     clearTimeout(this.imeWarningTimeout);
-    this.imeWarningTimeout = setTimeout(() => {
-      this.elements.imeWarning.classList.add('hidden');
-    }, 2000);
+    this.imeWarningTimeout = setTimeout(() =>
+      this.elements.imeWarning.classList.add('hidden'), 2000
+    );
   },
 
-  showFatalError(message) {
-    const selectionDiv = this.elements.selectionScreen;
-    selectionDiv.innerHTML = `
-      <div class="p-8 text-center">
-        <h1 class="text-3xl font-bold text-red-600 mb-4">앱 초기화 실패</h1>
-        <p class="text-gray-700 mb-6">Firebase 연결에 실패했습니다.<br>네트워크를 확인해 주세요.</p>
-        <div class="bg-red-50 text-red-700 p-4 rounded-lg text-left text-sm break-all">
-          <p class="font-semibold">오류 내용</p>
-          <p>${message}</p>
-        </div>
-      </div>`;
-    this.elements.appWrapper.classList.remove('hidden');
-    this.elements.selectionScreen.classList.remove('hidden');
-    this.elements.quizModeContainer.classList.add('hidden');
-    this.elements.learningModeContainer.classList.add('hidden');
-  },
-
+  // #17 fix: Promise.all 병렬 이미지 로드
   async loadInitialImages() {
-    const imageSelectors = [
-      '#select-learning-btn img', '#select-quiz-btn img',
-      '#start-meaning-quiz-btn img', '#start-blank-quiz-btn img', '#start-definition-quiz-btn img'
+    const selectors = [
+      '#select-learning-btn img',   '#select-quiz-btn img',
+      '#start-meaning-quiz-btn img','#start-blank-quiz-btn img',
+      '#start-definition-quiz-btn img',
     ];
-    for (const selector of imageSelectors) {
-      const img = document.querySelector(selector);
-      if (img) img.src = await imageDBCache.loadImage(img.src);
-    }
+    await Promise.all(selectors.map(async sel => {
+      const img = document.querySelector(sel);
+      if (img && window.imageDBCache)
+        img.src = await window.imageDBCache.loadImage(img.src);
+    }));
   },
 
   searchWordInLearningMode(word) {
@@ -512,6 +479,22 @@ const app = {
       learningMode.start();
       ui.hideWordContextMenu();
     }, 10);
+  },
+
+  showFatalError(message) {
+    this.elements.selectionScreen.innerHTML = `
+      <div class="p-8 text-center">
+        <h1 class="text-3xl font-bold text-red-600 mb-4">앱 초기화 실패</h1>
+        <p class="text-gray-700 mb-6">Firebase 연결에 문제가 발생했습니다.<br>페이지를 새로고침 해주세요.</p>
+        <div class="bg-red-50 text-red-700 p-4 rounded-lg text-left text-sm break-all">
+          <p class="font-semibold">오류 내용</p>
+          <p>${message}</p>
+        </div>
+      </div>`;
+    this.elements.appWrapper.classList.remove('hidden');
+    this.elements.selectionScreen.classList.remove('hidden');
+    this.elements.quizModeContainer.classList.add('hidden');
+    this.elements.learningModeContainer.classList.add('hidden');
   },
 };
 
