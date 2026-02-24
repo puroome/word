@@ -1,5 +1,5 @@
 import { config, state } from './config.js';
-import { utils, translationCache, imageDBCache, audioCache } from './utils.js';
+import { utils, translationCache } from './utils.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
 import { learningMode } from './learning.js';
@@ -144,15 +144,9 @@ const app = {
     } catch(e) { console.error(e); }
 
     // #10 fix: utils.js 캐시 객체를 window에 바인딩
-    window.imageDBCache = imageDBCache;
-    window.audioCache   = audioCache;
     try {
-      await Promise.all([
-        translationCache.init(),
-        imageDBCache.init(),
-        audioCache.init(),
-      ]);
-    } catch(e) { console.error('캐시 초기화 실패:', e); }
+  await translationCache.init();
+} catch(e) { console.error('캐시 초기화 실패:', e); }
 
     await this.syncOfflineData();
 
