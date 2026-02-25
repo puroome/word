@@ -898,7 +898,12 @@ async saveAndExitEditMode() {
         else if (e.key === 'ArrowUp') { e.preventDefault(); this.navigate(1); }
         else if (e.key === 'ArrowDown') { e.preventDefault(); this.navigate(-1); }
         else if (e.key === 'Enter') { e.preventDefault(); this.handleFlip(); }
-        else if (e.key === 'b' || e.key === '.') { e.preventDefault(); this.handleFlip(); }
+        else if (e.key === 'F5') { e.preventDefault(); this.handleFlip(); }
+        else if (e.key === 'b' || e.key === '.') { 
+            e.preventDefault();
+            const word = this.state.currentWordList[this.state.currentIndex]?.word;
+            if (word) { api.speak(word, 'word'); }
+        }
         else if (e.key === ' ') {
             e.preventDefault();
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
