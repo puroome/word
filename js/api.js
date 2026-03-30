@@ -74,44 +74,51 @@ export const api = {
             const utterance = new SpeechSynthesisUtterance(processedText);
 
             const setVoice = () => {
-                if (myRequestId !== activeSpeakId) return;
-                const voices = window.speechSynthesis.getVoices();
-                const isUK = state.currentVoiceSet === 'UK';
-                const targetLang = isUK ? 'en-gb' : 'en-us';
-                
-                let selectedVoice = null;
+    if (myRequestId !== activeSpeakId) return;
+    const voices = window.speechSynthesis.getVoices();
+    const isUK = state.currentVoiceSet === 'UK';
+    const targetLang = isUK ? 'en-gb' : 'en-us';
+    
+    let selectedVoice = null;
 
-                // 1. 영국 발음 (기존 유지)
-                if (isUK) {
-                    selectedVoice = voices.find(v => 
-                        v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
-                    );
-                }
+    if (isUK) {
+        // 영국: 기존 로직 유지
+        selectedVoice = voices.find(v => 
+            v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
+        );
+    } else {
+        // 미국: 자연스러운 Microsoft Neural 목소리 우선순위 지정
+        const usNaturalVoices = [
+            "Microsoft Andrew",   // Edge 최신 Neural
+            "Microsoft Aria",     // Edge Neural (여성)
+            "Microsoft Guy",      // Edge Neural (남성)
+            "Microsoft Davis",    // Edge Neural
+            "Microsoft Tony",     // Edge Neural
+            "Microsoft Jenny",    // Edge Neural (여성)
+            "Microsoft Eric",     // Edge Neural
+        ];
+        
+        for (const name of usNaturalVoices) {
+            selectedVoice = voices.find(v => v.name.includes(name));
+            if (selectedVoice) break;
+        }
+    }
 
-                // 2. 👇 미국 발음(US)일 때 자연스러운 여성 목소리를 찾도록 여기를 추가/수정합니다!
-                if (!isUK) {
-                    selectedVoice = voices.find(v => 
-                        (v.name.includes("Aria") && v.name.includes("Natural")) || // Windows/Edge 고품질 여성
-                        v.name.includes("Google US English") ||                    // Chrome 자연스러운 여성
-                        v.name.includes("Microsoft Zira") ||                       // Windows 기본 여성
-                        v.name.includes("Samantha")                                // Mac/iOS 기본 여성
-                    );
-                }
+    // 공통 폴백: 언어 코드로 찾기
+    if (!selectedVoice) {
+        selectedVoice = voices.find(v => {
+            const vLang = v.lang.replace('_', '-').toLowerCase();
+            return vLang === targetLang;
+        });
+    }
 
-                // 3. 위에서 못 찾았을 경우 언어 코드(en-us)로 기본 목소리 탐색 (기존 코드)
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => {
-                        const vLang = v.lang.replace('_', '-').toLowerCase();
-                        return vLang === targetLang;
-                    });
-                }
+    if (!selectedVoice) {
+        selectedVoice = voices.find(v => {
+            const vLang = v.lang.replace('_', '-').toLowerCase();
+            return vLang.includes(targetLang);
+        });
+    }
 
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => {
-                        const vLang = v.lang.replace('_', '-').toLowerCase();
-                        return vLang.includes(targetLang);
-                    });
-                }
 
                 if (!selectedVoice) {
                     const naturalName = isUK ? "United Kingdom" : "United States";
