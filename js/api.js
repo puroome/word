@@ -107,13 +107,6 @@ export const api = {
                 }
 
                 if (!selectedVoice) {
-                    selectedVoice = voices.find(v => {
-                        const vLang = v.lang.replace('_', '-').toLowerCase();
-                        return vLang.includes(targetLang);
-                    });
-                }
-
-                if (!selectedVoice) {
                     const naturalName = isUK ? "United Kingdom" : "United States";
                     selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
                 }
