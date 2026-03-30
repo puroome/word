@@ -82,20 +82,20 @@ export const api = {
     let selectedVoice = null;
 
     if (isUK) {
-        // 영국: 기존 로직 유지
+        // ✅ 영국: 원래 코드 그대로 복원
         selectedVoice = voices.find(v => 
             v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
         );
     } else {
-        // 미국: 자연스러운 Microsoft Neural 목소리 우선순위 지정
+        // ✅ 미국: Natural/Neural 목소리 우선순위 지정
         const usNaturalVoices = [
-            "Microsoft Andrew",   // Edge 최신 Neural
-            "Microsoft Aria",     // Edge Neural (여성)
+            "Microsoft Andrew",   // Edge Neural (남성, 가장 자연스러움)
             "Microsoft Guy",      // Edge Neural (남성)
-            "Microsoft Davis",    // Edge Neural
-            "Microsoft Tony",     // Edge Neural
+            "Microsoft Davis",    // Edge Neural (남성)
+            "Microsoft Tony",     // Edge Neural (남성)
+            "Microsoft Eric",     // Edge Neural (남성)
+            "Microsoft Aria",     // Edge Neural (여성)
             "Microsoft Jenny",    // Edge Neural (여성)
-            "Microsoft Eric",     // Edge Neural
         ];
         
         for (const name of usNaturalVoices) {
@@ -119,11 +119,10 @@ export const api = {
         });
     }
 
-
-                if (!selectedVoice) {
-                    const naturalName = isUK ? "United Kingdom" : "United States";
-                    selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
-                }
+    if (!selectedVoice) {
+        const naturalName = isUK ? "United Kingdom" : "United States";
+        selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
+    }
                  
                 if (selectedVoice) {
                     utterance.voice = selectedVoice;
