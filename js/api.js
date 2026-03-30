@@ -89,13 +89,13 @@ export const api = {
     } else {
         // ✅ 미국: Natural/Neural 목소리 우선순위 지정
         const usNaturalVoices = [
-            "Microsoft Andrew",   // Edge Neural (남성, 가장 자연스러움)
-            "Microsoft Guy",      // Edge Neural (남성)
+            "Microsoft Aria",   // Edge Neural (여성)
+            "Microsoft Jenny",      // Edge Neural (여성)
             "Microsoft Davis",    // Edge Neural (남성)
             "Microsoft Tony",     // Edge Neural (남성)
             "Microsoft Eric",     // Edge Neural (남성)
-            "Microsoft Aria",     // Edge Neural (여성)
-            "Microsoft Jenny",    // Edge Neural (여성)
+            "Microsoft Guy",     // Edge Neural (남성)
+            "Microsoft Andrew",    // Edge Neural (남성)
         ];
         
         for (const name of usNaturalVoices) {
