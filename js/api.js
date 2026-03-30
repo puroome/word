@@ -89,9 +89,9 @@ export const api = {
                 }
 
                 // 2. 👇 미국 발음(US)일 때 자연스러운 여성 목소리를 찾도록 여기를 추가/수정합니다!
-                if (!isUK) {
+                if (!isUS) {
                     selectedVoice = voices.find(v => 
-                        (v.name.includes("Aria") && v.name.includes("Natural")) || // Windows/Edge 고품질 여성
+                        v.name.includes("Aria") && v.name.includes("Natural")) || // Windows/Edge 고품질 여성
                         v.name.includes("Google US English") ||                    // Chrome 자연스러운 여성
                         v.name.includes("Microsoft Zira") ||                       // Windows 기본 여성
                         v.name.includes("Samantha")                                // Mac/iOS 기본 여성
