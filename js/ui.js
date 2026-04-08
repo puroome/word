@@ -12,6 +12,34 @@ export const ui = {
         this.hideTranslationTooltip();
     },
 
+    // --- 공통 헬퍼 ---
+    // 터치/마우스 이벤트에서 클라이언트 좌표를 통일하여 반환
+    _getEventCoords(event) {
+        const touch = event.touches ? event.touches[0] : null;
+        return {
+            x: touch ? touch.clientX : event.clientX,
+            y: touch ? touch.clientY : event.clientY
+        };
+    },
+
+    // 메뉴 엘리먼트를 (x, y) 위치에 배치하되 화면 밖으로 넘치지 않도록 보정
+    _positionMenu(menu, x, y) {
+        menu.style.left = `${x}px`;
+        menu.style.top  = `${y}px`;
+        menu.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const rect   = menu.getBoundingClientRect();
+            let finalX = x;
+            let finalY = y;
+            if (x + rect.width  > window.innerWidth  - 10) finalX = window.innerWidth  - rect.width  - 10;
+            if (y + rect.height > window.innerHeight - 10) finalY = window.innerHeight - rect.height - 10;
+            if (finalX < 10) finalX = 10;
+            if (finalY < 10) finalY = 10;
+            menu.style.left = `${finalX}px`;
+            menu.style.top  = `${finalY}px`;
+        });
+    },
+
     // [수정] treatAsPhrase 매개변수 추가 (true일 경우 단어 뭉치를 유지)
     createInteractiveFragment(content, isForSampleSentence = false, treatAsPhrase = false) {
         const fragment = document.createDocumentFragment();
@@ -264,46 +292,19 @@ export const ui = {
 
     // [수정] 사전 메뉴 표시
     showWordContextMenu(event, word, options = {}) {
-        this.hideAllMenus(); 
-
+        this.hideAllMenus();
         event.preventDefault();
         const menu = document.getElementById('word-context-menu');
         if (!menu) return;
 
-        const touch = event.touches ? event.touches[0] : null;
-        const x = touch ? touch.clientX : event.clientX;
-        const y = touch ? touch.clientY : event.clientY;
-
-        menu.style.left = `0px`;
-        menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
-
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) {
-                finalX = window.innerWidth - menuRect.width - 10;
-            }
-            if (y + menuRect.height > window.innerHeight - 10) {
-                 finalY = window.innerHeight - menuRect.height - 10;
-            }
-             if (finalX < 10) finalX = 10;
-             if (finalY < 10) finalY = 10;
-
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
+        const { x, y } = this._getEventCoords(event);
+        this._positionMenu(menu, x, y);
 
         const encodedWord = encodeURIComponent(word);
-
-        document.getElementById('search-app-context-btn').onclick = () => {
-             document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
-             this.hideWordContextMenu();
-        };
-        document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
-        document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
-        document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
+        document.getElementById('search-app-context-btn').onclick    = () => { document.dispatchEvent(new CustomEvent('searchWord', { detail: word })); this.hideWordContextMenu(); };
+        document.getElementById('search-daum-context-btn').onclick   = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
+        document.getElementById('search-naver-context-btn').onclick  = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
+        document.getElementById('search-etym-context-btn').onclick   = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };
         document.getElementById('search-longman-context-btn').onclick = () => { window.open(`https://www.ldoceonline.com/dictionary/${encodedWord}`, 'dict_longman'); this.hideWordContextMenu(); };
     },
     hideWordContextMenu() {
@@ -313,27 +314,11 @@ export const ui = {
 
     // [수정] 편집 메뉴 표시
     showEditContextMenu(event) {
-        this.hideAllMenus(); 
-
+        this.hideAllMenus();
         const menu = document.getElementById('edit-context-menu');
         if (!menu) return;
-        const touch = event.touches ? event.touches[0] : null;
-        const x = touch ? touch.clientX : event.clientX;
-        const y = touch ? touch.clientY : event.clientY;
-        menu.style.left = `${x}px`;
-        menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
-            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
-            if (finalX < 10) finalX = 10;
-            if (finalY < 10) finalY = 10;
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
+        const { x, y } = this._getEventCoords(event);
+        this._positionMenu(menu, x, y);
     },
     hideEditContextMenu() {
         const menu = document.getElementById('edit-context-menu');
@@ -443,24 +428,9 @@ export const ui = {
             };
         }
 
-        // 메뉴 위치 지정 (원본 UI 코드 그대로)
-        const touch = event.touches ? event.touches[0] : null;
-        const x = touch ? touch.clientX : event.clientX;
-        const y = touch ? touch.clientY : event.clientY;
-        menu.style.left = `${x}px`;
-        menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
-            let finalX = x;
-            let finalY = y;
-            if (x + menuRect.width > window.innerWidth - 10) finalX = window.innerWidth - menuRect.width - 10;
-            if (y + menuRect.height > window.innerHeight - 10) finalY = window.innerHeight - menuRect.height - 10;
-            if (finalX < 10) finalX = 10;
-            if (finalY < 10) finalY = 10;
-            menu.style.left = `${finalX}px`;
-            menu.style.top = `${finalY}px`;
-        });
+        // 메뉴 위치 지정
+        const { x, y } = this._getEventCoords(event);
+        this._positionMenu(menu, x, y);
     },
     hideCardContextMenu() {
         const menu = document.getElementById('card-context-menu');

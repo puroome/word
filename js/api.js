@@ -14,13 +14,13 @@ export const api = {
 
     async loadWordList(force = false) {
         if (force) {
-            localStorage.removeItem('wordListCache');
+            localStorage.removeItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             state.isWordListReady = false;
         }
 
         if (!state.isWordListReady) {
             try {
-                const cachedData = localStorage.getItem('wordListCache');
+                const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
                 if (cachedData) {
                     const { timestamp, words } = JSON.parse(cachedData);
                     state.wordList = words.sort((a, b) => a.index - b.index);
@@ -28,7 +28,7 @@ export const api = {
                     state.lastCacheTimestamp = timestamp;
                 }
             } catch (e) {
-                localStorage.removeItem('wordListCache');
+                localStorage.removeItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             }
         }
 
@@ -48,7 +48,7 @@ export const api = {
 
             const newTimestamp = Date.now();
             const cachePayload = { timestamp: newTimestamp, words: wordsArray };
-            localStorage.setItem('wordListCache', JSON.stringify(cachePayload));
+            localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(cachePayload));
             state.lastCacheTimestamp = newTimestamp;
         } catch (error) {
             throw error;
@@ -458,13 +458,13 @@ export const api = {
         }
 
         try {
-            const cachedData = localStorage.getItem('wordListCache');
+            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
                 const targetIndex = parsedCache.words.findIndex(w => w.word === wordData.word);
                 if (targetIndex !== -1) {
                     parsedCache.words[targetIndex].AISample = aiSampleObj;
-                    localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                    localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
                     console.log("✅ 로컬 캐시 업데이트 완료");
                 }
             }
@@ -515,11 +515,11 @@ export const api = {
         updateLocalList(state.wordList);
 
         try {
-            const cachedData = localStorage.getItem('wordListCache');
+            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
                 updateLocalList(parsedCache.words);
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
             }
         } catch (e) {
             console.error("캐시 업데이트 오류:", e);
@@ -529,7 +529,8 @@ export const api = {
             const { ref, update } = window.firebaseSDK;
             const safeKey = originalWord.replace(/[.#$[\]/]/g, '_');
             const firebaseUpdates = { ...updateData };
-            if (firebaseUpdates.manual_sample) {
+            // manual_sample이 undefined가 아닌 경우에만 변환
+            if (firebaseUpdates.manual_sample !== undefined) {
                 firebaseUpdates.sample = firebaseUpdates.manual_sample;
                 delete firebaseUpdates.manual_sample;
             }
@@ -589,7 +590,7 @@ async createWord(cardData, afterWord = null) {
     }
 
     try {
-        const cachedData = localStorage.getItem('wordListCache');
+        const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
         if (cachedData) {
             const parsedCache = JSON.parse(cachedData);
             const words = parsedCache.words || [];
@@ -610,7 +611,7 @@ async createWord(cardData, afterWord = null) {
             words.splice(localInsertPos, 0, newWordObj);
             
             parsedCache.words = words;
-            localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+            localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
             
             state.wordList = words;
         }
@@ -651,11 +652,11 @@ async createWord(cardData, afterWord = null) {
         state.wordList = state.wordList.filter(w => w.word !== word);
 
         try {
-            const cachedData = localStorage.getItem('wordListCache');
+            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             if (cachedData) {
                 const parsedCache = JSON.parse(cachedData);
                 parsedCache.words = parsedCache.words.filter(w => w.word !== word);
-                localStorage.setItem('wordListCache', JSON.stringify(parsedCache));
+                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
             }
         } catch (e) {}
 

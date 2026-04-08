@@ -34,6 +34,7 @@ export const state = {
         UNSYNCED_PROGRESS_UPDATES: 'student_unsyncedProgress_main',
         PRACTICE_MODE: 'student_practiceMode_main',
         QUIZ_RANGE_START: 'student_quizRangeStart_main',
-        QUIZ_RANGE_END: 'student_quizRangeEnd_main'
+        QUIZ_RANGE_END: 'student_quizRangeEnd_main',
+        WORD_LIST_CACHE: 'wordListCache'
     }
 };

@@ -22,6 +22,7 @@ export const quizMode = {
             'MULTIPLE_CHOICE_DEFINITION': false
         },
         currentRangeInputTarget: null,
+        isFinalResult: false,  // [BUG-3] 텍스트 문자열 비교 대신 사용하는 플래그
     },
     elements: {},
     init() {
@@ -216,8 +217,8 @@ export const quizMode = {
                     console.error("Error saving quiz range to localStorage", e);
                 }
             } else {
-                // Toast logic needed or just alert
-                alert("숫자만 입력 가능합니다.");
+                // [UX-1] alert() 대신 커스텀 toast 사용 (앱 전체 UX 일관성)
+                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "숫자만 입력 가능합니다.", isError: true } }));
             }
         }
         this.hideRangeInput();
@@ -235,9 +236,9 @@ export const quizMode = {
     },
     clearAndPreloadQuizzesForNewRange() {
         const quizTypes = Object.keys(this.state.preloadedQuizzes);
-        quizTypes.forEach(type => {
-            this.state.preloadedQuizzes[type] = null;
-            this.state.isPreloading[type] = false;
+        quizTypes.forEach(quizType => {
+            this.state.preloadedQuizzes[quizType] = null;
+            this.state.isPreloading[quizType] = false;
         });
         this.preloadAllQuizTypesBasedOnSavedRange();
     },
@@ -289,27 +290,66 @@ export const quizMode = {
             }
         }
     },
+    // --- 공통 헬퍼 ---
+    // 범위 파라리터(rangeOverride 또는 DOM)로부터 { startIndex, endIndex }를 계산
+    _getWordRange(allWords, rangeOverride = null) {
+        let startVal, endVal;
+        if (rangeOverride) {
+            startVal = rangeOverride.start;
+            endVal   = rangeOverride.end;
+        } else {
+            startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
+            endVal   = parseInt(this.elements.quizRangeEnd.textContent)   || allWords.length;
+        }
+        const startNum = Math.min(startVal, endVal);
+        const endNum   = Math.max(startVal, endVal);
+        return {
+            startIndex: Math.max(0, startNum - 1),
+            endIndex:   Math.min(allWords.length - 1, endNum - 1)
+        };
+    },
+
+    // 오답(distractor) Set을 구성하는 공통 로직
+    // valueKey: 오답으로 사용할 필드명 ('meaning' 또는 'word')
+    // allowFallbacks: 데이터 부족 시 더미 답변 허용 여부 (MeaningQuiz에서만 true)
+    _buildDistractors(correctWordData, allWordsData, valueKey, allowFallbacks = false) {
+        const correctValue = correctWordData[valueKey];
+        const wrongAnswers = new Set();
+
+        // 같은 품사 우선 (최적화된 랜덤 선택)
+        const samePosDistractors = utils.pickRandomItems(allWordsData, 10,
+            (w) => w.pos !== correctWordData.pos || w[valueKey] === correctValue
+        );
+        samePosDistractors.forEach(w => wrongAnswers.add(w[valueKey]));
+
+        // 부족하면 임의 단어 추가
+        if (wrongAnswers.size < 3) {
+            const randomDistractors = utils.pickRandomItems(allWordsData, 10,
+                (w) => w[valueKey] === correctValue || wrongAnswers.has(w[valueKey])
+            );
+            randomDistractors.forEach(w => wrongAnswers.add(w[valueKey]));
+        }
+
+        if (wrongAnswers.size < 3) {
+            if (allowFallbacks && allWordsData.length < 4) {
+                ['오답1', '오답2', '오답3'].forEach(d => wrongAnswers.add(d));
+            } else {
+                return null;
+            }
+        }
+        return wrongAnswers;
+    },
+
     async generateSingleQuiz() {
         const allWords = state.wordList || [];
         if (allWords.length === 0) return null;
 
-        const startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
-        const endVal = parseInt(this.elements.quizRangeEnd.textContent) || allWords.length;
-        const startNum = Math.min(startVal, endVal);
-        const endNum = Math.max(startVal, endVal);
-        const startIndex = Math.max(0, startNum - 1);
-        const endIndex = Math.min(allWords.length - 1, endNum - 1);
-        
-        // [최적화] slice 대신 필요한 범위의 단어만 순회하며 후보군 선정
-        // (현재 구조상 slice는 유지하되, 내부 filter 최적화)
+        const { startIndex, endIndex } = this._getWordRange(allWords);
         const wordsInRange = allWords.slice(startIndex, endIndex + 1);
-
         if (wordsInRange.length === 0) return null;
 
         const currentQuizType = this.state.currentQuizType;
-        const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-        let unsynced = {};
-        try { unsynced = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch(e) {}
+        const unsynced = utils.getUnsyncedProgress();
 
         let candidates = wordsInRange.filter(wordObj => {
             const word = wordObj.word;
@@ -320,22 +360,18 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[currentQuizType] === 'correct') return false;
             return true;
         });
-        if (this.state.currentQuizType === 'FILL_IN_THE_BLANK') {
-            candidates = candidates.filter(word => word.sample && word.sample.trim() !== '');
+        if (currentQuizType === 'FILL_IN_THE_BLANK') {
+            candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
 
         if (candidates.length === 0) return null;
-
         utils.shuffleArray(candidates);
-        
-        // [최적화] Dummy Array 생성을 최소화 (allWords 복사 방지)
-        const usableAllWordsForChoices = allWords;
 
         for (const wordData of candidates) {
             let quiz = null;
-            if (this.state.currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, usableAllWordsForChoices);
-            else if (this.state.currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, usableAllWordsForChoices);
-            else if (this.state.currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, usableAllWordsForChoices);
+            if (currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, allWords);
+            else if (currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, allWords);
+            else if (currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, allWords);
             if (quiz) return quiz;
         }
         return null;
@@ -444,12 +480,13 @@ export const quizMode = {
     showSessionResultModal(isFinal = false) {
         this.elements.modalScore.textContent = `${this.state.sessionAnsweredInSet}문제 중 ${this.state.sessionCorrectInSet}개 정답!`;
         this.elements.modalMistakesBtn.classList.toggle('hidden', this.state.sessionMistakes.length === 0);
+        this.state.isFinalResult = isFinal;  // [BUG-3] 플래그로 상태 관리
         this.elements.modalContinueBtn.textContent = isFinal ? "퀴즈 유형으로" : "다음 퀴즈 계속";
         this.elements.modal.classList.remove('hidden');
     },
     continueAfterResult() {
         this.elements.modal.classList.add('hidden');
-        if (this.elements.modalContinueBtn.textContent === "퀴즈 유형으로") {
+        if (this.state.isFinalResult) {  // [BUG-3] 문자열 비교 대신 플래그 사용
             window.dispatchEvent(new CustomEvent('syncRequest'));
             window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } }));
             return;
@@ -512,26 +549,11 @@ export const quizMode = {
         const allWords = state.wordList || [];
         if (allWords.length === 0) return null;
 
-        let startVal, endVal;
-        if (rangeOverride) {
-            startVal = rangeOverride.start;
-            endVal = rangeOverride.end;
-        } else {
-            startVal = parseInt(this.elements.quizRangeStart.textContent) || 1;
-            endVal = parseInt(this.elements.quizRangeEnd.textContent) || allWords.length;
-        }
-
-        const startNum = Math.min(startVal, endVal);
-        const endNum = Math.max(startVal, endVal);
-        const startIndex = Math.max(0, startNum - 1);
-        const endIndex = Math.min(allWords.length - 1, endNum - 1);
+        const { startIndex, endIndex } = this._getWordRange(allWords, rangeOverride);
         const wordsInRange = allWords.slice(startIndex, endIndex + 1);
-
         if (wordsInRange.length === 0) return null;
 
-        const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-        let unsynced = {};
-        try { unsynced = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch(e) {}
+        const unsynced = utils.getUnsyncedProgress();
 
         let candidates = wordsInRange.filter(wordObj => {
             const word = wordObj.word;
@@ -543,53 +565,21 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
             return true;
         });
-
         if (quizType === 'FILL_IN_THE_BLANK') {
-             candidates = candidates.filter(word => word.sample && word.sample.trim() !== '');
+            candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
-
         if (candidates.length === 0) return null;
 
         utils.shuffleArray(candidates);
-        
-        // [최적화] allWords 복사 방지
-        const usableAllWordsForChoices = allWords;
-
         const wordData = candidates[0];
-        let quiz = null;
-        if (quizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, usableAllWordsForChoices);
-        else if (quizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, usableAllWordsForChoices);
-        else if (quizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, usableAllWordsForChoices);
-
-        return quiz;
+        if (quizType === 'MULTIPLE_CHOICE_MEANING')    return this.createMeaningQuiz(wordData, allWords);
+        if (quizType === 'FILL_IN_THE_BLANK')           return this.createBlankQuiz(wordData, allWords);
+        if (quizType === 'MULTIPLE_CHOICE_DEFINITION')  return await this.createDefinitionQuiz(wordData, allWords);
+        return null;
     },
     createMeaningQuiz(correctWordData, allWordsData) {
-        // [최적화] 전체 단어 필터링 대신 랜덤 추출 (utils.pickRandomItems 활용)
-        const wrongAnswers = new Set();
-        
-        // 같은 품사 우선 시도 (최적화된 랜덤 선택)
-        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-            return w.pos !== correctWordData.pos || w.meaning === correctWordData.meaning;
-        });
-        samePosDistractors.forEach(w => wrongAnswers.add(w.meaning));
-        
-        // 부족하면 아무 단어나 추가 (기존 로직 유지하되 방식만 최적화)
-        if (wrongAnswers.size < 3) {
-             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-                 return w.meaning === correctWordData.meaning || wrongAnswers.has(w.meaning);
-             });
-             randomDistractors.forEach(w => wrongAnswers.add(w.meaning));
-        }
-
-        if (wrongAnswers.size < 3) {
-             // 데이터 부족 시 더미 추가 (기존 안전장치 유지)
-             if (allWordsData.length < 4) {
-                 ['오답1', '오답2', '오답3'].forEach(d => wrongAnswers.add(d));
-             } else {
-                 return null;
-             }
-        }
-        
+        const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'meaning', true);
+        if (!wrongAnswers) return null;
         const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctWordData.meaning };
     },
@@ -598,30 +588,14 @@ export const quizMode = {
 
         const firstLine = correctWordData.sample.split('\n')[0]
             .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, "")
-            .replace(/\*/g, '')
-            .trim();
+            .replace(/\*/g, '').trim();
 
         const placeholderRegex = new RegExp(`\\b${correctWordData.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
         if (!firstLine.match(placeholderRegex)) return null;
         const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
 
-        const wrongAnswers = new Set();
-        
-        // [최적화] 랜덤 추출 방식 적용
-        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-             return w.pos !== correctWordData.pos || w.word === correctWordData.word;
-        });
-        samePosDistractors.forEach(w => wrongAnswers.add(w.word));
-
-        if (wrongAnswers.size < 3) {
-             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-                 return w.word === correctWordData.word || wrongAnswers.has(w.word);
-             });
-             randomDistractors.forEach(w => wrongAnswers.add(w.word));
-        }
-        
-         if (wrongAnswers.size < 3) return null;
-
+        const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);
+        if (!wrongAnswers) return null;
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'FILL_IN_THE_BLANK', question: { sentence_with_blank: sentenceWithBlank, word: correctWordData.word }, choices, answer: correctWordData.word };
     },
@@ -629,23 +603,8 @@ export const quizMode = {
         const definition = await api.fetchDefinition(correctWordData.word);
         if (!definition) return null;
 
-        const wrongAnswers = new Set();
-        
-        // [최적화] 랜덤 추출 방식 적용
-        const samePosDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-             return w.pos !== correctWordData.pos || w.word === correctWordData.word;
-        });
-        samePosDistractors.forEach(w => wrongAnswers.add(w.word));
-
-        if (wrongAnswers.size < 3) {
-             const randomDistractors = utils.pickRandomItems(allWordsData, 10, (w) => {
-                 return w.word === correctWordData.word || wrongAnswers.has(w.word);
-             });
-             randomDistractors.forEach(w => wrongAnswers.add(w.word));
-        }
-
-         if (wrongAnswers.size < 3) return null;
-
+        const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);
+        if (!wrongAnswers) return null;
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_DEFINITION', question: { definition, word: correctWordData.word }, choices, answer: correctWordData.word };
     }

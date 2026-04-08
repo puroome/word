@@ -21,10 +21,8 @@ export const dashboard = {
         summary: document.getElementById('dashboard-summary'),
     },
     state: {
-        studyTimeChart: null,
-        quiz1Chart: null,
-        quiz2Chart: null,
-        quiz3Chart: null,
+        // 주의: 차트 인스턴스들을 배열로 통합 관리여 destroyCharts가 자동 확장됨
+        charts: [],
     },
     init() {
         document.addEventListener('wordListUpdated', () => {
@@ -34,14 +32,8 @@ export const dashboard = {
         });
     },
     destroyCharts() {
-        if (this.state.studyTimeChart) this.state.studyTimeChart.destroy();
-        if (this.state.quiz1Chart) this.state.quiz1Chart.destroy();
-        if (this.state.quiz2Chart) this.state.quiz2Chart.destroy();
-        if (this.state.quiz3Chart) this.state.quiz3Chart.destroy();
-        this.state.studyTimeChart = null;
-        this.state.quiz1Chart = null;
-        this.state.quiz2Chart = null;
-        this.state.quiz3Chart = null;
+        this.state.charts.forEach(chart => chart?.destroy());
+        this.state.charts = [];
     },
     async render() {
         if (!state.isWordListReady) {
@@ -92,15 +84,15 @@ export const dashboard = {
         const labels = [];
         const data = [];
         for (let i = 6; i >= 0; i--) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            const dateString = d.toISOString().slice(0, 10);
-            labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
+            const loopDate = new Date(today);
+            loopDate.setDate(loopDate.getDate() - i);
+            const dateString = loopDate.toISOString().slice(0, 10);
+            labels.push(`${loopDate.getMonth() + 1}/${loopDate.getDate()}`);
             data.push(Math.round((studyHistory[dateString] || 0) / 60));
         }
         const studyTimeCtx = document.getElementById('study-time-chart')?.getContext('2d');
         if (studyTimeCtx) {
-            this.state.studyTimeChart = new Chart(studyTimeCtx, {
+            this.state.charts.push(new Chart(studyTimeCtx, {
                 type: 'bar',
                 data: {
                     labels: labels,
@@ -120,7 +112,7 @@ export const dashboard = {
                     },
                     plugins: { legend: { display: false } }
                 }
-            });
+            }));
         }
 
 
@@ -131,9 +123,9 @@ export const dashboard = {
         };
 
         for (let i = 0; i < 7; i++) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            const dateString = d.toISOString().slice(0, 10);
+            const loopDate = new Date(today);
+            loopDate.setDate(loopDate.getDate() - i);
+            const dateString = loopDate.toISOString().slice(0, 10);
             if (quizHistory[dateString]) {
                 for (const type in totalQuizStats) {
                     if (quizHistory[dateString][type]) {
@@ -146,19 +138,17 @@ export const dashboard = {
 
         const createDoughnutChart = (elementId, labelId, labelText, stats) => {
             const ctx = document.getElementById(elementId)?.getContext('2d');
-            if (!ctx) return null;
+            if (!ctx) return;
 
-            const correct = stats.correct || 0;
-            const total = stats.total || 0;
+            const correct   = stats.correct || 0;
+            const total     = stats.total   || 0;
             const incorrect = total - correct;
-            const accuracy = total > 0 ? ((correct / total) * 100).toFixed(0) : 0;
+            const accuracy  = total > 0 ? ((correct / total) * 100).toFixed(0) : 0;
 
             const labelEl = document.getElementById(labelId);
-            if (labelEl) {
-                labelEl.textContent = `${labelText} (${correct}/${total})`;
-            }
+            if (labelEl) labelEl.textContent = `${labelText} (${correct}/${total})`;
 
-            return new Chart(ctx, {
+            this.state.charts.push(new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: total > 0 ? ['정답', '오답'] : ['기록 없음'],
@@ -194,11 +184,11 @@ export const dashboard = {
                         ctx.save();
                     }
                 }]
-            });
+            }));
         };
-        this.state.quiz1Chart = createDoughnutChart('quiz1-chart', 'quiz1-label', '영한 뜻', totalQuizStats['MULTIPLE_CHOICE_MEANING']);
-        this.state.quiz2Chart = createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸 추론', totalQuizStats['FILL_IN_THE_BLANK']);
-        this.state.quiz3Chart = createDoughnutChart('quiz3-chart', 'quiz3-label', '영영 풀이', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
+        createDoughnutChart('quiz1-chart', 'quiz1-label', '영한 뜻',  totalQuizStats['MULTIPLE_CHOICE_MEANING']);
+        createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸 추론', totalQuizStats['FILL_IN_THE_BLANK']);
+        createDoughnutChart('quiz3-chart', 'quiz3-label', '영영 풀이', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
 
 
         const textSummaryContainer = document.getElementById('dashboard-text-summary');
@@ -212,9 +202,9 @@ export const dashboard = {
                 };
 
                 for (let i = 0; i < days; i++) {
-                    const d = new Date(today);
-                    d.setDate(d.getDate() - i);
-                    const dateString = d.toISOString().slice(0, 10);
+                    const loopDate = new Date(today);
+                    loopDate.setDate(loopDate.getDate() - i);
+                    const dateString = loopDate.toISOString().slice(0, 10);
                     totalSeconds += studyHistory[dateString] || 0;
                     if (quizHistory[dateString]) {
                         for (const type in quizStats) {

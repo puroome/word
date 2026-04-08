@@ -556,6 +556,8 @@ async saveAndExitEditMode() {
         }
 
         await api.deleteWord(wordData.word);
+        // [BUG-1 수정] currentWordList에서도 해당 단어 제거
+        this.state.currentWordList = this.state.currentWordList.filter(w => w.word !== wordData.word);
         
         if (this.state.currentIndex >= this.state.currentWordList.length) {
             this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
@@ -799,6 +801,19 @@ async saveAndExitEditMode() {
             navigateAction();
         }
     },
+    // --- 콴통 헬퍼 ---
+    // 카드 뒷면 콘텐츠를 렌더링하는 중복 로직을 하나로 통합
+    _renderBackContent(wordData) {
+        this.elements.backTitle.textContent = wordData.word;
+        this.elements.backContent.innerHTML = '';
+        if (wordData.sample && wordData.sample.trim()) {
+            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
+        } else if ((!wordData.sample || !wordData.sample.trim()) && (!wordData.AISample || !wordData.AISample.en)) {
+            this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
+        }
+        this.appendAIGenButton(this.elements.backContent, wordData);
+    },
+
     async navigateBackToBack(direction) {
         if (this.state.isEditing) return;
 
@@ -814,18 +829,8 @@ async saveAndExitEditMode() {
             this.elements.cardBack.classList.add('is-slid-up');
         }
 
-        this.elements.backTitle.textContent = wordData.word;
-        
-        this.elements.backContent.innerHTML = '';
-        if (wordData.sample && wordData.sample.trim()) {
-            ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
-        } else if ((!wordData.sample || !wordData.sample.trim()) && (!wordData.AISample || !wordData.AISample.en)) {
-            this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
-        }
-
-        this.appendAIGenButton(this.elements.backContent, wordData);
-        const backImgUrl = 'images/cat-remove.png';
-        this.elements.sampleBtnImg.src = backImgUrl;
+        this._renderBackContent(wordData);
+        this.elements.sampleBtnImg.src = 'images/cat-remove.png';
     },
 
     async handleFlip() {
@@ -843,18 +848,9 @@ async saveAndExitEditMode() {
         const noSampleImgUrl = 'images/cat-add.png';
 
         if (!isBackVisible) {
-            this.elements.backTitle.textContent = wordData.word;
-            
-            this.elements.backContent.innerHTML = '';
-            if (wordData.sample && wordData.sample.trim()) {
-                 ui.displaySentences(wordData.sample.split('\n'), this.elements.backContent);
-            } else if ((!wordData.sample || !wordData.sample.trim()) && (!wordData.AISample || !wordData.AISample.en)) {
-                 this.elements.backContent.innerHTML = '<div class="flex h-full items-center justify-center text-gray-400">작성된 예문이 없습니다.<br>우클릭하여 편집하세요.</div>';
-            }
-            
-            this.appendAIGenButton(this.elements.backContent, wordData);
+            this._renderBackContent(wordData);
             this.elements.cardBack.classList.add('is-slid-up');
-            this.elements.sampleBtnImg.src = backImgUrl;
+            this.elements.sampleBtnImg.src = 'images/cat-remove.png';
         } else {
             this.elements.cardBack.classList.remove('is-slid-up');
             const hasSample = (wordData.sample && wordData.sample.trim() !== '') || (wordData.AISample && wordData.AISample.en);
@@ -899,15 +895,11 @@ async saveAndExitEditMode() {
         else if (e.key === 'ArrowDown') { e.preventDefault(); this.navigate(-1); }
         else if (e.key === 'Enter') { e.preventDefault(); this.handleFlip(); }
         else if (e.key === 'F5' || e.key === 'Escape') { e.preventDefault(); this.handleFlip(); }
-        else if (e.key === 'b' || e.key === '.') { 
+        else if (e.key === 'b' || e.key === '.' || e.key === ' ') {
+            // b / . / Space 세 키 모두 단어 음성 발음 (UX-2: 중복 제거)
             e.preventDefault();
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) { api.speak(word, 'word'); }
-        }
-        else if (e.key === ' ') {
-            e.preventDefault();
-            const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) { api.speak(word, 'word'); }
+            if (word) api.speak(word, 'word');
         } else if (e.key.toLowerCase() === 'z') { e.preventDefault(); this.navigateBackToBack(-1); }
         else if (e.key.toLowerCase() === 'x') { e.preventDefault(); this.navigateBackToBack(1); }
     },

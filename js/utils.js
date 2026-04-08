@@ -2,6 +2,18 @@ import { state } from './config.js';
 
 // --- General Utils ---
 export const utils = {
+    // --- 공통 헬퍼 ---
+    // localStorage의 미동기화 진행 데이터를 안전하게 읽어 객체로 반환
+    getUnsyncedProgress() {
+        try {
+            const item = localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES);
+            return item ? JSON.parse(item) : {};
+        } catch (e) {
+            console.warn("Error reading unsynced progress:", e);
+            return {};
+        }
+    },
+
     // [최적화] 제한된 Levenshtein 거리 계산 (속도 개선)
     // limit을 넘어가면 즉시 중단하여 긴 단어 목록 검색 시 성능 저하 방지
     levenshteinDistance(s, t, limit = Infinity) {
@@ -92,16 +104,7 @@ export const utils = {
     },
 
     getWordStatus(word) {
-        let localStatus = {};
-        try {
-            const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const item = localStorage.getItem(key);
-            if (item) {
-                const unsynced = JSON.parse(item);
-                if (unsynced[word]) localStatus = unsynced[word];
-            }
-        } catch(e) { console.warn("Error reading local progress:", e); }
-
+        const localStatus = this.getUnsyncedProgress()[word] || {};
         const progress = { ...(state.currentProgress[word] || {}), ...localStatus };
         if (Object.keys(progress).length === 0) return 'unseen';
 
@@ -113,27 +116,15 @@ export const utils = {
     },
 
     isFavorite(word) {
-        let isFav = state.currentProgress[word]?.favorite || false;
-        try {
-            const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            const item = localStorage.getItem(key);
-            if (item) {
-                const unsynced = JSON.parse(item);
-                if (unsynced[word] && unsynced[word].favorite !== undefined) {
-                    isFav = unsynced[word].favorite;
-                }
-            }
-        } catch (e) { console.warn("Error reading local favorite status:", e); }
-        return isFav;
+        const localUpdates = this.getUnsyncedProgress();
+        if (localUpdates[word] && localUpdates[word].favorite !== undefined) {
+            return localUpdates[word].favorite;
+        }
+        return state.currentProgress[word]?.favorite || false;
     },
 
     getFavoriteWords() {
-        let localUpdates = {};
-        try {
-            const key = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-            localUpdates = JSON.parse(localStorage.getItem(key) || '{}');
-        } catch (e) { console.warn("Error reading local favorites:", e); }
-
+        const localUpdates = this.getUnsyncedProgress();
         const allProgress = state.currentProgress;
         const combinedKeys = new Set([...Object.keys(allProgress), ...Object.keys(localUpdates)]);
         const favoriteWords = [];

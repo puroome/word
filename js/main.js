@@ -12,6 +12,17 @@ const studyTracker = {
     timerInterval: null,
     saveInterval: null,
     INACTIVITY_LIMIT: 30000,
+
+    // localStorage에 현재 세션 시간을 누적하는 공통 로직 (중복 제거)
+    _flushSessionTime() {
+        if (this.sessionSeconds <= 0) return;
+        try {
+            const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
+            localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
+            this.sessionSeconds = 0;
+        } catch (e) { console.error(e); }
+    },
+
     start() {
         if (this.timerInterval) return;
         this.lastActivityTimestamp = Date.now();
@@ -23,15 +34,7 @@ const studyTracker = {
                 this.sessionSeconds++;
             }
         }, 1000);
-        this.saveInterval = setInterval(() => {
-            if (this.sessionSeconds > 0) {
-                try {
-                    const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
-                    localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
-                    this.sessionSeconds = 0;
-                } catch (e) { console.error(e); }
-            }
-        }, 10000);
+        this.saveInterval = setInterval(() => this._flushSessionTime(), 10000);
         ['click', 'keydown', 'touchstart'].forEach(event => document.body.addEventListener(event, this.recordActivity, true));
     },
     stopAndSave() {
@@ -40,13 +43,7 @@ const studyTracker = {
         clearInterval(this.saveInterval);
         this.timerInterval = null;
         this.saveInterval = null;
-        try {
-            if (this.sessionSeconds > 0) {
-                const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
-                localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
-            }
-        } catch (e) { console.error(e); }
-        this.sessionSeconds = 0;
+        this._flushSessionTime();
         ['click', 'keydown', 'touchstart'].forEach(event => document.body.removeEventListener(event, this.recordActivity, true));
     },
     recordActivity() {
@@ -408,8 +405,8 @@ const app = {
     },
     updateLastUpdatedText() {
         if (this.elements.lastUpdatedText && state.lastCacheTimestamp) {
-            const d = new Date(state.lastCacheTimestamp);
-            const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            const cacheDate = new Date(state.lastCacheTimestamp);
+            const dateString = `${cacheDate.getFullYear()}-${String(cacheDate.getMonth() + 1).padStart(2, '0')}-${String(cacheDate.getDate()).padStart(2, '0')} ${String(cacheDate.getHours()).padStart(2, '0')}:${String(cacheDate.getMinutes()).padStart(2, '0')}`;
             this.elements.lastUpdatedText.textContent = `최종 업데이트 : ${dateString}`;
             this.elements.lastUpdatedText.classList.remove('hidden');
         } else if (this.elements.lastUpdatedText) {
