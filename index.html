@@ -66,10 +66,71 @@
                 <div class="inline-block">
                     <div class="flex flex-col sm:flex-row justify-center items-center sm:gap-x-6 gap-y-4">
                         <div id="select-learning-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-rotate-2 w-44 h-44">
-                            <img src="images/learn.png" alt="학습 모드" class="w-full h-full object-cover">
+                            <svg viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" aria-label="어휘카드 학습">
+                              <defs>
+                                <filter id="hd-learn"><feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="3" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+                              </defs>
+                              <rect width="176" height="176" fill="rgba(197,188,240,0.28)"/>
+                              <g filter="url(#hd-learn)" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Card stack back -->
+                                <rect x="50" y="68" width="88" height="66" rx="9" fill="rgba(197,188,240,0.4)" stroke="#9d95e8" stroke-width="2.2" transform="rotate(8 94 101)"/>
+                                <!-- Card stack middle -->
+                                <rect x="46" y="62" width="92" height="68" rx="10" fill="rgba(215,209,250,0.5)" stroke="#8880e4" stroke-width="2.3" transform="rotate(-4 92 96)"/>
+                                <!-- Card front -->
+                                <rect x="40" y="56" width="96" height="74" rx="10" fill="rgba(238,235,255,0.95)" stroke="#7c72e0" stroke-width="2.5"/>
+                                <rect x="40" y="56" width="96" height="15" rx="10" fill="rgba(197,188,240,0.55)"/>
+                                <rect x="40" y="64" width="96" height="7" fill="rgba(197,188,240,0.55)"/>
+                                <!-- A letter -->
+                                <text x="74" y="103" font-size="30" font-weight="700" fill="#7c72e0" font-family="Georgia,serif" text-anchor="middle">A</text>
+                                <!-- Arrow -->
+                                <line x1="83" y1="98" x2="100" y2="98" stroke="#9d95e8" stroke-width="2.2"/>
+                                <path d="M96 94 L101 98 L96 102" stroke="#9d95e8" stroke-width="2.2" fill="none"/>
+                                <!-- 가 -->
+                                <text x="115" y="103" font-size="20" font-weight="700" fill="#9d95e8" font-family="'Noto Sans KR',sans-serif" text-anchor="middle">가</text>
+                                <!-- Bottom text lines -->
+                                <line x1="54" y1="116" x2="90" y2="116" stroke="#b0a8e8" stroke-width="1.6"/>
+                                <line x1="54" y1="124" x2="78" y2="124" stroke="#c4bdf4" stroke-width="1.4"/>
+                                <!-- Sparkle top-right -->
+                                <path d="M143 40 L144.5 33 L146 40 L153 41.5 L146 43 L144.5 50 L143 43 L136 41.5 Z" stroke="#b0a8e8" stroke-width="1.5" fill="rgba(197,188,240,0.2)"/>
+                                <!-- Sparkle small bottom-left -->
+                                <path d="M30 130 L31 125 L32 130 L37 131 L32 132 L31 137 L30 132 L25 131 Z" stroke="#c4bdf4" stroke-width="1.2" fill="none"/>
+                                <!-- Small dot accents -->
+                                <circle cx="32" cy="62" r="3" fill="rgba(197,188,240,0.5)"/>
+                                <circle cx="148" cy="68" r="2.5" fill="rgba(176,168,232,0.4)"/>
+                              </g>
+                            </svg>
                         </div>
                         <div id="select-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-2 w-44 h-44">
-                            <img src="images/test.png" alt="퀴즈 모드" class="w-full h-full object-cover">
+                            <svg viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" aria-label="어휘 퀴즈">
+                              <defs>
+                                <filter id="hd-test"><feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="3" seed="9" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+                              </defs>
+                              <rect width="176" height="176" fill="rgba(75,200,160,0.18)"/>
+                              <g filter="url(#hd-test)" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Clipboard body -->
+                                <rect x="44" y="48" width="88" height="108" rx="10" fill="rgba(220,248,238,0.75)" stroke="#4bc8a0" stroke-width="2.5"/>
+                                <!-- Top clip -->
+                                <rect x="66" y="38" width="44" height="20" rx="10" fill="rgba(190,238,215,0.8)" stroke="#4bc8a0" stroke-width="2.5"/>
+                                <!-- Clip hole -->
+                                <circle cx="88" cy="48" r="5" fill="#4bc8a0"/>
+                                <!-- Row 1: empty + line -->
+                                <circle cx="62" cy="78" r="7" stroke="#4bc8a0" stroke-width="2.2"/>
+                                <line x1="77" y1="78" x2="120" y2="78" stroke="#a8d8c8" stroke-width="2"/>
+                                <!-- Row 2: checked -->
+                                <circle cx="62" cy="100" r="7" fill="rgba(75,200,160,0.35)" stroke="#4bc8a0" stroke-width="2.2"/>
+                                <path d="M57.5 100 L60.5 103.5 L67 96.5" stroke="#4bc8a0" stroke-width="2.5" fill="none"/>
+                                <line x1="77" y1="100" x2="118" y2="100" stroke="#a8d8c8" stroke-width="2"/>
+                                <!-- Row 3: empty -->
+                                <circle cx="62" cy="122" r="7" stroke="#3db8a8" stroke-width="2.2"/>
+                                <line x1="77" y1="122" x2="116" y2="122" stroke="#c0e4d8" stroke-width="2"/>
+                                <!-- Pencil (rotated) -->
+                                <g transform="rotate(-38 130 145)">
+                                  <rect x="122" y="118" width="10" height="40" rx="3" fill="rgba(75,200,160,0.35)" stroke="#4bc8a0" stroke-width="2"/>
+                                  <path d="M122 158 L127 170 L132 158 Z" fill="#4bc8a0" stroke="#4bc8a0" stroke-width="1"/>
+                                  <line x1="122" y1="125" x2="132" y2="125" stroke="#4bc8a0" stroke-width="1.5"/>
+                                </g>
+                              </g>
+                            </svg>
                         </div>
                     </div>
                      <div class="grid grid-cols-2 gap-4 mt-4">
@@ -123,13 +184,94 @@
                      </div>
                     <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
                         <div id="start-meaning-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-rotate-2 w-40 h-40">
-                            <img src="images/quiz1.png" alt="뜻 맞히기" class="w-full h-full object-cover">
+                             <svg viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" aria-label="영한 뜻 맞히기">
+                               <defs>
+                                 <filter id="hd-q1"><feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="3" seed="13" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+                               </defs>
+                               <rect width="176" height="176" fill="rgba(224,114,114,0.15)"/>
+                               <g filter="url(#hd-q1)" stroke-linecap="round" stroke-linejoin="round">
+                                 <!-- Left speech bubble (English) -->
+                                 <path d="M16 46 C16 28 30 20 50 20 L96 20 C116 20 128 28 128 46 C128 64 116 72 96 72 L62 72 L52 90 L46 72 L50 72 C30 72 16 64 16 46 Z" fill="rgba(240,180,180,0.3)" stroke="#e07272" stroke-width="2.5"/>
+                                 <text x="72" y="55" font-size="30" font-weight="700" fill="#e07272" font-family="Georgia,serif" text-anchor="middle">A</text>
+                                 <!-- Curved arrow -->
+                                 <path d="M116 82 Q140 106 120 124" stroke="#e09090" stroke-width="2.2" fill="none"/>
+                                 <path d="M115 120 L121 126 L126 118" stroke="#e09090" stroke-width="2.2" fill="none"/>
+                                 <!-- Right speech bubble (Korean) -->
+                                 <path d="M46 108 C46 91 58 83 78 83 L130 83 C150 83 160 91 160 108 C160 125 150 133 130 133 L108 133 L120 151 L86 133 L78 133 C58 133 46 125 46 108 Z" fill="rgba(224,160,160,0.25)" stroke="#e08080" stroke-width="2.5"/>
+                                 <text x="103" y="117" font-size="18" font-weight="700" fill="#e07272" font-family="'Noto Sans KR',sans-serif" text-anchor="middle">사과</text>
+                                 <!-- Deco dots -->
+                                 <circle cx="150" cy="36" r="5" fill="rgba(224,114,114,0.3)"/>
+                                 <circle cx="162" cy="50" r="3" fill="rgba(224,114,114,0.22)"/>
+                                 <circle cx="18" cy="150" r="4" fill="rgba(224,114,114,0.28)"/>
+                               </g>
+                             </svg>
                         </div>
                         <div id="start-blank-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 w-40 h-40">
-                            <img src="images/quiz2.png" alt="빈칸 채우기" class="w-full h-full object-cover">
+                             <svg viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" aria-label="빈칸 채우기">
+                               <defs>
+                                 <filter id="hd-q2"><feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="3" seed="19" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+                               </defs>
+                               <rect width="176" height="176" fill="rgba(224,144,48,0.15)"/>
+                               <g filter="url(#hd-q2)" stroke-linecap="round" stroke-linejoin="round">
+                                 <!-- Notebook paper -->
+                                 <rect x="22" y="32" width="132" height="124" rx="10" fill="rgba(255,242,210,0.65)" stroke="#e09030" stroke-width="2.5"/>
+                                 <!-- Left margin dashed line -->
+                                 <line x1="46" y1="32" x2="46" y2="156" stroke="#e0b060" stroke-width="1.5" stroke-dasharray="5 4"/>
+                                 <!-- Top text lines -->
+                                 <line x1="58" y1="54" x2="142" y2="54" stroke="#e8c888" stroke-width="1.6"/>
+                                 <line x1="58" y1="70" x2="140" y2="70" stroke="#e8c888" stroke-width="1.6"/>
+                                 <!-- The [___?] ran line -->
+                                 <line x1="58" y1="88" x2="80" y2="88" stroke="#e8c888" stroke-width="1.6"/>
+                                 <line x1="84" y1="88" x2="128" y2="88" stroke="#e09030" stroke-width="3"/>
+                                 <text x="106" y="82" font-size="18" font-weight="700" fill="#e09030" font-family="Georgia,serif" text-anchor="middle">?</text>
+                                 <line x1="132" y1="88" x2="146" y2="88" stroke="#e8c888" stroke-width="1.6"/>
+                                 <!-- More lines -->
+                                 <line x1="58" y1="106" x2="140" y2="106" stroke="#e8c888" stroke-width="1.6"/>
+                                 <line x1="58" y1="122" x2="132" y2="122" stroke="#e8d090" stroke-width="1.4"/>
+                                 <!-- Word-choice boxes -->
+                                 <rect x="30" y="136" width="34" height="16" rx="5" stroke="#e09030" stroke-width="2" fill="rgba(224,144,48,0.12)"/>
+                                 <rect x="71" y="136" width="34" height="16" rx="5" stroke="#d4a840" stroke-width="2" fill="rgba(212,168,64,0.14)"/>
+                                 <rect x="112" y="136" width="34" height="16" rx="5" stroke="#e09030" stroke-width="2" fill="rgba(224,144,48,0.12)"/>
+                                 <line x1="36" y1="144" x2="58" y2="144" stroke="#e0b060" stroke-width="1.4"/>
+                                 <line x1="77" y1="144" x2="99" y2="144" stroke="#d4a840" stroke-width="1.4"/>
+                                 <line x1="118" y1="144" x2="140" y2="144" stroke="#e0b060" stroke-width="1.4"/>
+                               </g>
+                             </svg>
                         </div>
                         <div id="start-definition-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-2 w-40 h-40">
-                            <img src="images/quiz3.png" alt="영영풀이 퀴즈" class="w-full h-full object-cover">
+                             <svg viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" aria-label="영영 풀이">
+                               <defs>
+                                 <filter id="hd-q3"><feTurbulence type="fractalNoise" baseFrequency="0.032" numOctaves="3" seed="25" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+                               </defs>
+                               <rect width="176" height="176" fill="rgba(107,168,224,0.18)"/>
+                               <g filter="url(#hd-q3)" stroke-linecap="round" stroke-linejoin="round">
+                                 <!-- Left book page -->
+                                 <path d="M26 72 C26 72 52 66 88 73 L88 152 C88 152 54 146 26 151 Z" fill="rgba(180,215,250,0.38)" stroke="#6ba8e0" stroke-width="2.5"/>
+                                 <!-- Right book page -->
+                                 <path d="M150 72 C150 72 124 66 88 73 L88 152 C88 152 122 146 150 151 Z" fill="rgba(160,200,244,0.32)" stroke="#7ab8e8" stroke-width="2.5"/>
+                                 <!-- Spine -->
+                                 <line x1="88" y1="73" x2="88" y2="152" stroke="#6ba8e0" stroke-width="2"/>
+                                 <!-- Left text lines -->
+                                 <line x1="38" y1="88" x2="82" y2="86" stroke="#a0c8e8" stroke-width="1.8"/>
+                                 <line x1="38" y1="100" x2="80" y2="98" stroke="#a0c8e8" stroke-width="1.8"/>
+                                 <line x1="38" y1="112" x2="76" y2="110" stroke="#b8d8f4" stroke-width="1.6"/>
+                                 <line x1="38" y1="124" x2="78" y2="122" stroke="#b8d8f4" stroke-width="1.6"/>
+                                 <line x1="38" y1="136" x2="70" y2="134" stroke="#c4e0f8" stroke-width="1.4"/>
+                                 <!-- Right text lines -->
+                                 <line x1="94" y1="88" x2="138" y2="86" stroke="#b0ccf0" stroke-width="1.8"/>
+                                 <line x1="94" y1="100" x2="136" y2="98" stroke="#b0ccf0" stroke-width="1.8"/>
+                                 <line x1="94" y1="112" x2="132" y2="110" stroke="#c0d8f8" stroke-width="1.6"/>
+                                 <line x1="94" y1="124" x2="134" y2="122" stroke="#c0d8f8" stroke-width="1.6"/>
+                                 <!-- Magnifying glass -->
+                                 <circle cx="122" cy="42" r="24" fill="rgba(107,168,224,0.18)" stroke="#6ba8e0" stroke-width="2.5"/>
+                                 <!-- Glass shine -->
+                                 <path d="M110 31 Q118 25 127 28" stroke="rgba(255,255,255,0.6)" stroke-width="2" fill="none"/>
+                                 <!-- Handle -->
+                                 <line x1="140" y1="60" x2="156" y2="76" stroke="#6ba8e0" stroke-width="4.5" stroke-linecap="round"/>
+                                 <!-- E-E inside glass -->
+                                 <text x="122" y="46" font-size="13" font-weight="700" fill="#6ba8e0" font-family="Georgia,serif" text-anchor="middle">E&#x2192;E</text>
+                               </g>
+                             </svg>
                         </div>
                     </div>
                 </div>
