@@ -397,13 +397,13 @@ body::after {
 }
 #learning-loader p { color: rgba(255,255,255,0.62) !important; }
 
-/* Main card */
+/* Main card — 살짝 더 밝게: 배경 대비 확보 */
 #learning-app-container {
-  background: rgba(255,255,255,0.08) !important;
+  background: rgba(255,255,255,0.11) !important;
   backdrop-filter: blur(24px) !important;
   -webkit-backdrop-filter: blur(24px) !important;
-  border: 1px solid rgba(255,255,255,0.15) !important;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.4) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12) !important;
 }
 #learning-app-container .relative { overflow: hidden; border-radius: 1rem; }
 
@@ -424,7 +424,8 @@ body::after {
 }
 #explanation-display { color: rgba(255,255,255,0.82) !important; }
 
-/* Card back (slide-up panel) */
+/* Card back (slide-up panel)
+   — 앞면 블리드스루 방지: 완전 불투명 처리 */
 #learning-card-back {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -434,16 +435,16 @@ body::after {
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  background: rgba(5,5,30,0.75) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* 완전 불투명: 앞면이 절대 비치지 않도록 */
+  background: #1a1535 !important;
+  border: 1px solid rgba(139,92,246,0.25) !important;
   border-radius: 1rem;
+  /* 블러 제거: 아래에 앞면 카드가 있으므로 적용하면 안됨 */
 }
 #learning-card-back.is-slid-up { transform: translateY(0); opacity: 1; pointer-events: auto; }
 #learning-card-front { min-height: 45vh; }
 #learning-back-title   { color: white !important; }
-#learning-back-content { color: rgba(255,255,255,0.85) !important; }
+#learning-back-content { color: rgba(255,255,255,0.88) !important; }
 
 /* Bottom nav buttons */
 #learning-fixed-buttons {
@@ -588,12 +589,13 @@ body::after {
 }
 #global-loader-text { color: rgba(255,255,255,0.85) !important; }
 
-/* Translation tooltip */
+/* Translation tooltip — 번역 중 / 결과 표시 */
 #translation-tooltip {
-  background: rgba(12,10,36,0.92) !important;
-  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(30,24,64,0.97) !important;
+  border: 1px solid rgba(139,92,246,0.4);
   backdrop-filter: blur(10px);
   color: white !important;
+  font-weight: 500;
 }
 #translation-tooltip::after {
   content: '';
@@ -626,9 +628,13 @@ body::after {
    ================================================================ */
 .interactive-word { user-select: none; -webkit-user-select: none; }
 .interactive-word:hover {
-  background-color: rgba(139,92,246,0.22);
-  border-radius: 0.25rem;
+  /* 어두운 테마용: 보라 반투명 하이라이트 */
+  background-color: rgba(139,92,246,0.35);
+  border-radius: 0.3rem;
   cursor: pointer;
+  color: white !important;
+  /* 흰 배경 완전 차단 */
+  box-shadow: none;
 }
 #word-display { white-space: nowrap; cursor: pointer; }
 
