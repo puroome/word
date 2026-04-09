@@ -197,7 +197,7 @@ export const ui = {
             }
 
             const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group';
+            p.className = 'p-2 rounded transition-colors hover:bg-white cursor-pointer relative group shadow-sm hover:shadow';
 
             const showTranslation = async (event) => {
                 state.activeTranslationTarget = p;
