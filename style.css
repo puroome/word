@@ -421,23 +421,14 @@ body {
 
 /* Word header — soft violet neumorphic pill */
 #word-header {
-  background: linear-gradient(135deg, #c5bcf0, #b0a8e8) !important;
+  background: #ddd6fe !important; /* 깔끔하고 부드러운 파스텔톤 보라색 */
   border: none !important;
   border-radius: var(--nm-radius) !important;
-  box-shadow: 5px 5px 12px rgba(120,110,200,0.35), -4px -4px 10px rgba(255,255,255,0.7) !important;
+  box-shadow: 5px 5px 12px rgba(120,110,200,0.25), -4px -4px 10px rgba(255,255,255,0.8) !important;
   position: relative !important;
   overflow: hidden !important;
   margin-bottom: 1rem;
   transition: box-shadow 0.3s ease !important;
-}
-#word-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 50%;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.35), transparent);
-  pointer-events: none;
-  border-radius: var(--nm-radius) var(--nm-radius) 50% 50%;
 }
 #word-header:hover {
   box-shadow: 8px 8px 18px rgba(120,110,200,0.4), -6px -6px 14px rgba(255,255,255,0.8) !important;
