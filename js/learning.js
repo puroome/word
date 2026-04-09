@@ -1042,7 +1042,7 @@ async saveAndExitEditMode() {
     },
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
         const p = document.createElement('p');
-        p.className = 'p-2 rounded transition-colors hover:bg-gray-200 cursor-pointer relative group'; 
+        p.className = 'p-2 rounded transition-colors hover:bg-white cursor-pointer relative group shadow-sm hover:shadow'; 
         const botBtn = document.createElement('button');
         botBtn.className = "float-left mr-2 text-base focus:outline-none transition-transform hover:scale-110"; 
         botBtn.innerHTML = "🤖";
