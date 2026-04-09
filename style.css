@@ -594,7 +594,7 @@ body {
 #quiz-result-modal > div {
   background: var(--nm-bg) !important;
   border: none !important;
-  box-shadow: var(--nm-shadow-out) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important; /* 얼룩진 입체 그림자 대신 깔끔한 단일 팝업 그림자로 변경 */
   border-radius: var(--nm-radius-lg) !important;
 }
 #quiz-result-modal h2 { color: var(--nm-text) !important; }
