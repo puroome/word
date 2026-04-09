@@ -108,11 +108,10 @@ body {
 }
 
 #tts-toggle-btn {
-  background: var(--nm-bg) !important;
   border: none !important;
-  color: var(--nm-accent) !important;
+  color: #1f2937 !important; /* 텍스트는 항상 검정색 */
   box-shadow: var(--nm-shadow-out) !important;
-  transition: transform 0.6s, box-shadow 0.2s;
+  transition: transform 0.6s, box-shadow 0.2s, background-color 0.3s;
   transform-style: preserve-3d;
 }
 #tts-toggle-btn.is-flipped { transform: rotateY(180deg); }
@@ -195,9 +194,9 @@ body {
 
 /* Dashboard / Mistakes / Favorites buttons */
 #select-dashboard-btn {
-  background: var(--nm-bg) !important;
+  background: #d1fae5 !important; /* 옅은 녹색 */
   border: none !important;
-  color: #2da8a8 !important;
+  color: #1f2937 !important; /* 검정색 */
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -210,9 +209,9 @@ body {
 #select-dashboard-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
 #select-mistakes-btn {
-  background: var(--nm-bg) !important;
+  background: #ffedd5 !important; /* 옅은 주황색 */
   border: none !important;
-  color: #e09030 !important;
+  color: #1f2937 !important; /* 검정색 */
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -225,9 +224,9 @@ body {
 #select-mistakes-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
 #select-favorites-btn {
-  background: var(--nm-bg) !important;
+  background: #fef9c3 !important; /* 옅은 노란색 */
   border: none !important;
-  color: #d4a017 !important;
+  color: #1f2937 !important; /* 검정색 */
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -461,7 +460,7 @@ body {
 #explanation-container {
   background: var(--nm-bg) !important;
   border: none !important;
-  box-shadow: var(--nm-shadow-in) !important;
+  box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
 }
 #explanation-display { color: var(--nm-text-sub) !important; }
