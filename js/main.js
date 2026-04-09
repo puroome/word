@@ -130,10 +130,8 @@ const app = {
             if (savedVoice) {
                 state.currentVoiceSet = savedVoice;
                 this.elements.ttsToggleText.textContent = savedVoice;
-                this.elements.ttsToggleBtn.classList.toggle('bg-indigo-700', savedVoice === 'UK');
-                this.elements.ttsToggleBtn.classList.toggle('hover:bg-indigo-800', savedVoice === 'UK');
-                this.elements.ttsToggleBtn.classList.toggle('bg-red-500', savedVoice === 'US');
-                this.elements.ttsToggleBtn.classList.toggle('hover:bg-red-600', savedVoice === 'US');
+                this.elements.ttsToggleBtn.classList.toggle('bg-blue-100', savedVoice === 'UK');
+                this.elements.ttsToggleBtn.classList.toggle('bg-red-100', savedVoice === 'US');
             }
             const savedPracticeMode = localStorage.getItem(state.LOCAL_STORAGE_KEYS.PRACTICE_MODE);
             if (savedPracticeMode === 'true') {
@@ -420,10 +418,8 @@ const app = {
         setTimeout(() => {
             state.currentVoiceSet = (state.currentVoiceSet === 'UK') ? 'US' : 'UK';
             this.elements.ttsToggleText.textContent = state.currentVoiceSet;
-            btn.classList.toggle('bg-indigo-700', state.currentVoiceSet === 'UK');
-            btn.classList.toggle('hover:bg-indigo-800', state.currentVoiceSet === 'UK');
-            btn.classList.toggle('bg-red-500', state.currentVoiceSet === 'US');
-            btn.classList.toggle('hover:bg-red-600', state.currentVoiceSet === 'US');
+            btn.classList.toggle('bg-blue-100', state.currentVoiceSet === 'UK');
+            btn.classList.toggle('bg-red-100', state.currentVoiceSet === 'US');
             try { localStorage.setItem(state.LOCAL_STORAGE_KEYS.TTS_VOICE, state.currentVoiceSet); } catch (e) { console.error(e); }
         }, 250);
     },
