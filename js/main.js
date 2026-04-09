@@ -130,7 +130,7 @@ const app = {
             if (savedVoice) {
                 state.currentVoiceSet = savedVoice;
                 this.elements.ttsToggleText.textContent = savedVoice;
-                this.elements.ttsToggleBtn.classList.toggle('bg-blue-100', savedVoice === 'UK');
+                this.elements.ttsToggleBtn.classList.toggle('bg-blue-200/80', savedVoice === 'UK');
                 this.elements.ttsToggleBtn.classList.toggle('bg-red-100', savedVoice === 'US');
             }
             const savedPracticeMode = localStorage.getItem(state.LOCAL_STORAGE_KEYS.PRACTICE_MODE);
