@@ -401,8 +401,9 @@ export const quizMode = {
 
                 if (index < parts.length - 1) {
                     const blankSpan = document.createElement('span');
-                    blankSpan.className = 'quiz-blank inline-block font-mono text-blue-600';
-                    blankSpan.textContent = '＿＿＿＿';
+                    // 글자기호 대신 px-6(좌우여백)과 underline(밑줄)을 조합하여 완벽한 실선을 만듭니다.
+                    blankSpan.className = 'quiz-blank inline-block text-blue-600 underline decoration-[3px] underline-offset-8 px-6 mx-1';
+                    blankSpan.innerHTML = '&nbsp;'; // 보이지 않는 공백 삽입
                     p.appendChild(blankSpan);
                 }
             });
