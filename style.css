@@ -330,14 +330,16 @@ body {
 .choice-item.correct {
   background: var(--nm-bg) !important;
   border: none !important;
-  color: #2da875 !important;
+  color: #059669 !important; /* 더 짙고 선명한 에메랄드 녹색 */
+  font-weight: 700 !important; /* 글씨를 굵게 하여 가독성 대폭 향상 */
   box-shadow: inset 4px 4px 10px rgba(45,168,117,0.25), inset -4px -4px 10px rgba(255,255,255,0.8) !important;
   transform: scale(1.03);
 }
 .choice-item.incorrect {
   background: var(--nm-bg) !important;
   border: none !important;
-  color: #e05c5c !important;
+  color: #dc2626 !important; /* 더 짙고 선명한 붉은색 */
+  font-weight: 700 !important; /* 글씨를 굵게 하여 가독성 대폭 향상 */
   box-shadow: inset 4px 4px 10px rgba(224,92,92,0.20), inset -4px -4px 10px rgba(255,255,255,0.8) !important;
 }
 .choice-item.submitting {
