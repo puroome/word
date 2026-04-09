@@ -426,7 +426,9 @@ export const quizMode = {
         });
 
         const passLi = document.createElement('li');
-        passLi.className = 'choice-item border-2 border-red-500 bg-red-500 hover:bg-red-600 text-white p-4 rounded-lg cursor-pointer flex items-center justify-center transition-all font-bold text-lg';
+        passLi.className = 'choice-item p-4 rounded-lg cursor-pointer flex items-center justify-center transition-all font-bold text-lg';
+        passLi.style.setProperty('background', '#ffe4e6', 'important'); /* 옅은 붉은색 */
+        passLi.style.setProperty('color', '#1f2937', 'important'); /* 검정색 텍스트 */
         passLi.innerHTML = `<span>PASS</span>`;
         passLi.onclick = () => this.checkAnswer(passLi, 'USER_PASSED');
         this.elements.choices.appendChild(passLi);
