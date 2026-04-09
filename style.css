@@ -458,12 +458,11 @@ body {
 #meaning-display { color: var(--nm-text) !important; }
 
 #explanation-container {
-  background: var(--nm-bg) !important;
+  background: transparent !important; /* 배경 투명하게 */
   border: none !important;
-  box-shadow: var(--nm-shadow-out) !important;
-  border-radius: var(--nm-radius-sm) !important;
+  box-shadow: none !important; /* 양각/음각 그림자 모두 제거 */
 }
-#explanation-display { color: var(--nm-text-sub) !important; }
+#explanation-display { color: var(--nm-text) !important; }
 
 /* Card back (slide-up) */
 #learning-card-back {
