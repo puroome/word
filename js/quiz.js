@@ -464,7 +464,7 @@ export const quizMode = {
         setTimeout(() => {
             if (this.state.sessionAnsweredInSet >= 10) this.showSessionResultModal();
             else this.displayNextQuiz();
-        }, 600);
+        }, 1200);
     },
     showLoader(isLoading, message = '퀴즈를 준비 중입니다...') {
         this.elements.loader.classList.toggle('hidden', !isLoading);
