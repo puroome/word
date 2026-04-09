@@ -307,9 +307,9 @@ body {
 
 /* Quiz question area */
 #quiz-question-display {
-  background: var(--nm-bg) !important;
+  background: #d1fae5 !important; /* 옅은 파스텔 녹색으로 변경 */
   border: none !important;
-  box-shadow: var(--nm-shadow-in) !important;
+  box-shadow: var(--nm-shadow-in) !important; /* 음각 그림자는 그대로 유지 */
   border-radius: var(--nm-radius) !important;
 }
 
