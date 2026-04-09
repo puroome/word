@@ -325,7 +325,7 @@ body {
 .choice-item:hover {
   box-shadow: var(--nm-hover-out) !important;
   transform: scale(1.02);
-  color: var(--nm-accent) !important;
+  color: #7e22ce !important; /* 선명하고 진한 보라색 적용 */
 }
 .choice-item.correct {
   background: var(--nm-bg) !important;
