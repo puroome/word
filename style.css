@@ -550,7 +550,7 @@ body {
 #range-input-modal > div {
   background: var(--nm-bg) !important;
   border: none !important;
-  box-shadow: var(--nm-shadow-out) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important; /* 깔끔한 단일 팝업 그림자로 변경 */
   border-radius: var(--nm-radius-lg) !important;
 }
 #range-input-field {
