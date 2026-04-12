@@ -1,7 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
-import { utils, playSequence, correctBeep, incorrectBeep } from './utils.js';
-
+import { utils, playSequence, playSingleBeep, correctBeep, incorrectBeep } from './utils.js';
 export const quizMode = {
     state: {
         currentQuiz: {},
@@ -11,16 +10,8 @@ export const quizMode = {
         sessionCorrectInSet: 0,
         sessionMistakes: [],
         answeredWords: new Set(),
-        preloadedQuizzes: {
-            'MULTIPLE_CHOICE_MEANING': null,
-            'FILL_IN_THE_BLANK': null,
-            'MULTIPLE_CHOICE_DEFINITION': null
-        },
-        isPreloading: {
-            'MULTIPLE_CHOICE_MEANING': false,
-            'FILL_IN_THE_BLANK': false,
-            'MULTIPLE_CHOICE_DEFINITION': false
-        },
+        preloadedQuizzes: { 'MULTIPLE_CHOICE_MEANING': null, 'FILL_IN_THE_BLANK': null, 'MULTIPLE_CHOICE_DEFINITION': null, 'LISTENING_CLOZE': null },
+    isPreloading: { 'MULTIPLE_CHOICE_MEANING': false, 'FILL_IN_THE_BLANK': false, 'MULTIPLE_CHOICE_DEFINITION': false, 'LISTENING_CLOZE': false },
         currentRangeInputTarget: null,
         isFinalResult: false,  // [BUG-3] 텍스트 문자열 비교 대신 사용하는 플래그
     },
@@ -31,6 +22,7 @@ export const quizMode = {
             startMeaningQuizBtn: document.getElementById('start-meaning-quiz-btn'),
             startBlankQuizBtn: document.getElementById('start-blank-quiz-btn'),
             startDefinitionQuizBtn: document.getElementById('start-definition-quiz-btn'),
+            startListeningQuizBtn: document.getElementById('start-listening-quiz-btn'),
             loader: document.getElementById('quiz-loader'),
             loaderText: document.getElementById('quiz-loader-text'),
             contentContainer: document.getElementById('quiz-content-container'),
@@ -56,7 +48,8 @@ export const quizMode = {
     bindEvents() {
         this.elements.startMeaningQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_MEANING'));
         this.elements.startBlankQuizBtn.addEventListener('click', () => this.start('FILL_IN_THE_BLANK'));
-        this.elements.startDefinitionQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_DEFINITION'));
+                this.elements.startDefinitionQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_DEFINITION'));
+        this.elements.startListeningQuizBtn.addEventListener('click', () => this.start('LISTENING_CLOZE'));
 
         this.elements.quizRangeStart.addEventListener('click', (e) => this.promptForRangeValue(e.target));
         this.elements.quizRangeEnd.addEventListener('click', (e) => this.promptForRangeValue(e.target));
@@ -360,18 +353,17 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[currentQuizType] === 'correct') return false;
             return true;
         });
-        if (currentQuizType === 'FILL_IN_THE_BLANK') {
+        if (currentQuizType === 'FILL_IN_THE_BLANK' || currentQuizType === 'LISTENING_CLOZE') {
             candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
-
         if (candidates.length === 0) return null;
         utils.shuffleArray(candidates);
-
         for (const wordData of candidates) {
             let quiz = null;
             if (currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, allWords);
             else if (currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, allWords);
             else if (currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, allWords);
+            else if (currentQuizType === 'LISTENING_CLOZE') quiz = await this.createListeningClozeQuiz(wordData, allWords);
             if (quiz) return quiz;
         }
         return null;
@@ -411,12 +403,27 @@ export const quizMode = {
             questionDisplay.classList.add('items-center', 'justify-center');
             questionDisplay.innerHTML = `<h1 id="quiz-word" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer">${question.word}</h1>`;
             questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); };
-        } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
-            questionDisplay.classList.add('items-start', 'text-left');
-            questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
-        }
-
-        this.elements.choices.innerHTML = '';
+            } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
+        questionDisplay.classList.add('items-start', 'text-left');
+        questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
+    } else if (type === 'LISTENING_CLOZE') {
+        questionDisplay.classList.add('items-start', 'text-left', 'flex-col', 'gap-2');
+        const koreanP = document.createElement('p');
+        koreanP.className = 'text-base text-gray-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 w-full leading-relaxed';
+        koreanP.textContent = question.korean;
+        const btnRow = document.createElement('div');
+        btnRow.className = 'flex items-center gap-3 w-full mt-1';
+        const replayBtn = document.createElement('button');
+        replayBtn.id = 'listening-replay-btn';
+        replayBtn.className = 'flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm flex-shrink-0';
+        replayBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> 다시 듣기`;
+        replayBtn.onclick = () => this._playListeningCloze(question.sentence, question.word);
+        btnRow.appendChild(replayBtn);
+        questionDisplay.appendChild(koreanP);
+        questionDisplay.appendChild(btnRow);
+        setTimeout(() => this._playListeningCloze(question.sentence, question.word), 400);
+    }
+    this.elements.choices.innerHTML = '';
         choices.forEach((choice, index) => {
             const li = document.createElement('li');
             li.className = 'choice-item border-2 border-gray-300 py-3 px-4 rounded-lg cursor-pointer flex items-start transition-all text-lg hover:bg-blue-50';
@@ -567,16 +574,16 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
             return true;
         });
-        if (quizType === 'FILL_IN_THE_BLANK') {
+                if (quizType === 'FILL_IN_THE_BLANK' || quizType === 'LISTENING_CLOZE') {
             candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
         if (candidates.length === 0) return null;
-
         utils.shuffleArray(candidates);
         const wordData = candidates[0];
-        if (quizType === 'MULTIPLE_CHOICE_MEANING')    return this.createMeaningQuiz(wordData, allWords);
-        if (quizType === 'FILL_IN_THE_BLANK')           return this.createBlankQuiz(wordData, allWords);
-        if (quizType === 'MULTIPLE_CHOICE_DEFINITION')  return await this.createDefinitionQuiz(wordData, allWords);
+        if (quizType === 'MULTIPLE_CHOICE_MEANING') return this.createMeaningQuiz(wordData, allWords);
+        if (quizType === 'FILL_IN_THE_BLANK') return this.createBlankQuiz(wordData, allWords);
+        if (quizType === 'MULTIPLE_CHOICE_DEFINITION') return await this.createDefinitionQuiz(wordData, allWords);
+        if (quizType === 'LISTENING_CLOZE') return await this.createListeningClozeQuiz(wordData, allWords);
         return null;
     },
     createMeaningQuiz(correctWordData, allWordsData) {
@@ -601,13 +608,59 @@ export const quizMode = {
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'FILL_IN_THE_BLANK', question: { sentence_with_blank: sentenceWithBlank, word: correctWordData.word }, choices, answer: correctWordData.word };
     },
-    async createDefinitionQuiz(correctWordData, allWordsData) {
+        async createDefinitionQuiz(correctWordData, allWordsData) {
         const definition = await api.fetchDefinition(correctWordData.word);
         if (!definition) return null;
-
         const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);
         if (!wrongAnswers) return null;
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_DEFINITION', question: { definition, word: correctWordData.word }, choices, answer: correctWordData.word };
+    },
+
+    async createListeningClozeQuiz(correctWordData, allWordsData) {
+        if (!correctWordData.sample || !correctWordData.sample.trim()) return null;
+        const firstLine = correctWordData.sample.split('\n')[0]
+            .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, '')
+            .replace(/\*/g, '').trim();
+        const placeholderRegex = new RegExp(`\\b${correctWordData.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+        if (!firstLine.match(placeholderRegex)) return null;
+        const koreanMeaning = await api.translate(firstLine);
+        if (!koreanMeaning || koreanMeaning.includes('실패') || koreanMeaning.includes('오류')) return null;
+        const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);
+        if (!wrongAnswers) return null;
+        const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
+        return {
+            type: 'LISTENING_CLOZE',
+            question: { sentence: firstLine, korean: koreanMeaning, word: correctWordData.word },
+            choices,
+            answer: correctWordData.word
+        };
+    },
+
+    async _playListeningCloze(sentence, word) {
+        const btn = document.getElementById('listening-replay-btn');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+        try {
+            const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
+            const match = sentence.match(regex);
+            if (!match) {
+                await api.speak(sentence, 'sample');
+                return;
+            }
+            const matchIndex = sentence.search(regex);
+            const before = sentence.substring(0, matchIndex).trimEnd();
+            const after = sentence.substring(matchIndex + match[0].length).trimStart();
+            if (before) await api.speak(before, 'sample');
+            // beep 길이는 단어 글자 수에 비례 (힌트 역할)
+            const beepDuration = Math.min(0.08 + word.length * 0.06, 0.8);
+            await new Promise(resolve => {
+                playSingleBeep(520, beepDuration, 'sine', 0.3);
+                setTimeout(resolve, beepDuration * 1000 + 200);
+            });
+            if (after) await api.speak(after, 'sample');
+        } finally {
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+        }
     }
 };
