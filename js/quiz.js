@@ -663,9 +663,9 @@ export const quizMode = {
 
         const targetCharIndex = sentence.search(regex);
         
-        // 표제어를 "Mm-mm"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
+        // 표제어를 "blank"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
         const modifiedSentence = sentence.substring(0, targetCharIndex)
-            + 'ppippippippi'
+            + 'blank'
             + sentence.substring(targetCharIndex + match[0].length);
 
         const voices = window.speechSynthesis.getVoices();
