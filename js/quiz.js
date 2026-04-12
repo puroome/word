@@ -406,7 +406,7 @@ export const quizMode = {
             } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
         questionDisplay.classList.add('items-start', 'text-left');
         questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
-    } else if (type === 'LISTENING_CLOZE') {
+    } else if (type === 'LISTENING_QUIZ') {
         questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
