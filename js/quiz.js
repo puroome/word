@@ -640,6 +640,12 @@ export const quizMode = {
     async _playListeningCloze(sentence, word) {
         const btn = document.getElementById('listening-replay-btn');
         if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+
+        // api.speak()은 내부에서 cancel()을 호출하므로 사용하지 않고
+        // utterance를 직접 제어하여 cancel() 없이 순서대로 재생
+        window.speechSynthesis.cancel();
+        await new Promise(r => setTimeout(r, 100));
+
         try {
             const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
@@ -652,12 +658,34 @@ export const quizMode = {
             const before = sentence.substring(0, matchIndex).trimEnd();
             const after = sentence.substring(matchIndex + match[0].length).trimStart();
 
-            if (before) await api.speak(before, 'sample');
+            // 목소리 한 번만 선택해서 before/after 모두 동일하게 적용
+            const voices = window.speechSynthesis.getVoices();
+            const isUK = state.currentVoiceSet === 'UK';
+            let selectedVoice = isUK
+                ? voices.find(v => v.name.includes('Microsoft Ryan') && v.name.includes('United Kingdom'))
+                : voices.find(v => ['Microsoft Aria','Microsoft Jenny','Microsoft Davis','Microsoft Guy'].some(n => v.name.includes(n)));
+            if (!selectedVoice) {
+                const tLang = isUK ? 'en-gb' : 'en-us';
+                selectedVoice = voices.find(v => v.lang.replace('_','-').toLowerCase() === tLang)
+                             || voices.find(v => v.lang.replace('_','-').toLowerCase().startsWith('en'));
+            }
 
-            // Chrome TTS 버그: speak() 직후 바로 speak() 호출 시 무시됨 → 충분한 딜레이 필요
-            await new Promise(r => setTimeout(r, 250));
+            const makeUtterance = (text) => {
+                const utt = new SpeechSynthesisUtterance(text.replace(/\bsb\b/gi,'somebody').replace(/\bsth\b/gi,'something'));
+                if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
+                else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
+                utt.rate = 0.9;
+                return utt;
+            };
 
-            // AudioContext 초기화 보장 (suspended 상태면 resume)
+            const speakDirect = (text) => new Promise(resolve => {
+                const utt = makeUtterance(text);
+                utt.onend = () => resolve();
+                utt.onerror = () => resolve();
+                window.speechSynthesis.speak(utt);
+            });
+
+            // AudioContext 초기화
             if (!state.audioContext) {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 if (AC) state.audioContext = new AC();
@@ -666,14 +694,14 @@ export const quizMode = {
                 await state.audioContext.resume();
             }
 
-            // beep: 단어 글자 수에 비례한 길이, 충분한 음량
             const beepDuration = Math.min(0.12 + word.length * 0.07, 1.0);
+
+            if (before) await speakDirect(before);
+            await new Promise(r => setTimeout(r, 120));
             playSingleBeep(600, beepDuration, 'sine', 0.5);
+            await new Promise(r => setTimeout(r, beepDuration * 1000 + 200));
+            if (after) await speakDirect(after);
 
-            // beep 종료 후 + Chrome TTS 딜레이
-            await new Promise(r => setTimeout(r, beepDuration * 1000 + 350));
-
-            if (after) await api.speak(after, 'sample');
         } finally {
             if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         }
