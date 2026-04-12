@@ -640,76 +640,12 @@ export const quizMode = {
     _playListeningCloze(sentence, word) {
         const btn = document.getElementById('listening-replay-btn');
         if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
-
         const enableBtn = () => { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } };
-
-        window.speechSynthesis.cancel();
 
         const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
-        const match = sentence.match(regex);
+        const modified = sentence.replace(regex, 'blank');
 
-        if (!match) {
-            api.speak(sentence, 'sample').finally(enableBtn);
-            return;
-        }
-
-        const matchIndex = sentence.search(regex);
-        const before = sentence.substring(0, matchIndex).trimEnd();
-        const after  = sentence.substring(matchIndex + match[0].length).trimStart();
-
-        // 목소리 선택
-        const voices = window.speechSynthesis.getVoices();
-        const isUK = state.currentVoiceSet === 'UK';
-        let selectedVoice = isUK
-            ? voices.find(v => v.name.includes('Microsoft Ryan') && v.name.includes('United Kingdom'))
-            : voices.find(v => ['Microsoft Aria','Microsoft Jenny','Microsoft Davis','Microsoft Guy'].some(n => v.name.includes(n)));
-        if (!selectedVoice) {
-            const tLang = isUK ? 'en-gb' : 'en-us';
-            selectedVoice = voices.find(v => v.lang.replace('_','-').toLowerCase() === tLang)
-                         || voices.find(v => v.lang.replace('_','-').toLowerCase().startsWith('en'));
-        }
-
-        const makeUtt = (text) => {
-            const utt = new SpeechSynthesisUtterance(
-                text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something')
-            );
-            if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
-            else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
-            utt.rate = 0.9;
-            return utt;
-        };
-
-        // beep.mp3 재생 후 after TTS 체인
-        const playBeepThenAfter = () => {
-            const beep = new Audio('./beep.mp3');
-            beep.onended = () => {
-                if (!after) { enableBtn(); return; }
-                const uttAfter = makeUtt(after);
-                uttAfter.onend  = enableBtn;
-                uttAfter.onerror = enableBtn;
-                window.speechSynthesis.speak(uttAfter);
-            };
-            beep.onerror = () => {
-                // beep.mp3 로드 실패 시 after만 재생
-                console.warn('beep.mp3 로드 실패 — after TTS만 재생');
-                if (!after) { enableBtn(); return; }
-                const uttAfter = makeUtt(after);
-                uttAfter.onend  = enableBtn;
-                uttAfter.onerror = enableBtn;
-                window.speechSynthesis.speak(uttAfter);
-            };
-            beep.play();
-        };
-
-        if (before) {
-            const uttBefore = makeUtt(before);
-            uttBefore.onend  = playBeepThenAfter;
-            uttBefore.onerror = playBeepThenAfter;
-            window.speechSynthesis.speak(uttBefore);
-        } else {
-            // 표제어가 문장 맨 앞인 경우
-            playBeepThenAfter();
-        }
+        api.speak(modified, 'sample').finally(enableBtn);
     }
 };
