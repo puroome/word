@@ -108,7 +108,8 @@ export const utils = {
         const progress = { ...(state.currentProgress[word] || {}), ...localStatus };
         if (Object.keys(progress).length === 0) return 'unseen';
 
-        const statuses = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION'].map(type => progress[type] || 'unseen');
+        const statuses = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION', 'LISTENING_QUIZ']
+  .map(type => progress[type] || 'unseen');
         if (statuses.includes('incorrect')) return 'review';
         if (statuses.every(s => s === 'correct')) return 'learned';
         if (statuses.some(s => s === 'correct')) return 'learning';
