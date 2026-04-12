@@ -663,9 +663,10 @@ export const quizMode = {
 
         const targetCharIndex = sentence.search(regex);
         
-        // 표제어를 "Mm-mm"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
+        // filler 텍스트로 치환 (beep으로 덮어씌울 것이므로 발음은 중요하지 않음)
+        const fillerText = 'bleep bleep bleep';
         const modifiedSentence = sentence.substring(0, targetCharIndex)
-            + 'hmm, hmm'
+            + fillerText
             + sentence.substring(targetCharIndex + match[0].length);
 
         const voices = window.speechSynthesis.getVoices();
@@ -685,6 +686,17 @@ export const quizMode = {
         if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
         else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
         utt.rate = 0.9;
+
+        // filler 위치 도달 시 beep으로 덮어씌움
+        // beep 길이 = 단어 글자 수 기준 (filler 발음 전체를 커버)
+        const beepDuration = Math.min(0.2 + word.length * 0.08, 1.5);
+        let beepPlayed = false;
+        utt.onboundary = (e) => {
+            if (!beepPlayed && e.name === 'word' && e.charIndex >= targetCharIndex) {
+                beepPlayed = true;
+                playSingleBeep(880, beepDuration, 'square', 0.8);
+            }
+        };
 
         utt.onend = enableBtn;
         utt.onerror = enableBtn;
