@@ -117,10 +117,11 @@ export const dashboard = {
 
 
         const totalQuizStats = {
-            'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-            'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-            'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-        };
+    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
+    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
+    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
+    'LISTENING_QUIZ': { correct: 0, total: 0 },
+};
 
         for (let i = 0; i < 7; i++) {
             const loopDate = new Date(today);
@@ -186,9 +187,10 @@ export const dashboard = {
                 }]
             }));
         };
-        createDoughnutChart('quiz1-chart', 'quiz1-label', '영한 뜻',  totalQuizStats['MULTIPLE_CHOICE_MEANING']);
-        createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸 추론', totalQuizStats['FILL_IN_THE_BLANK']);
-        createDoughnutChart('quiz3-chart', 'quiz3-label', '영영 풀이', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
+        createDoughnutChart('quiz1-chart', 'quiz1-label', '영한', totalQuizStats['MULTIPLE_CHOICE_MEANING']);
+createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸', totalQuizStats['FILL_IN_THE_BLANK']);
+createDoughnutChart('quiz3-chart', 'quiz3-label', '영영', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
+createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LISTENING_QUIZ']);
 
 
         const textSummaryContainer = document.getElementById('dashboard-text-summary');
@@ -196,10 +198,11 @@ export const dashboard = {
             const getStatsForPeriod = (days) => {
                 let totalSeconds = 0;
                 const quizStats = {
-                    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-                    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-                    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-                };
+    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
+    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
+    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
+    'LISTENING_QUIZ': { correct: 0, total: 0 },
+};
 
                 for (let i = 0; i < days; i++) {
                     const loopDate = new Date(today);
@@ -221,10 +224,11 @@ export const dashboard = {
             const totalStudySeconds = Object.values(studyHistory).reduce((sum, dailySeconds) => sum + (dailySeconds || 0), 0);
 
             const quizHistoryTotal = {
-                'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-                'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-                'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-            };
+    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
+    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
+    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
+    'LISTENING_QUIZ': { correct: 0, total: 0 },
+};
             if(quizHistory) {
                 Object.values(quizHistory).forEach(daily => {
                      Object.entries(daily).forEach(([type, stats]) => {
@@ -240,13 +244,13 @@ export const dashboard = {
 
             const createSummaryCardHTML = (title, totalSeconds, quizStats) => {
                 const quizTypes = {
-  'MULTIPLE_CHOICE_MEANING':    '뜻 고르기',
-  'FILL_IN_THE_BLANK':          '빈칸 채우기',
-  'MULTIPLE_CHOICE_DEFINITION': '영영 정의',
-  'LISTENING_QUIZ':             '듣기 퀴즈'
+    'MULTIPLE_CHOICE_MEANING': '영한',
+    'FILL_IN_THE_BLANK': '빈칸',
+    'MULTIPLE_CHOICE_DEFINITION': '영영',
+    'LISTENING_QUIZ': '듣기',
 };
 
-                let quizHTML = '<div class="grid grid-cols-3 gap-1 text-center">';
+                let quizHTML = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-1 text-center">';
                 for (const type in quizTypes) {
                     const stats = quizStats[type] || { correct: 0, total: 0 };
                     const accuracy = stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(0) : 0;
