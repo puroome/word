@@ -240,10 +240,11 @@ export const dashboard = {
 
             const createSummaryCardHTML = (title, totalSeconds, quizStats) => {
                 const quizTypes = {
-                    'MULTIPLE_CHOICE_MEANING': '영한 뜻',
-                    'FILL_IN_THE_BLANK': '빈칸 추론',
-                    'MULTIPLE_CHOICE_DEFINITION': '영영 풀이',
-                };
+  'MULTIPLE_CHOICE_MEANING':    '뜻 고르기',
+  'FILL_IN_THE_BLANK':          '빈칸 채우기',
+  'MULTIPLE_CHOICE_DEFINITION': '영영 정의',
+  'LISTENING_QUIZ':             '듣기 퀴즈'
+};
 
                 let quizHTML = '<div class="grid grid-cols-3 gap-1 text-center">';
                 for (const type in quizTypes) {
