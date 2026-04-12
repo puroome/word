@@ -651,13 +651,28 @@ export const quizMode = {
             const matchIndex = sentence.search(regex);
             const before = sentence.substring(0, matchIndex).trimEnd();
             const after = sentence.substring(matchIndex + match[0].length).trimStart();
+
             if (before) await api.speak(before, 'sample');
-            // beep 길이는 단어 글자 수에 비례 (힌트 역할)
-            const beepDuration = Math.min(0.08 + word.length * 0.06, 0.8);
-            await new Promise(resolve => {
-                playSingleBeep(520, beepDuration, 'sine', 0.3);
-                setTimeout(resolve, beepDuration * 1000 + 200);
-            });
+
+            // Chrome TTS 버그: speak() 직후 바로 speak() 호출 시 무시됨 → 충분한 딜레이 필요
+            await new Promise(r => setTimeout(r, 250));
+
+            // AudioContext 초기화 보장 (suspended 상태면 resume)
+            if (!state.audioContext) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (AC) state.audioContext = new AC();
+            }
+            if (state.audioContext?.state === 'suspended') {
+                await state.audioContext.resume();
+            }
+
+            // beep: 단어 글자 수에 비례한 길이, 충분한 음량
+            const beepDuration = Math.min(0.12 + word.length * 0.07, 1.0);
+            playSingleBeep(600, beepDuration, 'sine', 0.5);
+
+            // beep 종료 후 + Chrome TTS 딜레이
+            await new Promise(r => setTimeout(r, beepDuration * 1000 + 350));
+
             if (after) await api.speak(after, 'sample');
         } finally {
             if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
