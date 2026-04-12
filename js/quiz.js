@@ -10,8 +10,8 @@ export const quizMode = {
         sessionCorrectInSet: 0,
         sessionMistakes: [],
         answeredWords: new Set(),
-        preloadedQuizzes: { 'MULTIPLE_CHOICE_MEANING': null, 'FILL_IN_THE_BLANK': null, 'MULTIPLE_CHOICE_DEFINITION': null, 'LISTENING_CLOZE': null },
-    isPreloading: { 'MULTIPLE_CHOICE_MEANING': false, 'FILL_IN_THE_BLANK': false, 'MULTIPLE_CHOICE_DEFINITION': false, 'LISTENING_CLOZE': false },
+        preloadedQuizzes: { 'MULTIPLE_CHOICE_MEANING': null, 'FILL_IN_THE_BLANK': null, 'MULTIPLE_CHOICE_DEFINITION': null, 'LISTENING_QUIZ': null },
+    isPreloading: { 'MULTIPLE_CHOICE_MEANING': false, 'FILL_IN_THE_BLANK': false, 'MULTIPLE_CHOICE_DEFINITION': false, 'LISTENING_QUIZ': false },
         currentRangeInputTarget: null,
         isFinalResult: false,  // [BUG-3] 텍스트 문자열 비교 대신 사용하는 플래그
     },
