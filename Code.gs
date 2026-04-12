@@ -51,9 +51,9 @@ function getGeminiApiKey() {
  */
 function setupProperties() {
   PropertiesService.getScriptProperties().setProperties({
-    'FIREBASE_URL'    : 'YOUR_FIREBASE_RTDB_URL_HERE',   // e.g. https://xxx.firebasedatabase.app
-    'FIREBASE_SECRET' : 'YOUR_FIREBASE_SECRET_HERE',
-    'GEMINI_API_KEY'  : 'YOUR_GEMINI_API_KEY_HERE',
+    'FIREBASE_URL'    : 'https://word-91148-default-rtdb.asia-southeast1.firebasedatabase.app',   // e.g. https://xxx.firebasedatabase.app
+    'FIREBASE_SECRET' : 'iK4pLQsR5QkrFjEEaxTXkJNUNPVZly1bN92SIFPJ',
+    'GEMINI_API_KEY'  : 'AIzaSyCpGafn-Gs42-ew-XZYEOs6KvVZZZ-3CWA',
   });
   SpreadsheetApp.getUi().alert('✅ Script Properties 설정 완료!');
 }
