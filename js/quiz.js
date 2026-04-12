@@ -630,7 +630,7 @@ export const quizMode = {
         if (!wrongAnswers) return null;
         const choices = utils.shuffleArray([correctWordData.word, ...Array.from(wrongAnswers).slice(0, 3)]);
         return {
-            type: 'LISTENING_CLOZE',
+            type: 'LISTENING_QUIZ',
             question: { sentence: firstLine, korean: koreanMeaning, word: correctWordData.word },
             choices,
             answer: correctWordData.word
