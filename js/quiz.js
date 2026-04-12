@@ -407,21 +407,21 @@ export const quizMode = {
         questionDisplay.classList.add('items-start', 'text-left');
         questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
     } else if (type === 'LISTENING_CLOZE') {
-        questionDisplay.classList.add('items-start', 'text-left', 'flex-col', 'gap-2');
-        const koreanP = document.createElement('p');
-        koreanP.className = 'text-base text-gray-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 w-full leading-relaxed';
-        koreanP.textContent = question.korean;
-        const btnRow = document.createElement('div');
-        btnRow.className = 'flex items-center gap-3 w-full mt-1';
+        questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
-        replayBtn.className = 'flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm flex-shrink-0';
-        replayBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> 다시 듣기`;
+        replayBtn.title = '다시 듣기';
+        replayBtn.style.cssText = 'flex-shrink:0;width:2.4rem;height:2.4rem;border-radius:9999px;background:#ef4444;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;';
+        replayBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+        replayBtn.onmouseover = () => { replayBtn.style.background = '#dc2626'; };
+        replayBtn.onmouseout  = () => { replayBtn.style.background = '#ef4444'; };
         replayBtn.onclick = () => this._playListeningCloze(question.sentence, question.word);
-        btnRow.appendChild(replayBtn);
+        const koreanP = document.createElement('p');
+        koreanP.className = 'text-base text-gray-800 leading-relaxed';
+        koreanP.textContent = question.korean;
+        questionDisplay.appendChild(replayBtn);
         questionDisplay.appendChild(koreanP);
-        questionDisplay.appendChild(btnRow);
-        setTimeout(() => this._playListeningCloze(question.sentence, question.word), 400);
+        setTimeout(() => this._playListeningCloze(question.sentence, question.word), 1000);
     }
     this.elements.choices.innerHTML = '';
         choices.forEach((choice, index) => {
