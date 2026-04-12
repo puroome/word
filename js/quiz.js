@@ -663,6 +663,11 @@ export const quizMode = {
 
         const targetCharIndex = sentence.search(regex);
         
+        // 표제어를 "Mm-mm"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
+        const modifiedSentence = sentence.substring(0, targetCharIndex)
+            + 'ppippippippi'
+            + sentence.substring(targetCharIndex + match[0].length);
+
         const voices = window.speechSynthesis.getVoices();
         const isUK = state.currentVoiceSet === 'UK';
         let selectedVoice = isUK
@@ -674,51 +679,16 @@ export const quizMode = {
                          || voices.find(v => v.lang.replace('_','-').toLowerCase().startsWith('en'));
         }
 
-        const makeUtt = (text, vol = 1) => {
-            const utt = new SpeechSynthesisUtterance(
-                text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something')
-            );
-            if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
-            else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
-            utt.rate = 0.9;
-            utt.volume = vol;
-            return utt;
-        };
+        const utt = new SpeechSynthesisUtterance(
+            modifiedSentence.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something')
+        );
+        if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
+        else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
+        utt.rate = 0.9;
 
-        const before = sentence.substring(0, targetCharIndex).trimEnd();
-        const after  = sentence.substring(targetCharIndex + match[0].length).trimStart();
-        const beepDuration = Math.min(0.2 + word.length * 0.1, 1.5);
+        utt.onend = enableBtn;
+        utt.onerror = enableBtn;
 
-        // ① before를 정상 볼륨으로 재생
-        const uttBefore = makeUtt(before || 'go');
-        uttBefore.volume = before ? 1 : 0;
-
-        // ② before 끝나면 → 삐 재생 → after 재생
-        uttBefore.onend = () => {
-            // 삐이이이 (사각파, 고음, 충분한 길이)
-            playSingleBeep(880, beepDuration, 'square', 1.0);
-
-            setTimeout(() => {
-                if (!after) { enableBtn(); return; }
-                const uttAfter = makeUtt(after);
-                uttAfter.onend = enableBtn;
-                uttAfter.onerror = enableBtn;
-                // cancel() 없이 바로 speak (before utterance가 이미 끝난 상태)
-                window.speechSynthesis.speak(uttAfter);
-            }, beepDuration * 1000 + 150);
-        };
-
-        uttBefore.onerror = () => {
-            playSingleBeep(880, beepDuration, 'square', 1.0);
-            setTimeout(() => {
-                if (!after) { enableBtn(); return; }
-                const uttAfter = makeUtt(after);
-                uttAfter.onend = enableBtn;
-                uttAfter.onerror = enableBtn;
-                window.speechSynthesis.speak(uttAfter);
-            }, beepDuration * 1000 + 150);
-        };
-
-        window.speechSynthesis.speak(uttBefore);
+        window.speechSynthesis.speak(utt);
     }
 };
