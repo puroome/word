@@ -662,12 +662,10 @@ export const quizMode = {
         }
 
         const targetCharIndex = sentence.search(regex);
-        const beepDuration = Math.min(0.15 + word.length * 0.07, 2.0);
-
-        // 표제어를 동일 길이의 공백 filler로 치환 → TTS가 문장 끊김 없이 전체 재생
-        const filler = ' '.repeat(match[0].length);
+        
+        // 표제어를 "Mm-mm"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
         const modifiedSentence = sentence.substring(0, targetCharIndex)
-            + filler
+            + 'Mm-mm'
             + sentence.substring(targetCharIndex + match[0].length);
 
         const voices = window.speechSynthesis.getVoices();
@@ -688,14 +686,6 @@ export const quizMode = {
         else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
         utt.rate = 0.9;
 
-        let beepPlayed = false;
-        utt.onboundary = (e) => {
-            // charIndex가 표제어 위치에 도달했을 때 beep 1회만 재생
-            if (e.name === 'word' && !beepPlayed && e.charIndex >= targetCharIndex) {
-                beepPlayed = true;
-                playSingleBeep(600, beepDuration, 'sine', 0.6);
-            }
-        };
         utt.onend = enableBtn;
         utt.onerror = enableBtn;
 
