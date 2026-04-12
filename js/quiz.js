@@ -649,25 +649,16 @@ export const quizMode = {
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
         const match = sentence.match(regex);
 
-        // AudioContext 초기화
-        if (!state.audioContext) {
-            const AC = window.AudioContext || window.webkitAudioContext;
-            if (AC) state.audioContext = new AC();
-        }
-        if (state.audioContext?.state === 'suspended') state.audioContext.resume();
-
         if (!match) {
             api.speak(sentence, 'sample').finally(enableBtn);
             return;
         }
 
-        const targetCharIndex = sentence.search(regex);
-        
-        // 표제어를 "blank"으로 치환 → TTS가 자연스럽게 전체 문장을 읽으면서 해당 위치에서 "음음" 발음
-        const modifiedSentence = sentence.substring(0, targetCharIndex)
-            + 'blah blah blah'
-            + sentence.substring(targetCharIndex + match[0].length);
+        const matchIndex = sentence.search(regex);
+        const before = sentence.substring(0, matchIndex).trimEnd();
+        const after  = sentence.substring(matchIndex + match[0].length).trimStart();
 
+        // 목소리 선택
         const voices = window.speechSynthesis.getVoices();
         const isUK = state.currentVoiceSet === 'UK';
         let selectedVoice = isUK
@@ -679,16 +670,46 @@ export const quizMode = {
                          || voices.find(v => v.lang.replace('_','-').toLowerCase().startsWith('en'));
         }
 
-        const utt = new SpeechSynthesisUtterance(
-            modifiedSentence.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something')
-        );
-        if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
-        else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
-        utt.rate = 0.9;
+        const makeUtt = (text) => {
+            const utt = new SpeechSynthesisUtterance(
+                text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something')
+            );
+            if (selectedVoice) { utt.voice = selectedVoice; utt.lang = selectedVoice.lang; }
+            else { utt.lang = isUK ? 'en-GB' : 'en-US'; }
+            utt.rate = 0.9;
+            return utt;
+        };
 
-        utt.onend = enableBtn;
-        utt.onerror = enableBtn;
+        // beep.mp3 재생 후 after TTS 체인
+        const playBeepThenAfter = () => {
+            const beep = new Audio('./beep.mp3');
+            beep.onended = () => {
+                if (!after) { enableBtn(); return; }
+                const uttAfter = makeUtt(after);
+                uttAfter.onend  = enableBtn;
+                uttAfter.onerror = enableBtn;
+                window.speechSynthesis.speak(uttAfter);
+            };
+            beep.onerror = () => {
+                // beep.mp3 로드 실패 시 after만 재생
+                console.warn('beep.mp3 로드 실패 — after TTS만 재생');
+                if (!after) { enableBtn(); return; }
+                const uttAfter = makeUtt(after);
+                uttAfter.onend  = enableBtn;
+                uttAfter.onerror = enableBtn;
+                window.speechSynthesis.speak(uttAfter);
+            };
+            beep.play();
+        };
 
-        window.speechSynthesis.speak(utt);
+        if (before) {
+            const uttBefore = makeUtt(before);
+            uttBefore.onend  = playBeepThenAfter;
+            uttBefore.onerror = playBeepThenAfter;
+            window.speechSynthesis.speak(uttBefore);
+        } else {
+            // 표제어가 문장 맨 앞인 경우
+            playBeepThenAfter();
+        }
     }
 };
