@@ -1,5 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
+import { ui } from './ui.js'; // [요청 2] 툴팁 사용을 위해 추가
 import { utils, playSequence, playSingleBeep, correctBeep, incorrectBeep } from './utils.js';
 export const quizMode = {
     state: {
@@ -65,11 +66,31 @@ export const quizMode = {
         this.elements.modalContinueBtn.addEventListener('click', () => this.continueAfterResult());
         this.elements.modalMistakesBtn.addEventListener('click', () => this.reviewSessionMistakes());
 
-        document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', (e) => {
             const isQuizModeActive = !this.elements.contentContainer.classList.contains('hidden') && !this.elements.choices.classList.contains('disabled');
             if (!isQuizModeActive) return;
 
             const choiceCount = Array.from(this.elements.choices.children).filter(el => !el.textContent.includes('PASS')).length;
+
+            // [요청 3, 4, 5, 2(스페이스바 부분)] 스페이스바 입력 시 TTS 실행
+            if (e.key === ' ') {
+                e.preventDefault();
+                const quizData = this.state.currentQuiz;
+                if (!quizData || !quizData.question) return;
+
+                const type = this.state.currentQuizType;
+                if (type === 'MULTIPLE_CHOICE_MEANING') {
+                    api.speak(quizData.question.word, 'word');
+                } else if (type === 'FILL_IN_THE_BLANK') {
+                    const sentence = quizData.question.sentence_with_blank.replace('___BLANK___', '; blank ;');
+                    api.speak(sentence, 'sample');
+                } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
+                    api.speak(quizData.question.definition, 'sample');
+                } else if (type === 'LISTENING_QUIZ') {
+                    this._playListeningCloze(quizData.question.sentence, quizData.question.word);
+                }
+                return;
+            }
 
             if (e.key.toLowerCase() === 'p' || e.key === '0') {
                  e.preventDefault();
@@ -406,19 +427,34 @@ export const quizMode = {
             } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
         questionDisplay.classList.add('items-start', 'text-left');
         questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
-    } else if (type === 'LISTENING_QUIZ') {
+} else if (type === 'LISTENING_QUIZ') {
         questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
-        replayBtn.title = '다시 듣기';
+        replayBtn.title = '빈칸 예문 보기';
         replayBtn.style.cssText = 'flex-shrink:0;width:2.4rem;height:2.4rem;border-radius:9999px;background:#ef4444;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;';
-        replayBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+        
+        // [요청 2] ▷ 아이콘 대신 볼드체 대문자 T로 변경
+        replayBtn.innerHTML = `<span style="font-weight:bold; font-size:16px; color:white;">T</span>`;
         replayBtn.onmouseover = () => { replayBtn.style.background = '#dc2626'; };
         replayBtn.onmouseout  = () => { replayBtn.style.background = '#ef4444'; };
-        replayBtn.onclick = () => this._playListeningCloze(question.sentence, question.word);
+        
+        // [요청 2] T 버튼 클릭 시 예문 팝업 띄우기
+        replayBtn.onclick = (e) => {
+            const escapedWord = question.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
+            const blankedSentence = question.sentence.replace(regex, '___________');
+            ui.showTranslationTooltip(blankedSentence, e);
+        };
+        replayBtn.onmouseleave = () => { ui.hideTranslationTooltip(); };
+
+        // [요청 2] 한글 영역 클릭 시 다시 듣기(TTS) 실행
         const koreanP = document.createElement('p');
-        koreanP.className = 'text-base text-gray-800 leading-relaxed';
+        koreanP.className = 'text-base text-gray-800 leading-relaxed cursor-pointer hover:text-blue-600 transition-colors';
         koreanP.textContent = question.korean;
+        koreanP.title = '클릭하여 다시 듣기';
+        koreanP.onclick = () => this._playListeningCloze(question.sentence, question.word);
+        
         questionDisplay.appendChild(replayBtn);
         questionDisplay.appendChild(koreanP);
         setTimeout(() => this._playListeningCloze(question.sentence, question.word), 1000);
