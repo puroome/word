@@ -644,7 +644,7 @@ export const quizMode = {
 
         const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
-        const modified = sentence.replace(regex, '. . blank . .');
+        const modified = sentence.replace(regex, '; blank ;');
 
         api.speak(modified, 'sample').finally(enableBtn);
     }
