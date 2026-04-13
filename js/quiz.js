@@ -644,16 +644,9 @@ export const quizMode = {
 
         const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
-        
-        // 정답 부분을 'mmm' (허밍)으로 치환
-        const modified = sentence.replace(regex, 'mmm');
+        // 'blank' 대신 마침표 여러 개를 넣어 브라우저 TTS가 자연스럽게 쉬도록 유도 (엔진에 따라 쉼표 , , , 가 더 잘 먹히기도 합니다)
+        const modified = sentence.replace(regex, '... ...');
 
-        // 문장을 읽기 직전에 0.1초짜리 짧은 삐- 소리(주의 환기)를 먼저 재생
-        playSingleBeep({ frequency: 800, duration: 0.1, type: 'sine', gain: 0.2 });
-        
-        // 그 직후 바로 문장 읽기 시작
-        setTimeout(() => {
-            api.speak(modified, 'sample').finally(enableBtn);
-        }, 150);
+        api.speak(modified, 'sample').finally(enableBtn);
     }
 };
