@@ -431,7 +431,6 @@ document.addEventListener('keydown', (e) => {
         questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
-        replayBtn.title = '빈칸 예문 보기';
         replayBtn.style.cssText = 'flex-shrink:0;width:2.4rem;height:2.4rem;border-radius:9999px;background:#ef4444;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;';
         
         // [요청 2] ▷ 아이콘 대신 볼드체 대문자 T로 변경
@@ -452,7 +451,6 @@ document.addEventListener('keydown', (e) => {
         const koreanP = document.createElement('p');
         koreanP.className = 'text-base text-gray-800 leading-relaxed cursor-pointer hover:text-blue-600 transition-colors';
         koreanP.textContent = question.korean;
-        koreanP.title = '클릭하여 다시 듣기';
         koreanP.onclick = () => this._playListeningCloze(question.sentence, question.word);
         
         questionDisplay.appendChild(replayBtn);
