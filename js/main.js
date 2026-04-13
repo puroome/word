@@ -283,8 +283,13 @@ const app = {
         this._renderMode(mode, options);
     },
 
-    async _renderMode(mode, options = {}) {
+async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
+        
+        // [요청 1] 화면 전환 시 실행 중인 TTS 즉시 중단
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
         
         // [수정됨] 화면 전환 시 일단 새로고침 버튼 숨김 (기본 초기화)
         if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
