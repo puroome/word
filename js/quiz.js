@@ -644,15 +644,8 @@ export const quizMode = {
 
         const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
-        
-        // 'mmm' 대신 아래 기호들을 사용해 봅니다.
-        // 엔진이 발음할 수 없는 특수기호나 쉼표를 연속으로 배치하여 강제 공백을 만듭니다.
-        const modified = sentence.replace(regex, '_ _ _'); // 쉼표 3개 (대부분의 엔진에서 짧은 쉬어감 발생)
+        const modified = sentence.replace(regex, 'blank');
 
-        // 만약 위 코드로도 부족하다면 알림음을 추가하는 방법 B를 유지합니다.
-        playSingleBeep({ frequency: 800, duration: 0.1, type: 'sine', gain: 0.2 });
-        setTimeout(() => {
-            api.speak(modified, 'sample').finally(enableBtn);
-        }, 150);
+        api.speak(modified, 'sample').finally(enableBtn);
     }
 };
