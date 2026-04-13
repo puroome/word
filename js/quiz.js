@@ -644,9 +644,15 @@ export const quizMode = {
 
         const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
-        // 'blank' 대신 마침표 여러 개를 넣어 브라우저 TTS가 자연스럽게 쉬도록 유도 (엔진에 따라 쉼표 , , , 가 더 잘 먹히기도 합니다)
-        const modified = sentence.replace(regex, '... ...');
+        
+        // 'mmm' 대신 아래 기호들을 사용해 봅니다.
+        // 엔진이 발음할 수 없는 특수기호나 쉼표를 연속으로 배치하여 강제 공백을 만듭니다.
+        const modified = sentence.replace(regex, ', , ,'); // 쉼표 3개 (대부분의 엔진에서 짧은 쉬어감 발생)
 
-        api.speak(modified, 'sample').finally(enableBtn);
+        // 만약 위 코드로도 부족하다면 알림음을 추가하는 방법 B를 유지합니다.
+        playSingleBeep({ frequency: 800, duration: 0.1, type: 'sine', gain: 0.2 });
+        setTimeout(() => {
+            api.speak(modified, 'sample').finally(enableBtn);
+        }, 150);
     }
 };
