@@ -49,7 +49,7 @@ export const quizMode = {
         this.elements.startMeaningQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_MEANING'));
         this.elements.startBlankQuizBtn.addEventListener('click', () => this.start('FILL_IN_THE_BLANK'));
                 this.elements.startDefinitionQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_DEFINITION'));
-        this.elements.startListeningQuizBtn.addEventListener('click', () => this.start('LISTENING_CLOZE'));
+        this.elements.startListeningQuizBtn.addEventListener('click', () => this.start('LISTENING_QUIZ'));
 
         this.elements.quizRangeStart.addEventListener('click', (e) => this.promptForRangeValue(e.target));
         this.elements.quizRangeEnd.addEventListener('click', (e) => this.promptForRangeValue(e.target));
@@ -353,7 +353,7 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[currentQuizType] === 'correct') return false;
             return true;
         });
-        if (currentQuizType === 'FILL_IN_THE_BLANK' || currentQuizType === 'LISTENING_CLOZE') {
+        if (currentQuizType === 'FILL_IN_THE_BLANK' || currentQuizType === 'LISTENING_QUIZ') {
             candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
         if (candidates.length === 0) return null;
@@ -363,7 +363,7 @@ export const quizMode = {
             if (currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, allWords);
             else if (currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, allWords);
             else if (currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, allWords);
-            else if (currentQuizType === 'LISTENING_CLOZE') quiz = await this.createListeningClozeQuiz(wordData, allWords);
+            else if (currentQuizType === 'LISTENING_QUIZ') quiz = await this.createListeningClozeQuiz(wordData, allWords);
             if (quiz) return quiz;
         }
         return null;
@@ -574,7 +574,7 @@ export const quizMode = {
             if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
             return true;
         });
-                if (quizType === 'FILL_IN_THE_BLANK' || quizType === 'LISTENING_CLOZE') {
+                if (quizType === 'FILL_IN_THE_BLANK' || quizType === 'LISTENING_QUIZ') {
             candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
         if (candidates.length === 0) return null;
@@ -583,7 +583,7 @@ export const quizMode = {
         if (quizType === 'MULTIPLE_CHOICE_MEANING') return this.createMeaningQuiz(wordData, allWords);
         if (quizType === 'FILL_IN_THE_BLANK') return this.createBlankQuiz(wordData, allWords);
         if (quizType === 'MULTIPLE_CHOICE_DEFINITION') return await this.createDefinitionQuiz(wordData, allWords);
-        if (quizType === 'LISTENING_CLOZE') return await this.createListeningClozeQuiz(wordData, allWords);
+        if (quizType === 'LISTENING_QUIZ') return await this.createListeningClozeQuiz(wordData, allWords);
         return null;
     },
     createMeaningQuiz(correctWordData, allWordsData) {
