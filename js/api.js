@@ -273,7 +273,7 @@ export const api = {
     async updateStudyTime(seconds) {
         if (!state.userId || seconds < 1) return;
         const { doc, setDoc, getDoc } = window.firebaseSDK;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = utils.getLocalDateString();
         const historyRef = doc(db, 'users', state.userId, 'history', 'study');
         try {
             const docSnap = await getDoc(historyRef);
@@ -323,7 +323,7 @@ export const api = {
     async syncQuizHistory(statsToSync) {
         if (!state.userId || !statsToSync) return;
         const { doc, setDoc, getDoc } = window.firebaseSDK;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = utils.getLocalDateString();
         const historyRef = doc(db, 'users', state.userId, 'history', 'quiz');
         try {
             const docSnap = await getDoc(historyRef);
