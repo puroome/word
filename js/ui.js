@@ -390,7 +390,6 @@ export const ui = {
                 // 메시지 설정 (현재 단어 이름 넣기)
                 msgEl.innerHTML = `'<b>${currentWord.word}</b>' 단어를<br>정말 삭제하시겠습니까?`;
                 modal.style.display = 'flex';
-                document.body.style.overflow = 'hidden'; // ✨ 삭제 모달 열릴 때 잠금
 
                 // 기존 이벤트 제거를 위해 버튼 재생성 (중복 클릭 방지)
                 const newConfirm = confirmBtn.cloneNode(true);
@@ -399,14 +398,11 @@ export const ui = {
                 cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
                 // [취소] 버튼 클릭 시
-                newCancel.onclick = () => {
-                    modal.style.display = 'none';
-                    document.body.style.overflow = ''; // ✨ 취소해서 닫힐 때 해제
-                };
+                newCancel.onclick = () => { modal.style.display = 'none'; };
+                
                 // [삭제] 버튼 클릭 시 (실제 삭제 로직)
                 newConfirm.onclick = async () => {
                     modal.style.display = 'none'; // 창 닫기
-                    document.body.style.overflow = ''; // ✨ 삭제 후 닫힐 때 해제
                     
                     // (1) 서버 데이터 삭제
                     await api.deleteWord(currentWord.word);
