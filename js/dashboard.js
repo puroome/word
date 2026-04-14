@@ -100,7 +100,8 @@ export const dashboard = {
         for (let i = 6; i >= 0; i--) {
             const loopDate = new Date(today);
             loopDate.setDate(loopDate.getDate() - i);
-            const dateString = loopDate.toISOString().slice(0, 10);
+            const offset = loopDate.getTimezoneOffset() * 60000;
+            const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
             labels.push(`${loopDate.getMonth() + 1}/${loopDate.getDate()}`);
             data.push(Math.round((studyHistory[dateString] || 0) / 60));
         }
@@ -140,7 +141,8 @@ export const dashboard = {
         for (let i = 0; i < 7; i++) {
             const loopDate = new Date(today);
             loopDate.setDate(loopDate.getDate() - i);
-            const dateString = loopDate.toISOString().slice(0, 10);
+            const offset = loopDate.getTimezoneOffset() * 60000;
+            const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
             if (quizHistory[dateString]) {
                 for (const type in totalQuizStats) {
                     if (quizHistory[dateString][type]) {
@@ -221,7 +223,8 @@ createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LIST
                 for (let i = 0; i < days; i++) {
                     const loopDate = new Date(today);
                     loopDate.setDate(loopDate.getDate() - i);
-                    const dateString = loopDate.toISOString().slice(0, 10);
+                    const offset = loopDate.getTimezoneOffset() * 60000;
+                    const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
                     totalSeconds += studyHistory[dateString] || 0;
                     if (quizHistory[dateString]) {
                         for (const type in quizStats) {
