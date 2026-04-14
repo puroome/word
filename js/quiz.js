@@ -203,6 +203,13 @@ promptForRangeValue(targetButton) {
         this.elements.rangeInputField.focus();
         this.elements.rangeInputField.select();
     },
+
+    // ✨ 누락되었던 hideRangeInput 함수 추가
+    hideRangeInput() {
+        this.elements.rangeInputModal.classList.add('hidden');
+        this.state.currentRangeInputTarget = null;
+    },
+
     confirmRangeInput() {
         const targetButton = this.state.currentRangeInputTarget;
         if (!targetButton) return;
@@ -227,11 +234,10 @@ promptForRangeValue(targetButton) {
                     console.error("Error saving quiz range to localStorage", e);
                 }
             } else {
-                // [UX-1] alert() 대신 커스텀 toast 사용 (앱 전체 UX 일관성)
                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "숫자만 입력 가능합니다.", isError: true } }));
             }
         }
-        this.hideRangeInput();
+        this.hideRangeInput(); // 이제 함수를 정상적으로 찾을 수 있습니다.
     },
     resetQuizRange() {
         const allWords = state.wordList || [];
