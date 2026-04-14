@@ -73,6 +73,9 @@ export const api = {
             const processedText = text.replace(/\bsb\b/gi, 'somebody').replace(/\bsth\b/gi, 'something');
             const utterance = new SpeechSynthesisUtterance(processedText);
 
+            // ✨ [최적화] 긴 문장 읽을 때 브라우저가 메모리에서 날려버려 뚝 끊기는 버그 방지
+            state.currentUtterance = utterance;
+
             const setVoice = () => {
     if (myRequestId !== activeSpeakId) return;
     const voices = window.speechSynthesis.getVoices();
