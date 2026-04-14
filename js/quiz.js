@@ -503,10 +503,13 @@ document.addEventListener('keydown', (e) => {
              await api.updateWordStatus(word, quizType, (isCorrect && !isPass) ? 'correct' : 'incorrect');
         }
 
+        // ✨ 정답이면 1.2초(1200), 오답이거나 패스면 2초(2000) 대기
+        const delayTime = (isCorrect && !isPass) ? 1200 : 2000;
+
         setTimeout(() => {
             if (this.state.sessionAnsweredInSet >= 10) this.showSessionResultModal();
             else this.displayNextQuiz();
-        }, 1200);
+        }, delayTime);
     },
     showLoader(isLoading, message = '퀴즈를 준비 중입니다...') {
         this.elements.loader.classList.toggle('hidden', !isLoading);
