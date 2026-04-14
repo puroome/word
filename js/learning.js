@@ -267,6 +267,17 @@ async enterEditMode(side) {
 
                     // (C) 이벤트 리스너 부착
                     editor.addEventListener('mouseup', () => setTimeout(showFormatTooltip, 10));
+
+                    // ✨ [최적화] 붙여넣기 시 외부 서식(배경색, 폰트 등) 제거하고 순수 텍스트만 유지
+                    editor.addEventListener('paste', (e) => {
+                        e.preventDefault(); // 기본 붙여넣기 동작 차단
+                        // 클립보드에서 순수 텍스트만 추출
+                        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+                        // 현재 커서 위치에 순수 텍스트만 삽입
+                        document.execCommand('insertText', false, text);
+                        editor.value = editor.innerHTML; // 변경사항 동기화
+                    });
+                    
                     editor.addEventListener('keyup', (e) => {
                         if (e.shiftKey) setTimeout(showFormatTooltip, 10);
                     });
