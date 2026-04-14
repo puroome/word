@@ -931,9 +931,11 @@ async saveAndExitEditMode() {
         const deltaX = touchEndX - this.state.touchStartX;
         const deltaY = touchEndY - this.state.touchStartY;
         const swipeThreshold = 50;
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
+        
+        // ✨ [최적화] 위아래 스크롤 시 카드가 휙 넘어가는 대각선 오작동 방지 (deltaY * 2)
+        if (Math.abs(deltaX) > Math.abs(deltaY) * 2 && Math.abs(deltaX) > swipeThreshold) {
             this.navigate(deltaX > 0 ? -1 : 1);
-        } 
+        }
         this.state.touchStartX = this.state.touchStartY = 0;
     },
     updateProgressBar(index) {
