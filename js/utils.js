@@ -144,14 +144,39 @@ export const utils = {
         return favoriteWords.sort((a, b) => b.time - a.time).map(item => item.word);
     },
 
-    addProgressUpdateToLocalSync(word, key, value) {
+addProgressUpdateToLocalSync(word, key, value) {
         try {
             const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
             const unsynced = JSON.parse(localStorage.getItem(localKey) || '{}');
             if (!unsynced[word]) unsynced[word] = {};
             unsynced[word][key] = value;
             localStorage.setItem(localKey, JSON.stringify(unsynced));
-        } catch (e) { console.error("Error adding progress update to localStorage sync", e); }
+        } catch (e) { 
+            // ✨ [자가 치유 로직] 용량 초과 에러가 발생했을 때
+            if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+                console.warn("로컬 스토리지 용량 초과! WORD_LIST_CACHE를 비우고 다시 시도합니다.");
+                
+                // 1. 용량을 가장 많이 차지하는 단어장 캐시를 삭제하여 공간 확보
+                localStorage.removeItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
+                
+                // 2. 캐시를 지웠다는 사실을 앱에 알림 (다음에 다시 다운로드 하도록)
+                state.isWordListReady = false; 
+                
+                // 3. 공간이 확보되었으니, 저장하려던 학습 데이터를 다시 저장 시도
+                try {
+                    const localKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
+                    const unsynced = JSON.parse(localStorage.getItem(localKey) || '{}');
+                    if (!unsynced[word]) unsynced[word] = {};
+                    unsynced[word][key] = value;
+                    localStorage.setItem(localKey, JSON.stringify(unsynced));
+                    console.log("✅ 자가 치유 성공: 캐시 삭제 후 학습 데이터 저장 완료!");
+                } catch (retryError) {
+                    console.error("자가 치유 후에도 저장 실패:", retryError);
+                }
+            } else {
+                console.error("Error adding progress update to localStorage sync", e); 
+            }
+        }
     }
 };
 
