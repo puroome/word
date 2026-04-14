@@ -248,29 +248,53 @@ const app = {
         document.addEventListener('searchWord', (e) => this.searchWordInLearningMode(e.detail));
     },
 
-    async syncOfflineData() {
+async syncOfflineData() {
         if (!state.userId) return;
-        try {
-            const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
-            const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
-            const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
+        
+        const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
+        const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
+        const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
 
-            const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
+        // 1. 동기화할 데이터를 먼저 읽어옵니다.
+        const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
+        const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
+        const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
+
+        // 2. [선 차감] 레이스 컨디션을 막기 위해 로컬 데이터를 먼저 지웁니다.
+        if (timeToSync > 0) localStorage.removeItem(timeKey);
+        if (statsToSync) localStorage.removeItem(quizKey);
+        if (progressToSync && Object.keys(progressToSync).length > 0) localStorage.removeItem(progressKey);
+
+        // 3. [서버 전송 및 실패 시 복구(Rollback)]
+        try {
             if (timeToSync > 0) {
                 await api.updateStudyTime(timeToSync);
-                localStorage.removeItem(timeKey);
             }
-            const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
+        } catch (error) {
+            console.error("학습 시간 동기화 실패, 로컬에 복구합니다:", error);
+            // 실패하면 지웠던 데이터를 다시 살려둡니다 (기존 값에 누적)
+            const currentTime = parseInt(localStorage.getItem(timeKey) || '0');
+            localStorage.setItem(timeKey, currentTime + timeToSync);
+        }
+
+        try {
             if (statsToSync) {
                 await api.syncQuizHistory(statsToSync);
-                localStorage.removeItem(quizKey);
             }
-            const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
-             if (progressToSync && Object.keys(progressToSync).length > 0) {
-                 await api.syncProgressUpdates(progressToSync);
-                 localStorage.removeItem(progressKey);
-             }
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error("퀴즈 기록 동기화 실패, 로컬에 복구합니다:", error);
+            // 복잡한 객체 병합 대신, 다음 세션에서 합쳐지도록 단순히 원래 값으로 덮어씌웁니다.
+            localStorage.setItem(quizKey, JSON.stringify(statsToSync));
+        }
+
+        try {
+            if (progressToSync && Object.keys(progressToSync).length > 0) {
+                await api.syncProgressUpdates(progressToSync);
+            }
+        } catch (error) {
+            console.error("단어 진행도 동기화 실패, 로컬에 복구합니다:", error);
+            localStorage.setItem(progressKey, JSON.stringify(progressToSync));
+        }
     },
     
     navigateTo(mode, options = {}) {
