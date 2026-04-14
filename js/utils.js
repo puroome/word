@@ -3,6 +3,16 @@ import { state } from './config.js';
 // --- General Utils ---
 export const utils = {
     // --- 공통 헬퍼 ---
+
+    // ✨ [버그 수정] 영국 시간(UTC) 대신 사용자의 로컬 시간대(한국 KST) 기준 날짜를 반환 (YYYY-MM-DD)
+    getLocalDateString() {
+        const now = new Date();
+        // 현재 시간대와 UTC의 차이를 분 단위로 구해서 밀리초로 변환 (한국은 -540분)
+        const offset = now.getTimezoneOffset() * 60000; 
+        // 현재 시간에서 오프셋을 빼서 정확한 로컬 시간을 계산
+        return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+    },
+
     // localStorage의 미동기화 진행 데이터를 안전하게 읽어 객체로 반환
     getUnsyncedProgress() {
         try {
