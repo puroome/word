@@ -186,7 +186,7 @@ document.addEventListener('keydown', (e) => {
             this.elements.quizRangeEnd.dataset.max = totalWords;
         }
     },
-    promptForRangeValue(targetButton) {
+promptForRangeValue(targetButton) {
         if (!targetButton) return;
         this.state.currentRangeInputTarget = targetButton;
         const isStart = targetButton.id === 'quiz-range-start';
@@ -200,13 +200,8 @@ document.addEventListener('keydown', (e) => {
         this.elements.rangeInputField.max = max;
 
         this.elements.rangeInputModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // ✨ 팝업 열릴 때 배경 스크롤 잠금
         this.elements.rangeInputField.focus();
         this.elements.rangeInputField.select();
-    },
-    hideRangeInput() {
-        this.elements.rangeInputModal.classList.add('hidden');
-        this.state.currentRangeInputTarget = null;
     },
     confirmRangeInput() {
         const targetButton = this.state.currentRangeInputTarget;
@@ -524,17 +519,15 @@ document.addEventListener('keydown', (e) => {
         this.elements.finishedScreen.classList.remove('hidden');
         this.elements.finishedMessage.textContent = message;
     },
-    showSessionResultModal(isFinal = false) {
+showSessionResultModal(isFinal = false) {
         this.elements.modalScore.textContent = `${this.state.sessionAnsweredInSet}문제 중 ${this.state.sessionCorrectInSet}개 정답!`;
         this.elements.modalMistakesBtn.classList.toggle('hidden', this.state.sessionMistakes.length === 0);
         this.state.isFinalResult = isFinal;  // [BUG-3] 플래그로 상태 관리
         this.elements.modalContinueBtn.textContent = isFinal ? "퀴즈 유형으로" : "다음 퀴즈 계속";
         this.elements.modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // ✨ 결과창 열릴 때 잠금
     },
     continueAfterResult() {
         this.elements.modal.classList.add('hidden');
-        document.body.style.overflow = ''; // ✨ 결과창 닫힐 때 해제
         if (this.state.isFinalResult) {  // [BUG-3] 문자열 비교 대신 플래그 사용
             window.dispatchEvent(new CustomEvent('syncRequest'));
             window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } }));
@@ -547,7 +540,6 @@ document.addEventListener('keydown', (e) => {
     },
     reviewSessionMistakes() {
         this.elements.modal.classList.add('hidden');
-        document.body.style.overflow = ''; // ✨ 결과창 닫힐 때 해제
         const mistakes = [...new Set(this.state.sessionMistakes)];
         this.state.sessionAnsweredInSet = 0;
         this.state.sessionCorrectInSet = 0;
@@ -555,6 +547,7 @@ document.addEventListener('keydown', (e) => {
         window.dispatchEvent(new CustomEvent('syncRequest'));
         window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'mistakeReview', options: { mistakeWords: mistakes } } }));
     },
+
     async preloadAllQuizTypesBasedOnSavedRange() {
         if (!state.isWordListReady) {
             try { await api.loadWordList(); } catch (e) { return; }
