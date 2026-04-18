@@ -304,7 +304,7 @@ export const api = {
     // GAS(구글시트)에도 반영
     if (config.SCRIPTURL) {
         const scriptUrl = new URL(config.SCRIPTURL);
-        scriptUrl.searchParams.append('action', 'toggleexcept');
+        scriptUrl.searchParams.append('action', 'toggle_except');
         scriptUrl.searchParams.append('word', word);
         scriptUrl.searchParams.append('value', newExceptStatus ? '1' : '');
         fetch(scriptUrl.toString())
