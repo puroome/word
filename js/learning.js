@@ -52,6 +52,8 @@ export const learningMode = {
             progressBarNumber: document.getElementById('progress-bar-number'),
             favoriteBtn: document.getElementById('favorite-btn'),
             favoriteIcon: document.getElementById('favorite-icon'),
+            exceptBtn:   document.getElementById('except-btn'),
+            exceptIcon:  document.getElementById('except-icon'),
             editContextBtn: document.getElementById('edit-context-btn'),
             createCardBtn: document.getElementById('create-card-btn'),
             deleteCardBtn: document.getElementById('delete-card-btn'),
@@ -77,6 +79,7 @@ export const learningMode = {
         this.elements.prevBtn.addEventListener('click', () => this.navigate(-1));
         this.elements.sampleBtn.addEventListener('click', () => this.handleFlip());
         this.elements.favoriteBtn.addEventListener('click', () => this.toggleFavorite());
+        this.elements.exceptBtn.addEventListener('click', () => this.toggleExcept());
 
         this.elements.wordDisplay.addEventListener('click', () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
@@ -777,6 +780,7 @@ async saveAndExitEditMode() {
         this.elements.sampleBtnImg.src = hasSample ? sampleImgUrl : noSampleImgUrl;
 
         this.updateFavoriteIcon(utils.isFavorite(wordData.word));
+        this.updateExceptIcon(wordData.except === true);
     },
     adjustWordFontSize() {
         const wordDisplay = this.elements.wordDisplay;
@@ -1011,9 +1015,23 @@ async saveAndExitEditMode() {
             this.displayWord(this.state.currentIndex);
         }
     },
-    updateFavoriteIcon(isFavorite) {
+        updateFavoriteIcon(isFavorite) {
         this.elements.favoriteIcon.classList.toggle('text-yellow-400', isFavorite);
         this.elements.favoriteIcon.classList.toggle('text-white', !isFavorite);
+    },
+    updateExceptIcon(isExcluded) {
+        if (!this.elements.exceptIcon) return;
+        this.elements.exceptIcon.style.opacity = isExcluded ? '1' : '0';
+    },
+    async toggleExcept() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        if (!wordData) return;
+        const newStatus = await api.toggleExcept(wordData.word);
+        wordData.except = newStatus;
+        this.updateExceptIcon(newStatus);
+        window.dispatchEvent(new CustomEvent('showToast', {
+            detail: { message: newStatus ? '🚫 퀴즈에서 제외됩니다.' : '✅ 퀴즈에 다시 포함됩니다.' }
+        }));
     },
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
