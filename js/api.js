@@ -270,10 +270,9 @@ export const api = {
         return newFavoriteStatus;
     },
 
-    async toggleExcept(word) {
+async toggleExcept(word) {
     if (!word) return false;
 
-    // wordList에서 현재 except 상태 확인
     const wordObj = state.wordList.find(w => w.word === word);
     if (!wordObj) return false;
 
@@ -293,7 +292,7 @@ export const api = {
         }
     } catch (e) { console.error('캐시 업데이트 오류', e); }
 
-    // Firebase Realtime DB 직접 업데이트
+    // Firebase Realtime DB 업데이트
     if (typeof database !== 'undefined' && database) {
         const { ref, update } = window.firebaseSDK;
         const safeKey = word.replace(/\./g, ',');
@@ -301,16 +300,16 @@ export const api = {
             .catch(e => console.warn('Firebase except 업데이트 오류', e));
     }
 
-    // GAS(구글시트)에도 반영
-    if (config.SCRIPTURL) {
-        const scriptUrl = new URL(config.SCRIPTURL);
+    // 구글시트(GAS) 업데이트
+    if (config.SCRIPT_URL) {
+        const scriptUrl = new URL(config.SCRIPT_URL);
         scriptUrl.searchParams.append('action', 'toggle_except');
         scriptUrl.searchParams.append('word', word);
         scriptUrl.searchParams.append('value', newExceptStatus ? '1' : '');
         fetch(scriptUrl.toString())
             .then(r => r.json())
-            .then(d => { if (!d.success) console.warn('GAS except 업데이트 오류', d.message); })
-            .catch(e => console.error('GAS except 오류', e));
+            .then(d => { if (!d.success) console.warn('GAS except 오류', d.message); })
+            .catch(e => console.error('GAS except fetch 오류', e));
     }
 
     return newExceptStatus;
