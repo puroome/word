@@ -1023,15 +1023,12 @@ async saveAndExitEditMode() {
         if (!this.elements.exceptIcon) return;
         this.elements.exceptIcon.style.opacity = isExcluded ? '1' : '0';
     },
-    async toggleExcept() {
+        async toggleExcept() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
         const newStatus = await api.toggleExcept(wordData.word);
         wordData.except = newStatus;
         this.updateExceptIcon(newStatus);
-        window.dispatchEvent(new CustomEvent('showToast', {
-            detail: { message: newStatus ? '🚫 퀴즈에서 제외됩니다.' : '✅ 퀴즈에 다시 포함됩니다.' }
-        }));
     },
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
