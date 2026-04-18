@@ -369,6 +369,7 @@ promptForRangeValue(targetButton) {
 
         let candidates = wordsInRange.filter(wordObj => {
             const word = wordObj.word;
+            if (wordObj.except === true) return false;
             if (this.state.answeredWords.has(word)) return false;
             if (this.state.isPracticeMode) return true;
             if (unsynced[word] && unsynced[word][currentQuizType] === 'correct') return false;
@@ -606,6 +607,7 @@ showSessionResultModal(isFinal = false) {
 
         let candidates = wordsInRange.filter(wordObj => {
             const word = wordObj.word;
+            if (wordObj.except === true) return false;
             if (word === wordToExclude) return false;
             if (this.state.answeredWords.has(word)) return false;
             if (this.state.isPracticeMode) return true;
