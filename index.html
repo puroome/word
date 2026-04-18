@@ -184,6 +184,11 @@
                     <div class="relative">
                         <div id="learning-card-front" class="w-full">
                             <div id="word-header" class="relative group bg-green-100 py-3 px-1 rounded-lg mb-4 flex items-baseline justify-center cursor-context-menu">
+    <!-- 🚫 퀴즈제외 버튼 (왼쪽) -->
+    <button id="except-btn" class="absolute top-1/2 left-0 -translate-y-1/2 p-2 rounded-full focus:outline-none" title="퀴즈에서 제외">
+        <span id="except-icon" class="text-2xl leading-none opacity-0 transition-opacity duration-200">🚫</span>
+    </button>                            
+                                
                                 <h1 id="word-display" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 pr-4"></h1>
                                 <button id="favorite-btn" class="absolute top-1/2 right-0 -translate-y-1/2 p-2 rounded-full group focus:outline-none">
                                     <svg id="favorite-icon" class="w-7 h-7 text-white transition-all duration-200 group-hover:stroke-yellow-300" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
