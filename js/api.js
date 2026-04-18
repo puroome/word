@@ -270,6 +270,52 @@ export const api = {
         return newFavoriteStatus;
     },
 
+    async toggleExcept(word) {
+    if (!word) return false;
+
+    // wordList에서 현재 except 상태 확인
+    const wordObj = state.wordList.find(w => w.word === word);
+    if (!wordObj) return false;
+
+    const newExceptStatus = !wordObj.except;
+
+    // 로컬 wordList 즉시 업데이트
+    wordObj.except = newExceptStatus;
+
+    // 캐시 업데이트
+    try {
+        const cachedData = localStorage.getItem(state.LOCALSTORAGEKEYS.WORDLISTCACHE);
+        if (cachedData) {
+            const parsedCache = JSON.parse(cachedData);
+            const target = parsedCache.words.find(w => w.word === word);
+            if (target) target.except = newExceptStatus;
+            localStorage.setItem(state.LOCALSTORAGEKEYS.WORDLISTCACHE, JSON.stringify(parsedCache));
+        }
+    } catch (e) { console.error('캐시 업데이트 오류', e); }
+
+    // Firebase Realtime DB 직접 업데이트
+    if (typeof database !== 'undefined' && database) {
+        const { ref, update } = window.firebaseSDK;
+        const safeKey = word.replace(/\./g, ',');
+        update(ref(database), { [`vocabulary/${safeKey}/except`]: newExceptStatus })
+            .catch(e => console.warn('Firebase except 업데이트 오류', e));
+    }
+
+    // GAS(구글시트)에도 반영
+    if (config.SCRIPTURL) {
+        const scriptUrl = new URL(config.SCRIPTURL);
+        scriptUrl.searchParams.append('action', 'toggleexcept');
+        scriptUrl.searchParams.append('word', word);
+        scriptUrl.searchParams.append('value', newExceptStatus ? '1' : '');
+        fetch(scriptUrl.toString())
+            .then(r => r.json())
+            .then(d => { if (!d.success) console.warn('GAS except 업데이트 오류', d.message); })
+            .catch(e => console.error('GAS except 오류', e));
+    }
+
+    return newExceptStatus;
+},
+    
     async updateStudyTime(seconds) {
         if (!state.userId || seconds < 1) return;
         const { doc, setDoc, getDoc } = window.firebaseSDK;
