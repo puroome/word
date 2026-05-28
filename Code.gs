@@ -49,15 +49,6 @@ function getGeminiApiKey() {
  * [SEC-2] 최초 1회 실행하여 민감 정보를 PropertiesService에 저장.
  * 값을 입력한 뒤 GAS 편집기에서 직접 실행하세요.
  */
-function setupProperties() {
-  PropertiesService.getScriptProperties().setProperties({
-    'FIREBASE_URL'    : 'https://word-91148-default-rtdb.asia-southeast1.firebasedatabase.app',   // e.g. https://xxx.firebasedatabase.app
-    'FIREBASE_SECRET' : 'iK4pLQsR5QkrFjEEaxTXkJNUNPVZly1bN92SIFPJ',
-    'GEMINI_API_KEY'  : 'AIzaSyCpGafn-Gs42-ew-XZYEOs6KvVZZZ-3CWA',
-  });
-  SpreadsheetApp.getUi().alert('✅ Script Properties 설정 완료!');
-}
-
 
 // ================================================================
 // 1. 라우팅 (doGet)
@@ -76,6 +67,8 @@ function doGet(e) {
       case 'update_word_data':      result = handleUpdateWordData(e);      break;
       case 'create_word':           result = handleCreateWord(e);          break;
       case 'delete_word':           result = handleDeleteWord(e);          break;
+      case 'toggle_except':         result = handleToggleExcept(e);        break;
+
       default:
         throw new Error(`지원하지 않는 action: "${action}"`);
     }
@@ -451,6 +444,35 @@ function handleDeleteWord(e) {
   return { success: true, message: '삭제 및 전체 동기화 완료' };
 }
 
+// ================================================================
+// except 토글 핸들러
+// ================================================================
+function handleToggleExcept(e) {
+    const word = e.parameter.word;
+    const value = e.parameter.value; // '1' or ''
+    if (!word) throw new Error('word 파라미터가 없습니다.');
+
+    const sheet = getSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const colMap  = buildHeaderMap(headers);
+
+    if (colMap['except'] === undefined) {
+        // except 열이 없으면 마지막 열에 헤더 추가
+        const lastCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, lastCol).setValue('except');
+        colMap['except'] = lastCol - 1; // 0-based
+    }
+
+    const rowIdx = findRowByWord(sheet, colMap['word'], word);
+    if (rowIdx === -1) throw new Error(`'${word}' 단어를 찾을 수 없습니다.`);
+
+    sheet.getRange(rowIdx, colMap['except'] + 1).setValue(value);
+
+    // Firebase에도 반영
+    patchWordInFirebase(word, { except: value === '1' });
+
+    return { success: true, message: 'except 업데이트 완료' };
+}
 
 // ================================================================
 // 6. Firebase 전체 동기화
@@ -514,7 +536,7 @@ function readWordsFromSheet(sheet) {
     richData.shift();
 
     const colMap = buildHeaderMap(headerRow);
-    const { word: wc, pos: pc, meaning: mc, manualsample: msc, aisample: asc, explanation: ec } = colMap;
+    const { word: wc, pos: pc, meaning: mc, manualsample: msc, aisample: asc, explanation: ec, except: exc } = colMap;
 
     if ([wc, pc, mc].some(c => c === undefined)) {
       throw new Error('필수 헤더(Word, Pos, Meaning)가 없습니다.');
@@ -530,15 +552,16 @@ function readWordsFromSheet(sheet) {
       const manualSample = String(row[msc] || '');
       const aiSampleText = String(row[asc] || '');
 
-      words.push({
-        index:       idx,
-        word:        wordHtml,
-        pos:         String(row[pc]  || ''),
-        meaning:     convertRichTextToHtml(rich[mc]),
-        explanation: ec !== undefined ? convertRichTextToHtml(rich[ec]) : '',
-        sample:      manualSample,
-        AISample:    aiSampleText ? { en: aiSampleText, ko: '' } : null,
-      });
+words.push({
+    index:       idx,
+    word:        wordHtml,
+    pos:         String(row[pc]  || ''),
+    meaning:     convertRichTextToHtml(rich[mc]),
+    explanation: ec !== undefined ? convertRichTextToHtml(rich[ec]) : '',
+    sample:      manualSample,
+    AISample:    aiSampleText ? { en: aiSampleText, ko: '' } : null,
+    except:      exc !== undefined ? (String(row[exc] || '').trim() === '1') : false,
+});
     });
 
     return { words };
