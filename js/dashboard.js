@@ -2,19 +2,24 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
 
-let chartJsPromise = null;
+// ✨ 차트 다운로드 상태를 기억할 변수 추가
+let chartJsPromise = null; 
 
+// Chart.js 동적 로딩을 위한 헬퍼 함수 (안전하게 개선됨)
 const loadChartJs = () => {
-    if (window.Chart) return Promise.resolve();
+    // 1. 이미 다운로드가 완료되어 설치되어 있다면 즉시 통과!
+    if (window.Chart) return Promise.resolve(); 
+    
+    // 2. 누군가 이미 다운로드를 시작해서 진행 중이라면, 그 작업이 끝날 때까지 기다림! (중복 다운로드 방지)
+    if (chartJsPromise) return chartJsPromise; 
 
-    if (chartJsPromise) return chartJsPromise;
-
+    // 3. 처음 요청하는 거라면 다운로드 시작!
     chartJsPromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
         script.onload = resolve;
         script.onerror = (e) => {
-            chartJsPromise = null;
+            chartJsPromise = null; // 실패하면 다음에 다시 시도할 수 있도록 초기화
             reject(e);
         };
         document.head.appendChild(script);
@@ -30,6 +35,7 @@ export const dashboard = {
         summary: document.getElementById('dashboard-summary'),
     },
     state: {
+        // 주의: 차트 인스턴스들을 배열로 통합 관리여 destroyCharts가 자동 확장됨
         charts: [],
     },
     init() {
@@ -77,11 +83,12 @@ export const dashboard = {
     async renderSummary() {
         this.destroyCharts();
 
+        // 여기서 Chart.js 로딩을 기다립니다.
         try {
             await loadChartJs();
         } catch (e) {
             console.error("Chart.js 로딩 실패:", e);
-            return;
+            return; // 라이브러리 로드 실패 시 차트 렌더링 중단
         }
 
         const studyHistory = await api.getStudyHistory();

@@ -1,6 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
-import { ui } from './ui.js';
+import { ui } from './ui.js'; // [요청 2] 툴팁 사용을 위해 추가
 import { utils, playSequence, playSingleBeep, correctBeep, incorrectBeep } from './utils.js';
 export const quizMode = {
     state: {
@@ -14,7 +14,7 @@ export const quizMode = {
         preloadedQuizzes: { 'MULTIPLE_CHOICE_MEANING': null, 'FILL_IN_THE_BLANK': null, 'MULTIPLE_CHOICE_DEFINITION': null, 'LISTENING_QUIZ': null },
     isPreloading: { 'MULTIPLE_CHOICE_MEANING': false, 'FILL_IN_THE_BLANK': false, 'MULTIPLE_CHOICE_DEFINITION': false, 'LISTENING_QUIZ': false },
         currentRangeInputTarget: null,
-        isFinalResult: false,
+        isFinalResult: false,  // [BUG-3] 텍스트 문자열 비교 대신 사용하는 플래그
     },
     elements: {},
     init() {
@@ -72,6 +72,7 @@ document.addEventListener('keydown', (e) => {
 
             const choiceCount = Array.from(this.elements.choices.children).filter(el => !el.textContent.includes('PASS')).length;
 
+            // [요청 3, 4, 5, 2(스페이스바 부분)] 스페이스바 입력 시 TTS 실행
             if (e.key === ' ') {
                 e.preventDefault();
                 const quizData = this.state.currentQuiz;
@@ -203,6 +204,7 @@ promptForRangeValue(targetButton) {
         this.elements.rangeInputField.select();
     },
 
+    // ✨ 누락되었던 hideRangeInput 함수 추가
     hideRangeInput() {
         this.elements.rangeInputModal.classList.add('hidden');
         this.state.currentRangeInputTarget = null;
@@ -235,7 +237,7 @@ promptForRangeValue(targetButton) {
                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "숫자만 입력 가능합니다.", isError: true } }));
             }
         }
-        this.hideRangeInput();
+        this.hideRangeInput(); // 이제 함수를 정상적으로 찾을 수 있습니다.
     },
     resetQuizRange() {
         const allWords = state.wordList || [];
@@ -304,6 +306,8 @@ promptForRangeValue(targetButton) {
             }
         }
     },
+    // --- 공통 헬퍼 ---
+    // 범위 파라리터(rangeOverride 또는 DOM)로부터 { startIndex, endIndex }를 계산
     _getWordRange(allWords, rangeOverride = null) {
         let startVal, endVal;
         if (rangeOverride) {
@@ -321,15 +325,20 @@ promptForRangeValue(targetButton) {
         };
     },
 
+    // 오답(distractor) Set을 구성하는 공통 로직
+    // valueKey: 오답으로 사용할 필드명 ('meaning' 또는 'word')
+    // allowFallbacks: 데이터 부족 시 더미 답변 허용 여부 (MeaningQuiz에서만 true)
     _buildDistractors(correctWordData, allWordsData, valueKey, allowFallbacks = false) {
         const correctValue = correctWordData[valueKey];
         const wrongAnswers = new Set();
 
+        // 같은 품사 우선 (최적화된 랜덤 선택)
         const samePosDistractors = utils.pickRandomItems(allWordsData, 10,
             (w) => w.pos !== correctWordData.pos || w[valueKey] === correctValue
         );
         samePosDistractors.forEach(w => wrongAnswers.add(w[valueKey]));
 
+        // 부족하면 임의 단어 추가
         if (wrongAnswers.size < 3) {
             const randomDistractors = utils.pickRandomItems(allWordsData, 10,
                 (w) => w[valueKey] === correctValue || wrongAnswers.has(w[valueKey])
@@ -426,11 +435,13 @@ promptForRangeValue(targetButton) {
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
         replayBtn.style.cssText = 'flex-shrink:0;width:2.4rem;height:2.4rem;border-radius:9999px;background:#ef4444;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;';
-
+        
+        // [요청 2] ▷ 아이콘 대신 볼드체 대문자 T로 변경
         replayBtn.innerHTML = `<span style="font-weight:bold; font-size:16px; color:white;">T</span>`;
         replayBtn.onmouseover = () => { replayBtn.style.background = '#dc2626'; };
         replayBtn.onmouseout  = () => { replayBtn.style.background = '#ef4444'; };
-
+        
+        // [요청 2] T 버튼 클릭 시 예문 팝업 띄우기
         replayBtn.onclick = (e) => {
             const escapedWord = question.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
@@ -439,11 +450,12 @@ promptForRangeValue(targetButton) {
         };
         replayBtn.onmouseleave = () => { ui.hideTranslationTooltip(); };
 
+        // [요청 2] 한글 영역 클릭 시 다시 듣기(TTS) 실행
         const koreanP = document.createElement('p');
         koreanP.className = 'text-base text-gray-800 leading-relaxed cursor-pointer hover:text-blue-600 transition-colors';
         koreanP.textContent = question.korean;
         koreanP.onclick = () => this._playListeningCloze(question.sentence, question.word);
-
+        
         questionDisplay.appendChild(replayBtn);
         questionDisplay.appendChild(koreanP);
         setTimeout(() => this._playListeningCloze(question.sentence, question.word), 1000);
@@ -459,8 +471,8 @@ promptForRangeValue(targetButton) {
 
         const passLi = document.createElement('li');
         passLi.className = 'choice-item p-4 rounded-lg cursor-pointer flex items-center justify-center transition-all font-bold text-lg';
-        passLi.style.setProperty('background', '#ffe4e6CC', 'important');
-        passLi.style.setProperty('color', '#1f2937', 'important');
+        passLi.style.setProperty('background', '#ffe4e6CC', 'important'); /* 80% 투명도 적용 */
+        passLi.style.setProperty('color', '#1f2937', 'important'); /* 검정색 텍스트 */
         passLi.innerHTML = `<span>PASS</span>`;
         passLi.onclick = () => this.checkAnswer(passLi, 'USER_PASSED');
         this.elements.choices.appendChild(passLi);
@@ -493,6 +505,7 @@ promptForRangeValue(targetButton) {
              await api.updateWordStatus(word, quizType, (isCorrect && !isPass) ? 'correct' : 'incorrect');
         }
 
+        // ✨ 정답이면 1.2초(1200), 오답이거나 패스면 2초(2000) 대기
         const delayTime = (isCorrect && !isPass) ? 1200 : 2000;
 
         setTimeout(() => {
@@ -516,13 +529,13 @@ promptForRangeValue(targetButton) {
 showSessionResultModal(isFinal = false) {
         this.elements.modalScore.textContent = `${this.state.sessionAnsweredInSet}문제 중 ${this.state.sessionCorrectInSet}개 정답!`;
         this.elements.modalMistakesBtn.classList.toggle('hidden', this.state.sessionMistakes.length === 0);
-        this.state.isFinalResult = isFinal;
+        this.state.isFinalResult = isFinal;  // [BUG-3] 플래그로 상태 관리
         this.elements.modalContinueBtn.textContent = isFinal ? "퀴즈 유형으로" : "다음 퀴즈 계속";
         this.elements.modal.classList.remove('hidden');
     },
     continueAfterResult() {
         this.elements.modal.classList.add('hidden');
-        if (this.state.isFinalResult) {
+        if (this.state.isFinalResult) {  // [BUG-3] 문자열 비교 대신 플래그 사용
             window.dispatchEvent(new CustomEvent('syncRequest'));
             window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } }));
             return;
