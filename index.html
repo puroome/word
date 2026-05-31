@@ -184,6 +184,7 @@
                     <div class="relative">
                         <div id="learning-card-front" class="w-full">
                             <div id="word-header" class="relative group bg-green-100 py-3 px-1 rounded-lg mb-4 flex items-baseline justify-center cursor-context-menu">
+    <!-- 🚫 퀴즈제외 버튼 (왼쪽) -->
     <button id="except-btn" class="absolute top-1/2 left-0 -translate-y-1/2 p-2 rounded-full focus:outline-none" title="퀴즈에서 제외">
         <span id="except-icon" class="text-2xl leading-none opacity-0 transition-opacity duration-200">🚫</span>
     </button>                            
@@ -275,17 +276,6 @@
         </div>
     </div>
 
-    <div id="nice-alert-modal" class="nice-modal-overlay" style="display:none">
-        <div class="nice-modal-box">
-            <div class="nice-modal-title">🗑️ 카드 삭제</div>
-            <div id="nice-msg" class="nice-modal-desc"></div>
-            <div class="nice-modal-btns">
-                <button id="nice-cancel" class="nice-btn nice-btn-cancel">취소</button>
-                <button id="nice-confirm" class="nice-btn nice-btn-del">삭제</button>
-            </div>
-        </div>
-    </div>
-
     <div id="practice-mode-control" class="hidden fixed bottom-4 left-4 z-50 group">
         <label for="practice-mode-checkbox" class="flex items-center bg-gray-800 bg-opacity-80 text-white p-3 rounded-lg shadow-lg cursor-pointer">
             <input type="checkbox" id="practice-mode-checkbox" class="h-5 w-5 rounded text-blue-500 focus:ring-blue-500 border-gray-300">
@@ -329,3 +319,6 @@
     </script>
 </body>
 </html>
+
+
+
