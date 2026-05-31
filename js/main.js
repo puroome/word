@@ -13,7 +13,6 @@ const studyTracker = {
     saveInterval: null,
     INACTIVITY_LIMIT: 30000,
 
-    // localStorage에 현재 세션 시간을 누적하는 공통 로직 (중복 제거)
     _flushSessionTime() {
         if (this.sessionSeconds <= 0) return;
         try {
@@ -83,12 +82,12 @@ const app = {
     init() {
         const startFirebaseApp = () => {
             const { initializeApp, getDatabase, getAuth, getFirestore, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } = window.firebaseSDK;
-            
+
             const firebaseApp = initializeApp(config.FIREBASE_CONFIG);
             const database = getDatabase(firebaseApp);
             const auth = getAuth(firebaseApp);
             const db = getFirestore(firebaseApp);
-            
+
             api.init(db, database);
 
             onAuthStateChanged(auth, async (user) => {
@@ -151,7 +150,7 @@ const app = {
             await api.loadUserProgress();
             this.updateLastUpdatedText();
         } catch (e) { return; }
-        
+
         quizMode.init();
         learningMode.init();
         dashboard.init();
@@ -167,7 +166,7 @@ const app = {
         this.elements.googleLoginBtn.addEventListener('click', async () => {
              const provider = new GoogleAuthProvider();
              this.elements.loginError.textContent = '';
-             try { await signInWithPopup(auth, provider); } 
+             try { await signInWithPopup(auth, provider); }
              catch (error) { this.elements.loginError.textContent = '로그인 실패'; }
         });
 
@@ -228,10 +227,9 @@ const app = {
             const target = e.target;
             const isInteractiveTrigger = target.closest('.interactive-word, #word-display');
             const isCustomContextMenu = target.closest('#word-context-menu');
-            // 편집 메뉴 추가로 인한 예외 처리 (edit-context-menu)
             const isEditContextMenu = target.closest('#edit-context-menu');
             const isEditTrigger = target.closest('#meaning-container, #explanation-container');
-            
+
             if (!isInteractiveTrigger && !isCustomContextMenu && !isEditContextMenu && !isEditTrigger) {
                 e.preventDefault();
             }
@@ -250,29 +248,25 @@ const app = {
 
 async syncOfflineData() {
         if (!state.userId) return;
-        
+
         const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
         const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
 
-        // 1. 동기화할 데이터를 먼저 읽어옵니다.
         const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
         const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
         const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
 
-        // 2. [선 차감] 레이스 컨디션을 막기 위해 로컬 데이터를 먼저 지웁니다.
         if (timeToSync > 0) localStorage.removeItem(timeKey);
         if (statsToSync) localStorage.removeItem(quizKey);
         if (progressToSync && Object.keys(progressToSync).length > 0) localStorage.removeItem(progressKey);
 
-        // 3. [서버 전송 및 실패 시 복구(Rollback)]
         try {
             if (timeToSync > 0) {
                 await api.updateStudyTime(timeToSync);
             }
         } catch (error) {
             console.error("학습 시간 동기화 실패, 로컬에 복구합니다:", error);
-            // 실패하면 지웠던 데이터를 다시 살려둡니다 (기존 값에 누적)
             const currentTime = parseInt(localStorage.getItem(timeKey) || '0');
             localStorage.setItem(timeKey, currentTime + timeToSync);
         }
@@ -283,7 +277,6 @@ async syncOfflineData() {
             }
         } catch (error) {
             console.error("퀴즈 기록 동기화 실패, 로컬에 복구합니다:", error);
-            // 복잡한 객체 병합 대신, 다음 세션에서 합쳐지도록 단순히 원래 값으로 덮어씌웁니다.
             localStorage.setItem(quizKey, JSON.stringify(statsToSync));
         }
 
@@ -296,7 +289,7 @@ async syncOfflineData() {
             localStorage.setItem(progressKey, JSON.stringify(progressToSync));
         }
     },
-    
+
     navigateTo(mode, options = {}) {
         const currentState = history.state || {};
         if (currentState.mode !== mode) this.syncOfflineData();
@@ -309,13 +302,11 @@ async syncOfflineData() {
 
 async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
-        
-        // [요청 1] 화면 전환 시 실행 중인 TTS 즉시 중단
+
         if (window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
-        
-        // [수정됨] 화면 전환 시 일단 새로고침 버튼 숨김 (기본 초기화)
+
         if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
 
         this.elements.selectionScreen.classList.add('hidden');
@@ -334,7 +325,6 @@ async _renderMode(mode, options = {}) {
         const showCommonButtons = () => {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.ttsToggleBtn.classList.remove('hidden');
-            // 학습 모드 등에서는 새로고침 버튼 안 보임 (TTS 버튼이 대신 함)
         };
 
         if (['quiz-play', 'learning', 'mistakeReview', 'favorites'].includes(mode)) {
@@ -379,10 +369,9 @@ async _renderMode(mode, options = {}) {
             this.elements.dashboardContainer.classList.remove('hidden');
             dashboard.render();
         } else {
-            // [수정됨] 첫 화면(selection)에서만 새로고침 버튼 표시
             this.elements.selectionScreen.classList.remove('hidden');
             this.elements.logoutBtn.classList.remove('hidden');
-            
+
             if (this.elements.refreshBtn) {
                 this.elements.refreshBtn.classList.remove('hidden');
             }
@@ -393,12 +382,11 @@ async _renderMode(mode, options = {}) {
     },
     async forceReload() {
         this.elements.globalLoader.classList.remove('hidden');
-        // refreshBtn도 비활성화 대상에 포함
         const elementsToDisable = [
-            this.elements.refreshBtn, 
-            this.elements.selectDashboardBtn, 
-            this.elements.selectMistakesBtn, 
-            this.elements.selectLearningBtn, 
+            this.elements.refreshBtn,
+            this.elements.selectDashboardBtn,
+            this.elements.selectMistakesBtn,
+            this.elements.selectLearningBtn,
             this.elements.selectQuizBtn
         ];
         elementsToDisable.forEach(el => {
