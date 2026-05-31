@@ -1,12 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* ================================================================
-   NEUMORPHISM DESIGN SYSTEM
-   Base color: #e0e5ec  (soft blue-grey)
-   Light shadow: #ffffff  Dark shadow: #a3b1c6
-   Accent: #7c72e0 (soft violet)
-   ================================================================ */
-
 :root {
   --nm-bg:        #e0e5ec;
   --nm-light:     #ffffff;
@@ -19,16 +12,12 @@
   --nm-radius-sm: 12px;
   --nm-radius-lg: 24px;
 
-  /* Shadows */
   --nm-shadow-out:  6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light);
   --nm-shadow-in:   inset 4px 4px 10px var(--nm-dark), inset -4px -4px 10px var(--nm-light);
   --nm-shadow-flat: 2px 2px 6px var(--nm-dark), -2px -2px 6px var(--nm-light);
   --nm-hover-out:   8px 8px 18px var(--nm-dark), -8px -8px 18px var(--nm-light);
 }
 
-/* ================================================================
-   BASE
-   ================================================================ */
 * { box-sizing: border-box; }
 
 body {
@@ -43,9 +32,6 @@ body {
   color: var(--nm-text);
 }
 
-/* ================================================================
-   LOADER
-   ================================================================ */
 .loader {
   border: 4px solid var(--nm-bg);
   border-radius: 50%;
@@ -57,9 +43,6 @@ body {
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* ================================================================
-   LOGIN SCREEN
-   ================================================================ */
 #login-screen {
   background: var(--nm-bg) !important;
   border-radius: var(--nm-radius-lg) !important;
@@ -87,9 +70,6 @@ body {
 }
 #login-error { color: #e05c5c !important; }
 
-/* ================================================================
-   TOP NAV
-   ================================================================ */
 #last-updated-text { color: var(--nm-text-sub) !important; }
 
 #refresh-btn {
@@ -109,9 +89,9 @@ body {
 
 #tts-toggle-btn {
   border: none !important;
-  color: #1f2937 !important; /* 텍스트는 항상 검정색 */
+  color: #1f2937 !important;
   box-shadow: var(--nm-shadow-out) !important;
-  transition: transform 0.6s, box-shadow 0.2s, background-color 0.3s;
+  transition: transform 0.6s, box-shadow 0.3s;
   transform-style: preserve-3d;
 }
 #tts-toggle-btn.is-flipped { transform: rotateY(180deg); }
@@ -145,7 +125,6 @@ body {
 }
 #logout-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* Progress bar */
 #progress-bar-track {
   background: var(--nm-bg) !important;
   box-shadow: var(--nm-shadow-in) !important;
@@ -162,9 +141,6 @@ body {
 }
 #progress-bar-handle:active { cursor: grabbing; transform: scale(1.2) translateY(-10%); }
 
-/* ================================================================
-   SELECTION (HOME) SCREEN
-   ================================================================ */
 #selection-screen {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -174,7 +150,6 @@ body {
 #selection-screen h1 { color: var(--nm-text) !important; }
 #selection-screen > p { color: var(--nm-text-sub) !important; }
 
-/* Image buttons */
 #select-learning-btn, #select-quiz-btn,
 #start-meaning-quiz-btn, #start-blank-quiz-btn, #start-definition-quiz-btn {
   box-shadow: var(--nm-shadow-out) !important;
@@ -192,11 +167,10 @@ body {
   transform: scale(0.98) !important;
 }
 
-/* Dashboard / Mistakes / Favorites buttons */
 #select-dashboard-btn {
-  background: #d1fae5 !important; /* 옅은 녹색 */
+  background: #d1fae5 !important;
   border: none !important;
-  color: #1f2937 !important; /* 검정색 */
+  color: #1f2937 !important;
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -209,9 +183,9 @@ body {
 #select-dashboard-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
 #select-mistakes-btn {
-  background: #ffedd5 !important; /* 옅은 주황색 */
+  background: #ffedd5 !important;
   border: none !important;
-  color: #1f2937 !important; /* 검정색 */
+  color: #1f2937 !important;
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -224,9 +198,9 @@ body {
 #select-mistakes-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
 #select-favorites-btn {
-  background: #fef9c3 !important; /* 옅은 노란색 */
+  background: #fef9c3 !important;
   border: none !important;
-  color: #1f2937 !important; /* 검정색 */
+  color: #1f2937 !important;
   font-weight: 700 !important;
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius-sm) !important;
@@ -238,9 +212,6 @@ body {
 }
 #select-favorites-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* ================================================================
-   DASHBOARD
-   ================================================================ */
 #dashboard-container {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -249,7 +220,6 @@ body {
 }
 #dashboard-container h1 { color: var(--nm-text) !important; }
 
-/* Progress bars in dashboard */
 #dashboard-content .bg-blue-500   {
   background: linear-gradient(90deg, var(--nm-accent), var(--nm-accent2)) !important;
   border-radius: 999px;
@@ -264,7 +234,6 @@ body {
 }
 #dashboard-content .bg-gray-400   { background: var(--nm-dark) !important; border-radius: 999px; }
 
-/* Chart wrapper neumorphic cards */
 #dashboard-summary > div {
   background: var(--nm-bg);
   border-radius: var(--nm-radius);
@@ -277,9 +246,6 @@ body {
   border-radius: var(--nm-radius-sm) !important;
 }
 
-/* ================================================================
-   QUIZ MODE
-   ================================================================ */
 #quiz-mode-container {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -305,15 +271,13 @@ body {
   box-shadow: var(--nm-shadow-in) !important;
 }
 
-/* Quiz question area */
 #quiz-question-display {
-  background: #d1fae5 !important; /* 옅은 파스텔 녹색으로 변경 */
+  background: #d1fae5 !important;
   border: none !important;
-  box-shadow: var(--nm-shadow-in) !important; /* 음각 그림자는 그대로 유지 */
+  box-shadow: var(--nm-shadow-in) !important;
   border-radius: var(--nm-radius) !important;
 }
 
-/* Quiz choices */
 .choice-item {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -325,21 +289,21 @@ body {
 .choice-item:hover {
   box-shadow: var(--nm-hover-out) !important;
   transform: scale(1.02);
-  color: #7e22ce !important; /* 선명하고 진한 보라색 적용 */
+  color: #7e22ce !important;
 }
 .choice-item.correct {
   background: var(--nm-bg) !important;
   border: none !important;
-  color: #059669 !important; /* 더 짙고 선명한 에메랄드 녹색 */
-  font-weight: 700 !important; /* 글씨를 굵게 하여 가독성 대폭 향상 */
+  color: #059669 !important;
+  font-weight: 700 !important;
   box-shadow: inset 4px 4px 10px rgba(45,168,117,0.25), inset -4px -4px 10px rgba(255,255,255,0.8) !important;
   transform: scale(1.03);
 }
 .choice-item.incorrect {
   background: var(--nm-bg) !important;
   border: none !important;
-  color: #dc2626 !important; /* 더 짙고 선명한 붉은색 */
-  font-weight: 700 !important; /* 글씨를 굵게 하여 가독성 대폭 향상 */
+  color: #dc2626 !important;
+  font-weight: 700 !important;
   box-shadow: inset 4px 4px 10px rgba(224,92,92,0.20), inset -4px -4px 10px rgba(255,255,255,0.8) !important;
 }
 .choice-item.submitting {
@@ -347,9 +311,6 @@ body {
   opacity: 0.7;
 }
 
-/* ================================================================
-   LEARNING MODE
-   ================================================================ */
 #learning-start-screen {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -404,14 +365,12 @@ body {
   border-radius: var(--nm-radius-lg) !important;
 }
 
-/* Suggestion containers */
 .bg-green-500\/20, .bg-red-500\/20 {
   background: var(--nm-bg) !important;
   box-shadow: var(--nm-shadow-in) !important;
   border-radius: var(--nm-radius-sm) !important;
 }
 
-/* Main learning card */
 #learning-app-container {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -419,9 +378,8 @@ body {
   border-radius: var(--nm-radius-lg) !important;
 }
 
-/* Word header — soft violet neumorphic pill */
 #word-header {
-  background: #ddd6fe !important; /* 깔끔하고 부드러운 파스텔톤 보라색 */
+  background: #ddd6fe !important;
   border: none !important;
   border-radius: var(--nm-radius) !important;
   box-shadow: 5px 5px 12px rgba(120,110,200,0.25), -4px -4px 10px rgba(255,255,255,0.8) !important;
@@ -430,7 +388,6 @@ body {
   margin-bottom: 1rem;
   transition: box-shadow 0.3s ease !important;
 }
-/* 주의: 기존에 있던 #word-header::before (유리광택 효과) 블록은 통째로 지워주세요! */
 #word-display {
   white-space: nowrap;
   cursor: pointer;
@@ -449,13 +406,12 @@ body {
 #meaning-display { color: var(--nm-text) !important; }
 
 #explanation-container {
-  background: transparent !important; /* 배경 투명하게 */
+  background: transparent !important;
   border: none !important;
-  box-shadow: none !important; /* 양각/음각 그림자 모두 제거 */
+  box-shadow: none !important;
 }
 #explanation-display { color: var(--nm-text) !important; }
 
-/* Card back (slide-up) */
 #learning-card-back {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -475,7 +431,6 @@ body {
 #learning-back-title   { color: var(--nm-text) !important; }
 #learning-back-content { color: var(--nm-text-sub) !important; }
 
-/* Bottom nav buttons */
 #learning-fixed-buttons {
   background: linear-gradient(to top, rgba(224,229,236,0.98), transparent) !important;
 }
@@ -493,9 +448,6 @@ body {
 }
 #prev-btn:active, #next-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* ================================================================
-   CONTEXT MENUS
-   ================================================================ */
 #word-context-menu {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -533,13 +485,10 @@ body {
 #delete-card-btn:hover { background: rgba(224,92,92,0.08) !important; }
 #card-context-menu .h-px { background: var(--nm-dark) !important; opacity: 0.3; }
 
-/* ================================================================
-   MODALS
-   ================================================================ */
 #range-input-modal > div {
   background: var(--nm-bg) !important;
   border: none !important;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important; /* 깔끔한 단일 팝업 그림자로 변경 */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
   border-radius: var(--nm-radius-lg) !important;
 }
 #range-input-field {
@@ -577,7 +526,6 @@ body {
 #range-input-confirm-btn:hover { box-shadow: var(--nm-hover-out) !important; }
 #range-input-confirm-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* Number input spinners */
 #range-input-modal input[type="number"]::-webkit-outer-spin-button,
 #range-input-modal input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 #range-input-modal input[type="number"] { -moz-appearance: textfield; }
@@ -585,7 +533,7 @@ body {
 #quiz-result-modal > div {
   background: var(--nm-bg) !important;
   border: none !important;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important; /* 얼룩진 입체 그림자 대신 깔끔한 단일 팝업 그림자로 변경 */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
   border-radius: var(--nm-radius-lg) !important;
 }
 #quiz-result-modal h2 { color: var(--nm-text) !important; }
@@ -615,9 +563,17 @@ body {
 #quiz-result-continue-btn:hover { box-shadow: var(--nm-hover-out) !important; transform: translateY(-1px); }
 #quiz-result-continue-btn:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* ================================================================
-   MISC UI
-   ================================================================ */
+#nice-alert-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; backdrop-filter: blur(2px); }
+.nice-modal-box { background: white; padding: 24px; border-radius: 16px; width: 85%; max-width: 300px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out; }
+.nice-modal-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 8px; color: #1f2937; }
+.nice-modal-desc { color: #4b5563; margin-bottom: 20px; line-height: 1.5; font-size: 1rem; }
+.nice-modal-btns { display: flex; gap: 10px; }
+.nice-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.1s; font-size: 1rem; }
+.nice-btn:active { transform: scale(0.96); }
+.nice-btn-cancel { background: #f3f4f6; color: #4b5563; }
+.nice-btn-del { background: #ef4444; color: white; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+@keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
 #global-loader { background: rgba(224,229,236,0.88) !important; }
 #translation-tooltip {
   background: #3a3f5c !important;
@@ -647,16 +603,12 @@ body {
 
 #app-wrapper.hidden { display: none; }
 
-/* IME warning */
 #ime-warning {
   background: rgba(224,92,92,0.55) !important;
   backdrop-filter: blur(6px);
   border-radius: var(--nm-radius-sm) !important;
 }
 
-/* ================================================================
-   INTERACTIVE WORDS
-   ================================================================ */
 .interactive-word { user-select: none; -webkit-user-select: none; }
 .interactive-word:hover {
   background-color: rgba(124,114,224,0.12);
@@ -666,29 +618,14 @@ body {
 }
 #word-display { white-space: nowrap; cursor: pointer; }
 
-/* ================================================================
-   FUNCTIONAL STATES (보존)
-   ================================================================ */
 .quiz-blank { display: inline-block; white-space: nowrap; }
 .disabled { pointer-events: none; opacity: 0.7; }
 #favorite-icon { transition: color 0.2s, fill 0.2s; }
 #favorite-icon.fill-current { fill: currentColor; }
 
-/* Favorite button — glow on active */
 #favorite-btn { color: rgba(255,255,255,0.5) !important; }
 #favorite-btn:hover { color: #f0c040 !important; }
 
-/* ================================================================
-   TTS BUTTON FLIP (보존)
-   ================================================================ */
-#tts-toggle-btn { transition: transform 0.6s, box-shadow 0.3s; transform-style: preserve-3d; }
-#tts-toggle-btn.is-flipped { transform: rotateY(180deg); }
-#tts-toggle-text { transform: rotateY(0deg); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-#tts-toggle-btn.is-flipped #tts-toggle-text { transform: rotateY(-180deg); }
-
-/* ================================================================
-   FORMAT TOOLTIP (rich-text editing)
-   ================================================================ */
 .format-tooltip {
   position: fixed;
   background: var(--nm-bg);
@@ -717,13 +654,9 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ================================================================
-   QUIZ FINISHED SCREEN
-   ================================================================ */
 #quiz-finished-screen h2 { color: var(--nm-accent) !important; }
 #quiz-finished-message { color: var(--nm-text-sub) !important; }
 
-/* More quizes buttons */
 #more-quizzes-container button {
   background: var(--nm-bg) !important;
   border: none !important;
@@ -740,9 +673,6 @@ body {
 }
 #more-quizzes-container button:active { box-shadow: var(--nm-shadow-in) !important; }
 
-/* ================================================================
-   SCROLLBAR (neumorphic feel)
-   ================================================================ */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track {
   background: var(--nm-bg);
