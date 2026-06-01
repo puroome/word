@@ -137,6 +137,13 @@ export const learningMode = {
         this.elements.progressBarTrack.addEventListener('touchstart', this.handleProgressBarInteraction.bind(this), { passive: false });
         document.addEventListener('touchmove', this.handleProgressBarInteraction.bind(this));
         document.addEventListener('touchend', this.handleProgressBarInteraction.bind(this));
+        document.addEventListener('mousedown', (e) => {           // ← 여기 추가
+            const tooltip = document.getElementById('format-tooltip');
+            if (!tooltip) return;
+            if (tooltip.contains(e.target)) return;
+            if (e.target.closest('[contenteditable="true"]')) return;
+            tooltip.remove();
+        });
     },
 
     handleEditContextMenu(e, side) {
@@ -298,14 +305,6 @@ export const learningMode = {
                             }
                         }
                     });
-                });
-
-                document.addEventListener('mousedown', (e) => {
-                    const tooltip = document.getElementById('format-tooltip');
-                    const isEditorClick = richEditors.some(ed => ed && ed.contains(e.target));
-                    if (tooltip && !tooltip.contains(e.target) && !isEditorClick) {
-                        tooltip.remove();
-                    }
                 });
 
                 if (autoBtn) {
