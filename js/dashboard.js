@@ -27,7 +27,6 @@ export const dashboard = {
     elements: {
         container: document.getElementById('dashboard-container'),
         content: document.getElementById('dashboard-content'),
-        summary: document.getElementById('dashboard-summary'),
     },
     state: {
         charts: [],
