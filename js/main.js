@@ -129,7 +129,7 @@ const app = {
             if (savedVoice) {
                 state.currentVoiceSet = savedVoice;
                 this.elements.ttsToggleText.textContent = savedVoice;
-                this.elements.ttsToggleBtn.classList.toggle('bg-blue-200/80', savedVoice === 'UK');
+                this.elements.ttsToggleBtn.classList.toggle('bg-blue-100', savedVoice === 'UK');   // bg-blue-200/80 → bg-blue-100
                 this.elements.ttsToggleBtn.classList.toggle('bg-red-100', savedVoice === 'US');
             }
             const savedPracticeMode = localStorage.getItem(state.LOCAL_STORAGE_KEYS.PRACTICE_MODE);
@@ -253,46 +253,46 @@ async syncOfflineData() {
         const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
 
-        const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
+const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
         const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
         const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
 
-        if (timeToSync > 0) localStorage.removeItem(timeKey);
-        if (statsToSync) localStorage.removeItem(quizKey);
-        if (progressToSync && Object.keys(progressToSync).length > 0) localStorage.removeItem(progressKey);
+        // (기존의 removeItem 3줄은 삭제됨 — 여기에 아무것도 없음)
 
         try {
             if (timeToSync > 0) {
                 await api.updateStudyTime(timeToSync);
+                localStorage.removeItem(timeKey);          // 성공 후 삭제
             }
         } catch (error) {
-            console.error("학습 시간 동기화 실패, 로컬에 복구합니다:", error);
-            const currentTime = parseInt(localStorage.getItem(timeKey) || '0');
-            localStorage.setItem(timeKey, currentTime + timeToSync);
+            console.error("학습 시간 동기화 실패:", error);   // 복구 줄 삭제 (안 지웠으니 그대로 남아있음)
         }
 
         try {
             if (statsToSync) {
                 await api.syncQuizHistory(statsToSync);
+                localStorage.removeItem(quizKey);
             }
         } catch (error) {
-            console.error("퀴즈 기록 동기화 실패, 로컬에 복구합니다:", error);
-            localStorage.setItem(quizKey, JSON.stringify(statsToSync));
+            console.error("퀴즈 기록 동기화 실패:", error);
         }
 
         try {
             if (progressToSync && Object.keys(progressToSync).length > 0) {
                 await api.syncProgressUpdates(progressToSync);
+                localStorage.removeItem(progressKey);
             }
         } catch (error) {
-            console.error("단어 진행도 동기화 실패, 로컬에 복구합니다:", error);
-            localStorage.setItem(progressKey, JSON.stringify(progressToSync));
+            console.error("단어 진행도 동기화 실패:", error);
         }
     },
 
     navigateTo(mode, options = {}) {
         const currentState = history.state || {};
-        if (currentState.mode !== mode) this.syncOfflineData();
+        if (currentState.mode !== mode) {
+        studyTracker._flushSessionTime();
+        this.syncOfflineData();
+        }
         if (currentState.mode === mode && JSON.stringify(currentState.options) === JSON.stringify(options) && !['learning', 'mistakeReview', 'favorites', 'quiz-play'].includes(mode)) return;
 
         const newPath = mode === 'selection' ? window.location.pathname + window.location.search : `#${mode}`;
