@@ -151,18 +151,18 @@ body {
 #selection-screen > p { color: var(--nm-text-sub) !important; }
 
 #select-learning-btn, #select-quiz-btn,
-#start-meaning-quiz-btn, #start-blank-quiz-btn, #start-definition-quiz-btn {
+#start-meaning-quiz-btn, #start-blank-quiz-btn, #start-definition-quiz-btn, #start-listening-quiz-btn {
   box-shadow: var(--nm-shadow-out) !important;
   border-radius: var(--nm-radius) !important;
   transition: all 0.3s ease !important;
 }
 #select-learning-btn:hover, #select-quiz-btn:hover,
-#start-meaning-quiz-btn:hover, #start-blank-quiz-btn:hover, #start-definition-quiz-btn:hover {
+#start-meaning-quiz-btn:hover, #start-blank-quiz-btn:hover, #start-definition-quiz-btn:hover, #start-listening-quiz-btn:hover {
   box-shadow: var(--nm-hover-out) !important;
   transform: scale(1.04) !important;
 }
 #select-learning-btn:active, #select-quiz-btn:active,
-#start-meaning-quiz-btn:active, #start-blank-quiz-btn:active, #start-definition-quiz-btn:active {
+#start-meaning-quiz-btn:active, #start-blank-quiz-btn:active, #start-definition-quiz-btn:active, #start-listening-quiz-btn:active {
   box-shadow: var(--nm-shadow-in) !important;
   transform: scale(0.98) !important;
 }
