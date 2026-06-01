@@ -1,12 +1,12 @@
 {
   "name": "단어장",
   "short_name": "word",
-  "start_url": "/",
+  "start_url": "/word/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#000000",
-  "scope": "/",
+  "scope": "/word/",
   "icons": [
     {
       "src": "icon_192.png",
