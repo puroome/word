@@ -18,6 +18,7 @@ export const state = {
     userId: null,
     currentVoiceSet: 'UK',
     isSpeaking: false,
+    currentUtterance: null,
     audioContext: null,
     wordList: [],
     currentProgress: {},
