@@ -146,11 +146,15 @@ export const api = {
             };
 
             if (window.speechSynthesis.getVoices().length === 0) {
-                const voiceChangedHandler = () => {
+                let voiceReady = false;                           // ↓ 이 블록 전체 교체
+                const runOnce = () => {
+                    if (voiceReady) return;
+                    voiceReady = true;
                     window.speechSynthesis.onvoiceschanged = null;
                     setVoice();
                 };
-                window.speechSynthesis.onvoiceschanged = voiceChangedHandler;
+                window.speechSynthesis.onvoiceschanged = runOnce;
+                setTimeout(runOnce, 1000);
             } else {
                 setVoice();
             }
