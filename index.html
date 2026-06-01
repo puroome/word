@@ -317,7 +317,13 @@
             setDoc
         };
 
-        document.dispatchEvent(new Event('firebaseSDKLoaded'));
+document.dispatchEvent(new Event('firebaseSDKLoaded'));
+    </script>
+    <script type="module" src="js/main.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').then(() => console.log('서비스 워커 등록 성공')).catch(() => console.log('서비스 워커 등록 실패'));
+      }
     </script>
 </body>
 </html>
