@@ -1,7 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
-import { utils, playSequence, playSingleBeep, correctBeep, incorrectBeep } from './utils.js';
+import { utils, playSequence, correctBeep, incorrectBeep } from './utils.js';
 export const quizMode = {
     state: {
         currentQuiz: {},
@@ -484,7 +484,7 @@ promptForRangeValue(targetButton) {
             Array.from(this.elements.choices.children)
                  .find(li => li._choice === this.state.currentQuiz.answer)
                  ?.classList.add('correct');
-             if (!isPass) this.state.sessionMistakes.push(word);
+             this.state.sessionMistakes.push(word);
         }
 
         this.state.sessionAnsweredInSet++;
