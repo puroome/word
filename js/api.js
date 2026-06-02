@@ -283,13 +283,6 @@ export const api = {
             }
         } catch (e) { console.error('캐시 업데이트 오류', e); }
 
-        if (typeof database !== 'undefined' && database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = utils.toFirebaseKey(word);
-            update(ref(database), { [`vocabulary/${safeKey}/except`]: newExceptStatus })
-                .catch(e => console.warn('Firebase except 업데이트 오류', e));
-        }
-
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'toggle_except');
@@ -475,17 +468,6 @@ export const api = {
 
         const aiSampleObj = { en: fullEnText, ko: "" };
 
-        if (database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = utils.toFirebaseKey(wordData.word);
-            const updates = {};
-            updates[`/vocabulary/${safeKey}/AISample`] = aiSampleObj;
-
-            update(ref(database), updates).then(() => {
-                console.log("✅ Firebase 저장 완료");
-            }).catch(e => console.warn("Firebase 저장 실패:", e));
-        }
-
         try {
             const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
             if (cachedData) {
@@ -552,19 +534,6 @@ export const api = {
             }
         } catch (e) {
             console.error("캐시 업데이트 오류:", e);
-        }
-
-        if (typeof database !== 'undefined' && database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = utils.toFirebaseKey(originalWord);
-            const firebaseUpdates = { ...updateData };
-            if (firebaseUpdates.manual_sample !== undefined) {
-                firebaseUpdates.sample = firebaseUpdates.manual_sample;
-                delete firebaseUpdates.manual_sample;
-            }
-            if (!updateData.word || updateData.word === originalWord) {
-                update(ref(database, `/vocabulary/${safeKey}`), firebaseUpdates).catch(e => console.warn(e));
-            }
         }
     },
 
@@ -646,20 +615,6 @@ export const api = {
         } catch (e) {
             console.error("로컬 캐시 업데이트 중 오류:", e);
         }
-
-        if (database) {
-            const { ref, update } = window.firebaseSDK;
-            const safeKey = utils.toFirebaseKey(cardData.word);
-
-            const updates = {};
-            updates[`/vocabulary/${safeKey}`] = {
-                ...cardData,
-                sample: cardData.manual_sample || cardData.sample || "",
-                AISample: null,
-                index: newFirebaseIndex
-            };
-            update(ref(database), updates).catch(e => console.warn(e));
-        }
     },
 
     async deleteWord(word) {
@@ -687,14 +642,5 @@ export const api = {
                 localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
             }
         } catch (e) {}
-
-        if (database) {
-            const { ref, remove } = window.firebaseSDK;
-            const safeKey = utils.toFirebaseKey(word);
-
-            remove(ref(database, `/vocabulary/${safeKey}`))
-                .then(() => console.log("✅ Firebase 삭제 성공"))
-                .catch(e => console.warn("Firebase 삭제 실패:", e));
-        }
     }
 };
