@@ -13,8 +13,12 @@ export const utils = {
 
     getUnsyncedProgress() {
         try {
-            const item = localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES);
-            return item ? JSON.parse(item) : {};
+            const raw = localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES);
+            if (this._unsyncedCacheRaw === raw) return this._unsyncedCacheParsed;
+            const parsed = raw ? JSON.parse(raw) : {};
+            this._unsyncedCacheRaw = raw;
+            this._unsyncedCacheParsed = parsed;
+            return parsed;
         } catch (e) {
             console.warn("Error reading unsynced progress:", e);
             return {};
