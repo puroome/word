@@ -4,6 +4,8 @@ import { translationCache, utils } from './utils.js';
 let db = null;
 let database = null;
 let activeSpeakId = 0;
+let cachedVoice = null;
+let cachedVoiceSet = null;
 
 export const api = {
 
@@ -74,50 +76,60 @@ export const api = {
 
             const setVoice = () => {
                 if (myRequestId !== activeSpeakId) return;
-                const voices = window.speechSynthesis.getVoices();
                 const isUK = state.currentVoiceSet === 'UK';
-                const targetLang = isUK ? 'en-gb' : 'en-us';
 
-                let selectedVoice = null;
-
-                if (isUK) {
-                    selectedVoice = voices.find(v =>
-                        v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
-                    );
+                let selectedVoice;
+                if (cachedVoice && cachedVoiceSet === state.currentVoiceSet) {
+                    selectedVoice = cachedVoice;
                 } else {
-                    const usNaturalVoices = [
-                        "Microsoft Aria",
-                        "Microsoft Jenny",
-                        "Microsoft Davis",
-                        "Microsoft Tony",
-                        "Microsoft Eric",
-                        "Microsoft Guy",
-                        "Microsoft Andrew",
-                    ];
+                    const voices = window.speechSynthesis.getVoices();
+                    const targetLang = isUK ? 'en-gb' : 'en-us';
+                    selectedVoice = null;
 
-                    for (const name of usNaturalVoices) {
-                        selectedVoice = voices.find(v => v.name.includes(name));
-                        if (selectedVoice) break;
+                    if (isUK) {
+                        selectedVoice = voices.find(v =>
+                            v.name.includes("Microsoft Ryan") && v.name.includes("United Kingdom")
+                        );
+                    } else {
+                        const usNaturalVoices = [
+                            "Microsoft Aria",
+                            "Microsoft Jenny",
+                            "Microsoft Davis",
+                            "Microsoft Tony",
+                            "Microsoft Eric",
+                            "Microsoft Guy",
+                            "Microsoft Andrew",
+                        ];
+
+                        for (const name of usNaturalVoices) {
+                            selectedVoice = voices.find(v => v.name.includes(name));
+                            if (selectedVoice) break;
+                        }
                     }
-                }
 
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => {
-                        const vLang = v.lang.replace('_', '-').toLowerCase();
-                        return vLang === targetLang;
-                    });
-                }
+                    if (!selectedVoice) {
+                        selectedVoice = voices.find(v => {
+                            const vLang = v.lang.replace('_', '-').toLowerCase();
+                            return vLang === targetLang;
+                        });
+                    }
 
-                if (!selectedVoice) {
-                    selectedVoice = voices.find(v => {
-                        const vLang = v.lang.replace('_', '-').toLowerCase();
-                        return vLang.includes(targetLang);
-                    });
-                }
+                    if (!selectedVoice) {
+                        selectedVoice = voices.find(v => {
+                            const vLang = v.lang.replace('_', '-').toLowerCase();
+                            return vLang.includes(targetLang);
+                        });
+                    }
 
-                if (!selectedVoice) {
-                    const naturalName = isUK ? "United Kingdom" : "United States";
-                    selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
+                    if (!selectedVoice) {
+                        const naturalName = isUK ? "United Kingdom" : "United States";
+                        selectedVoice = voices.find(v => v.name.includes(naturalName) && v.name.includes("Natural"));
+                    }
+
+                    if (selectedVoice) {
+                        cachedVoice = selectedVoice;
+                        cachedVoiceSet = state.currentVoiceSet;
+                    }
                 }
 
                 if (selectedVoice) {
