@@ -1,4 +1,4 @@
-import { config, state } from './config.js';
+import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
 import { ui } from './ui.js';
@@ -347,7 +347,6 @@ export const learningMode = {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
                                 wordData.sample = originalSample.trim() ? (originalSample.trim() + "\n\n" + newSampleText) : newSampleText;
-                                wordData.manualSample = wordData.sample;
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `예문 ${aiData.samples.length}개 추가됨` } }));
                             } else {
                                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료" } }));
@@ -696,12 +695,12 @@ export const learningMode = {
 
         wordDisplay.style.fontSize = '';
         const defaultFontSize = parseFloat(window.getComputedStyle(wordDisplay).fontSize);
-        let currentFontSize = defaultFontSize;
-        const padding = 80;
+        const available = container.clientWidth - 80;
+        const needed = wordDisplay.scrollWidth;
 
-        while (wordDisplay.scrollWidth > container.clientWidth - padding && currentFontSize > 12) {
-            currentFontSize -= 1;
-            wordDisplay.style.fontSize = `${currentFontSize}px`;
+        if (needed > available && available > 0) {
+            const scaled = Math.floor(defaultFontSize * (available / needed));
+            wordDisplay.style.fontSize = `${Math.max(12, scaled)}px`;
         }
     },
     navigate(direction) {
