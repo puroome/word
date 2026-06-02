@@ -565,6 +565,27 @@ export const api = {
             newFirebaseIndex = (sortedList.length > 0 ? sortedList[sortedList.length - 1].index : 0) + 1;
         }
 
+        const newWordObj = {
+            word: cardData.word,
+            pos: cardData.pos || "",
+            meaning: cardData.meaning || "",
+            explanation: cardData.explanation || "",
+            sample: cardData.manual_sample || cardData.sample || "",
+            AISample: null,
+            except: false,
+            index: newFirebaseIndex
+        };
+
+        if (database) {
+            try {
+                const { ref, update } = window.firebaseSDK;
+                update(ref(database, `vocabulary/${utils.toFirebaseKey(cardData.word)}`), newWordObj)
+                    .catch(e => console.error("Firebase 단어 생성 실패:", e));
+            } catch (e) {
+                console.error("Firebase 단어 생성 호출 오류:", e);
+            }
+        }
+
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'create_word');
@@ -598,13 +619,6 @@ export const api = {
                     if (fIndex !== -1) localInsertPos = fIndex + 1;
                 }
 
-                const newWordObj = {
-                    ...cardData,
-                    sample: cardData.manual_sample || cardData.sample || "",
-                    AISample: null,
-                    index: newFirebaseIndex
-                };
-
                 words.splice(localInsertPos, 0, newWordObj);
 
                 parsedCache.words = words;
@@ -618,6 +632,16 @@ export const api = {
     },
 
     async deleteWord(word) {
+        if (database) {
+            try {
+                const { ref, remove } = window.firebaseSDK;
+                remove(ref(database, `vocabulary/${utils.toFirebaseKey(word)}`))
+                    .catch(e => console.error("Firebase 단어 삭제 실패:", e));
+            } catch (e) {
+                console.error("Firebase 단어 삭제 호출 오류:", e);
+            }
+        }
+
         if (config.SCRIPT_URL) {
             const scriptUrl = new URL(config.SCRIPT_URL);
             scriptUrl.searchParams.append('action', 'delete_word');
