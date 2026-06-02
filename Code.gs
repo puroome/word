@@ -82,17 +82,42 @@ function callGeminiApi(prompt) {
     payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     muteHttpExceptions: true,
   });
-  if (response.getResponseCode() !== 200) {
-    throw new Error(`Gemini API 오류 ${response.getResponseCode()}: ${response.getContentText()}`);
-  }
-  return JSON.parse(response.getContentText()).candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (response.getResponseCode() !== 200) {
+      throw new Error(`Gemini API 오류 ${response.getResponseCode()}: ${response.getContentText()}`);
+    }
+    return JSON.parse(response.getContentText()).candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 function parseGeminiJson(rawText) {
-  const cleaned = rawText.replace(/```json\s*|```/g, '').trim();
-  const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (!match) throw new Error('AI 응답에서 JSON을 찾을 수 없습니다.');
-  return JSON.parse(match[0]);
+  // 1. 마크다운 코드 블록 제거
+  let cleaned = rawText.replace(/```(json)?\s*|```/gi, '').trim();
+
+  try {
+    // 2. 깔끔하게 바로 파싱되는 경우 우선 시도
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // 3. 텍스트가 섞여 있어서 실패한 경우, 정확히 '{' 와 '}' 사이(또는 '[' 와 ']')만 추출
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+
+    let start = -1, end = -1;
+    if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      start = firstBrace; end = lastBrace;
+    } else if (firstBracket !== -1 && lastBracket !== -1) {
+      start = firstBracket; end = lastBracket;
+    }
+
+    if (start !== -1 && end !== -1) {
+      try {
+        return JSON.parse(cleaned.substring(start, end + 1));
+      } catch (err) {
+        throw new Error('추출된 데이터 파싱 실패: ' + err.message);
+      }
+    }
+    throw new Error('AI 응답에서 유효한 JSON을 찾을 수 없습니다.');
+  }
 }
 
 function callFirebaseRtdb(path, method, payload) {
@@ -223,49 +248,60 @@ function handleSaveAiSample(e) {
 }
 
 function handleUpdateWordData(e) {
-  const originalWord = e.parameter.original_word;
-  if (!originalWord) throw new Error('original_word 파라미터가 필요합니다.');
-
-  const sheet   = getSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colMap  = buildHeaderMap(headers);
-
-  const rowIdx = findRowByWord(sheet, colMap['word'], originalWord);
-  if (rowIdx === -1) throw new Error(`시트에서 단어 '${originalWord}'를 찾을 수 없습니다.`);
-
-  const fieldMap = {
-    word:          'word',
-    pos:           'pos',
-    meaning:       'meaning',
-    explanation:   'explanation',
-    manual_sample: 'manualsample',
-  };
-
-  const firebaseUpdates = {};
-  for (const [paramKey, colKey] of Object.entries(fieldMap)) {
-    const value = e.parameter[paramKey];
-    if (value === undefined || colMap[colKey] === undefined) continue;
-    const cell = sheet.getRange(rowIdx, colMap[colKey] + 1);
-    if (['word', 'meaning', 'explanation'].includes(paramKey)) {
-      setHtmlToCell(cell, value);
-    } else {
-      cell.setValue(value);
-    }
-    firebaseUpdates[paramKey === 'manual_sample' ? 'sample' : paramKey] = value;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (_) {
+    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
   }
 
-  if (Object.keys(firebaseUpdates).length > 0) {
-    const newWord = e.parameter.word;
-    if (newWord && newWord !== originalWord) {
-      const existing = callFirebaseRtdb(`vocabulary/${toFirebaseKey(originalWord)}`, 'GET') || {};
-      callFirebaseRtdb(`vocabulary/${toFirebaseKey(newWord)}`, 'PUT', { ...existing, ...firebaseUpdates });
-      deleteWordFromFirebase(originalWord);
-    } else {
-      patchWordInFirebase(originalWord, firebaseUpdates);
-    }
-  }
+  try {
+    const originalWord = e.parameter.original_word;
+    if (!originalWord) throw new Error('original_word 파라미터가 필요합니다.');
 
-  return { success: true, message: '단어 수정 및 동기화 완료' };
+    const sheet   = getSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const colMap  = buildHeaderMap(headers);
+
+    const rowIdx = findRowByWord(sheet, colMap['word'], originalWord);
+    if (rowIdx === -1) throw new Error(`시트에서 단어 '${originalWord}'를 찾을 수 없습니다.`);
+
+    const fieldMap = {
+      word:          'word',
+      pos:           'pos',
+      meaning:       'meaning',
+      explanation:   'explanation',
+      manual_sample: 'manualsample',
+    };
+
+    const firebaseUpdates = {};
+    for (const [paramKey, colKey] of Object.entries(fieldMap)) {
+      const value = e.parameter[paramKey];
+      if (value === undefined || colMap[colKey] === undefined) continue;
+      const cell = sheet.getRange(rowIdx, colMap[colKey] + 1);
+      if (['word', 'meaning', 'explanation'].includes(paramKey)) {
+        setHtmlToCell(cell, value);
+      } else {
+        cell.setValue(value);
+      }
+      firebaseUpdates[paramKey === 'manual_sample' ? 'sample' : paramKey] = value;
+    }
+
+    if (Object.keys(firebaseUpdates).length > 0) {
+      const newWord = e.parameter.word;
+      if (newWord && newWord !== originalWord) {
+        const existing = callFirebaseRtdb(`vocabulary/${toFirebaseKey(originalWord)}`, 'GET') || {};
+        callFirebaseRtdb(`vocabulary/${toFirebaseKey(newWord)}`, 'PUT', { ...existing, ...firebaseUpdates });
+        deleteWordFromFirebase(originalWord);
+      } else {
+        patchWordInFirebase(originalWord, firebaseUpdates);
+      }
+    }
+
+    return { success: true, message: '단어 수정 및 동기화 완료' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleCreateWord(e) {
@@ -320,22 +356,33 @@ function handleCreateWord(e) {
 }
 
 function handleDeleteWord(e) {
-  const word = e.parameter.word;
-  if (!word) throw new Error('삭제할 단어가 없습니다.');
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (_) {
+    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
+  }
 
-  const sheet   = getSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colMap  = buildHeaderMap(headers);
+  try {
+    const word = e.parameter.word;
+    if (!word) throw new Error('삭제할 단어가 없습니다.');
 
-  const rowIdx = findRowByWord(sheet, colMap['word'], word);
-  if (rowIdx === -1) throw new Error(`시트에서 단어 '${word}'를 찾을 수 없습니다.`);
+    const sheet   = getSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const colMap  = buildHeaderMap(headers);
 
-  sheet.deleteRow(rowIdx);
-  SpreadsheetApp.flush();
+    const rowIdx = findRowByWord(sheet, colMap['word'], word);
+    if (rowIdx === -1) throw new Error(`시트에서 단어 '${word}'를 찾을 수 없습니다.`);
 
-  performFullSync(sheet);
+    sheet.deleteRow(rowIdx);
+    SpreadsheetApp.flush();
 
-  return { success: true, message: '삭제 및 전체 동기화 완료' };
+    performFullSync(sheet);
+
+    return { success: true, message: '삭제 및 전체 동기화 완료' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleToggleExcept(e) {
