@@ -137,7 +137,7 @@ export const ui = {
             span.onclick = () => {
                 clearTimeout(state.longPressTimer);
                 if (linkedWord) {
-                    document.dispatchEvent(new CustomEvent('searchWord', { detail: linkedWord }));
+                    learningMode.jumpToWord(linkedWord);
                 } else {
                     api.speak(phrase, 'word');
                 }
