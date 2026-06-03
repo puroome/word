@@ -804,6 +804,21 @@ export const learningMode = {
         this.state.currentIndex = 0;
         this.launchApp();
     },
+    jumpToWord(word) {
+        const targetIndex = state.wordList.findIndex(w => w.word === word);
+        if (targetIndex === -1) return;
+
+        // 일반 학습 모드(전체 목록)로 전환해서 점프
+        this.state.isMistakeMode = false;
+        this.state.isFavoriteMode = false;
+        this.state.currentWordList = state.wordList;
+        this.state.currentIndex = targetIndex;
+
+        // 뒷면이 올라와 있으면 닫고 앞면부터
+        this.elements.cardBack.classList.remove('is-slid-up');
+        this.displayWord(targetIndex);
+    },
+    handleKeyDown(e) {
     handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         if (this.state.isEditing) return;
