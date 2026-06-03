@@ -641,6 +641,8 @@ export const api = {
         } catch (e) {
             console.error("로컬 캐시 업데이트 중 오류:", e);
         }
+
+        utils.invalidateWordIndexMap();
     },
 
     async deleteWord(word) {
@@ -669,6 +671,7 @@ export const api = {
         }
 
         state.wordList = state.wordList.filter(w => w.word !== word);
+        utils.invalidateWordIndexMap();
 
         try {
             const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
