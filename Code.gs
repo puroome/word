@@ -347,9 +347,7 @@ function handleCreateWord(e) {
 
     SpreadsheetApp.flush();
 
-    performFullSync(sheet);
-
-    return { success: true, message: '생성 및 전체 동기화 완료' };
+    return { success: true, message: '시트 단어 생성 완료' };
   } finally {
     lock.releaseLock();
   }
@@ -377,9 +375,7 @@ function handleDeleteWord(e) {
     sheet.deleteRow(rowIdx);
     SpreadsheetApp.flush();
 
-    performFullSync(sheet);
-
-    return { success: true, message: '삭제 및 전체 동기화 완료' };
+    return { success: true, message: '시트 단어 삭제 완료' };
   } finally {
     lock.releaseLock();
   }
