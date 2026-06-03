@@ -616,6 +616,14 @@ body {
   cursor: pointer;
   color: var(--nm-accent) !important;
 }
+.linked-word {
+  color: var(--nm-accent) !important;
+  border-bottom: 1.5px dotted var(--nm-accent);
+  font-weight: 600;
+}
+.linked-word:hover {
+  background-color: rgba(124,114,224,0.18);
+}
 #word-display { white-space: nowrap; cursor: pointer; }
 
 .quiz-blank { display: inline-block; white-space: nowrap; }
