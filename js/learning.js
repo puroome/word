@@ -819,7 +819,6 @@ export const learningMode = {
         this.displayWord(targetIndex);
     },
     handleKeyDown(e) {
-    handleKeyDown(e) {
         if (this.elements.appContainer.classList.contains('hidden')) return;
         if (this.state.isEditing) return;
         if (document.activeElement.tagName.match(/INPUT|TEXTAREA/)) return;
