@@ -1,6 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
-import { nonInteractiveWords } from './utils.js';
+import { nonInteractiveWords, utils } from './utils.js';
 import { learningMode } from './learning.js';
 
 export const ui = {
@@ -117,14 +117,82 @@ export const ui = {
     },
 
     renderExplanationText(targetElement, text) {
-        if (text && /<[a-z][\s\S]*>/i.test(text)) {
-            targetElement.innerHTML = '';
-            targetElement.appendChild(this.createInteractiveFragment(text, false, true));
-            return;
-        }
+        const wordMap = utils.getWordIndexMap();
+        const currentWordLower = (learningMode.state.currentWordList[learningMode.state.currentIndex]?.word || '').toLowerCase();
+
+        // 설명 속 영어 단어 span 하나를 만들어 반환 (카드로 존재하면 점프 링크로)
+        const buildWordSpan = (phrase) => {
+            const span = document.createElement('span');
+            span.textContent = phrase;
+
+            if (nonInteractiveWords.has(phrase.toLowerCase())) {
+                return span; // 기능어는 비활성 텍스트
+            }
+
+            const lower = phrase.toLowerCase();
+            const linkedWord = (wordMap.has(lower) && lower !== currentWordLower) ? wordMap.get(lower) : null;
+
+            span.className = linkedWord ? 'interactive-word linked-word' : 'interactive-word';
+
+            span.onclick = () => {
+                clearTimeout(state.longPressTimer);
+                if (linkedWord) {
+                    document.dispatchEvent(new CustomEvent('searchWord', { detail: linkedWord }));
+                } else {
+                    api.speak(phrase, 'word');
+                }
+            };
+            span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, phrase); };
+
+            let touchMove = false;
+            span.addEventListener('touchstart', (e) => {
+                touchMove = false;
+                clearTimeout(state.longPressTimer);
+                state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, phrase); }, 700);
+            }, { passive: true });
+            span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+            span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
+
+            return span;
+        };
 
         targetElement.innerHTML = '';
         if (!text || !text.trim()) return;
+
+        // HTML 태그(색/굵게 등)가 섞인 경우: 텍스트 노드만 골라 단어 분해, 태그 구조는 보존
+        if (/<[a-z][\s\S]*>/i.test(text)) {
+            const phraseRegex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = text;
+
+            const walk = (node) => {
+                if (node.nodeType === 3) { // 텍스트 노드
+                    const frag = document.createDocumentFragment();
+                    const str = node.nodeValue;
+                    let last = 0, m;
+                    while ((m = phraseRegex.exec(str))) {
+                        if (m.index > last) frag.appendChild(document.createTextNode(str.substring(last, m.index)));
+                        const [, bracket, phrase] = m;
+                        if (phrase) frag.appendChild(buildWordSpan(phrase));
+                        else if (bracket) frag.appendChild(document.createTextNode(bracket));
+                        last = phraseRegex.lastIndex;
+                    }
+                    if (last < str.length) frag.appendChild(document.createTextNode(str.substring(last)));
+                    return frag;
+                }
+                if (node.nodeType === 1) { // 요소 노드: 복제 후 자식 재귀
+                    const el = node.cloneNode(false);
+                    node.childNodes.forEach(child => el.appendChild(walk(child)));
+                    return el;
+                }
+                return node.cloneNode(true);
+            };
+
+            tempDiv.childNodes.forEach(child => targetElement.appendChild(walk(child)));
+            return;
+        }
+
+        // 평문 경우: 줄 단위로 분해
         const regex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
         text.split('\n').forEach((line, lineIndex, lineArr) => {
             let lastIndex = 0;
@@ -135,25 +203,7 @@ export const ui = {
                 }
                 const [_, nonClickable, englishPhrase] = match;
                 if (englishPhrase) {
-                    const span = document.createElement('span');
-                    span.textContent = englishPhrase;
-                    if (!nonInteractiveWords.has(englishPhrase.toLowerCase())) {
-                        span.className = 'interactive-word';
-                        span.onclick = () => {
-                            clearTimeout(state.longPressTimer);
-                            api.speak(englishPhrase, 'word');
-                        };
-                        span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, englishPhrase); };
-                        let touchMove = false;
-                        span.addEventListener('touchstart', (e) => {
-                            touchMove = false;
-                            clearTimeout(state.longPressTimer);
-                            state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, englishPhrase); }, 700);
-                        }, { passive: true });
-                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                        span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
-                    }
-                    targetElement.appendChild(span);
+                    targetElement.appendChild(buildWordSpan(englishPhrase));
                 } else if (nonClickable) {
                     targetElement.appendChild(document.createTextNode(nonClickable));
                 }
