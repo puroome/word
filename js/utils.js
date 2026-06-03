@@ -5,6 +5,28 @@ export const utils = {
         return word.replace(/[.#$[\]/]/g, '_');
     },
 
+    _wordIndexMap: null,
+    _wordIndexSourceLen: -1,
+
+    getWordIndexMap() {
+        // wordList 길이가 바뀌면(추가/삭제) 다시 생성
+        if (this._wordIndexMap && this._wordIndexSourceLen === state.wordList.length) {
+            return this._wordIndexMap;
+        }
+        const map = new Map();
+        state.wordList.forEach(w => {
+            if (w.word) map.set(w.word.toLowerCase(), w.word);
+        });
+        this._wordIndexMap = map;
+        this._wordIndexSourceLen = state.wordList.length;
+        return map;
+    },
+
+    invalidateWordIndexMap() {
+        this._wordIndexMap = null;
+        this._wordIndexSourceLen = -1;
+    },
+
     getLocalDateString() {
         const now = new Date();
         const offset = now.getTimezoneOffset() * 60000;
