@@ -409,6 +409,37 @@ export const ui = {
             }
         };
     },
+    // [편집-뒤로가기] '카드 삭제' 모달을 재활용한 예/아니오 확인창 (Promise<boolean> 반환)
+    showConfirmModal({ title, message, confirmLabel = '확인', cancelLabel = '취소' }) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('nice-alert-modal');
+            const titleEl = modal ? modal.querySelector('.nice-modal-title') : null;
+            const msgEl = document.getElementById('nice-msg');
+            const confirmBtn = document.getElementById('nice-confirm');
+            const cancelBtn = document.getElementById('nice-cancel');
+            if (!modal || !msgEl || !confirmBtn || !cancelBtn) { resolve(false); return; }
+
+            if (titleEl) titleEl.textContent = title;
+            msgEl.innerHTML = message;
+            confirmBtn.textContent = confirmLabel;
+            cancelBtn.textContent = cancelLabel;
+            modal.style.display = 'flex';
+
+            // 사용 후 '카드 삭제' 기본값으로 복원(기존 삭제 확인 흐름 보호)
+            const finish = (result) => {
+                modal.style.display = 'none';
+                if (titleEl) titleEl.textContent = '🗑️ 카드 삭제';
+                confirmBtn.textContent = '삭제';
+                cancelBtn.textContent = '취소';
+                confirmBtn.onclick = null;
+                cancelBtn.onclick = null;
+                resolve(result);
+            };
+
+            confirmBtn.onclick = () => finish(true);
+            cancelBtn.onclick = () => finish(false);
+        });
+    },
     hideCardContextMenu() {
         const menu = document.getElementById('card-context-menu');
         if (menu) menu.classList.add('hidden');
