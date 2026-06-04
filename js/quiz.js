@@ -373,13 +373,34 @@ promptForRangeValue(targetButton) {
         }
         if (candidates.length === 0) return null;
         utils.shuffleArray(candidates);
-        for (const wordData of candidates) {
-            let quiz = null;
-            if (currentQuizType === 'MULTIPLE_CHOICE_MEANING') quiz = this.createMeaningQuiz(wordData, allWords);
-            else if (currentQuizType === 'FILL_IN_THE_BLANK') quiz = this.createBlankQuiz(wordData, allWords);
-            else if (currentQuizType === 'MULTIPLE_CHOICE_DEFINITION') quiz = await this.createDefinitionQuiz(wordData, allWords);
-            else if (currentQuizType === 'LISTENING_QUIZ') quiz = await this.createListeningClozeQuiz(wordData, allWords);
-            if (quiz) return quiz;
+
+        // 동기 생성(영한/빈칸): 네트워크가 없으니 순차로 빠르게
+        if (currentQuizType === 'MULTIPLE_CHOICE_MEANING' || currentQuizType === 'FILL_IN_THE_BLANK') {
+            for (const wordData of candidates) {
+                const quiz = currentQuizType === 'MULTIPLE_CHOICE_MEANING'
+                    ? this.createMeaningQuiz(wordData, allWords)
+                    : this.createBlankQuiz(wordData, allWords);
+                if (quiz) return quiz;
+            }
+            return null;
+        }
+
+        // 네트워크 생성(영영/듣기): 후보를 5개씩 병렬 시도하고 첫 성공을 사용
+        const makeQuiz = (wordData) => currentQuizType === 'MULTIPLE_CHOICE_DEFINITION'
+            ? this.createDefinitionQuiz(wordData, allWords)
+            : this.createListeningClozeQuiz(wordData, allWords);
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+            const batch = candidates.slice(i, i + BATCH_SIZE);
+            try {
+                return await Promise.any(batch.map(async (wordData) => {
+                    const quiz = await makeQuiz(wordData);
+                    if (!quiz) throw new Error('no-quiz');   // null은 실패로 간주
+                    return quiz;
+                }));
+            } catch (_) {
+                // 이 배치 전부 실패 → 다음 배치 시도
+            }
         }
         return null;
     },
@@ -609,12 +630,30 @@ showSessionResultModal(isFinal = false) {
         }
         if (candidates.length === 0) return null;
         utils.shuffleArray(candidates);
-        const wordData = candidates[0];
-        if (quizType === 'MULTIPLE_CHOICE_MEANING') return this.createMeaningQuiz(wordData, allWords);
-        if (quizType === 'FILL_IN_THE_BLANK') return this.createBlankQuiz(wordData, allWords);
-        if (quizType === 'MULTIPLE_CHOICE_DEFINITION') return await this.createDefinitionQuiz(wordData, allWords);
-        if (quizType === 'LISTENING_QUIZ') return await this.createListeningClozeQuiz(wordData, allWords);
-        return null;
+
+        // 동기 생성: 유효한 첫 후보 반환
+        if (quizType === 'MULTIPLE_CHOICE_MEANING') {
+            for (const w of candidates) { const q = this.createMeaningQuiz(w, allWords); if (q) return q; }
+            return null;
+        }
+        if (quizType === 'FILL_IN_THE_BLANK') {
+            for (const w of candidates) { const q = this.createBlankQuiz(w, allWords); if (q) return q; }
+            return null;
+        }
+
+        // 네트워크 생성(영영/듣기): 첫 5개를 병렬 시도 (프리로드는 1개만 있으면 됨)
+        const makeQuiz = (w) => quizType === 'MULTIPLE_CHOICE_DEFINITION'
+            ? this.createDefinitionQuiz(w, allWords)
+            : this.createListeningClozeQuiz(w, allWords);
+        try {
+            return await Promise.any(candidates.slice(0, 5).map(async (w) => {
+                const q = await makeQuiz(w);
+                if (!q) throw new Error('no-quiz');
+                return q;
+            }));
+        } catch (_) {
+            return null;
+        }
     },
     createMeaningQuiz(correctWordData, allWordsData) {
         const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'meaning', true);
