@@ -707,6 +707,10 @@ export const learningMode = {
         this.displayWord(this.state.currentIndex);
     },
     reset() {
+        // [편집-뒤로가기] 학습 모드를 벗어날 때 편집 상태도 함께 정리(플래그 잔존 방지)
+        this.state.isEditing = false;
+        this.state.editingSide = null;
+        this.state.editSnapshot = null;
         this.elements.startScreen.classList.add('hidden');
         this.elements.appContainer.classList.add('hidden');
         this.elements.loader.classList.add('hidden');
