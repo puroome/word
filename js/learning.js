@@ -14,6 +14,7 @@ export const learningMode = {
         touchStartY: 0,
         isEditing: false,
         editingSide: null,
+        editSnapshot: null,
     },
     elements: {},
     init() {
@@ -372,6 +373,9 @@ export const learningMode = {
 
         const editImgUrl = 'images/cat-edit.png';
         this.elements.sampleBtnImg.src = editImgUrl;
+
+        // [편집-뒤로가기] 변경 감지를 위해 편집 진입 시점의 내용을 스냅샷으로 저장
+        this.state.editSnapshot = this._readEditorValues();
     },
 
     async saveAndExitEditMode() {
