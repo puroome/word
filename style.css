@@ -409,6 +409,10 @@ body {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 #explanation-display { color: var(--nm-text) !important; }
 
@@ -427,7 +431,19 @@ body {
   box-shadow: var(--nm-shadow-in) !important;
 }
 #learning-card-back.is-slid-up { transform: translateY(0); opacity: 1; pointer-events: auto; }
-#learning-card-front { min-height: 45vh; }
+/* 카드(앞/뒤)가 화면 높이를 넘지 않도록 제한 → 넘치는 내용은 페이지 대신 카드 안에서 스크롤 */
+#learning-app-container .relative { overflow: hidden; }
+
+#learning-card-front {
+  min-height: 45vh;
+  max-height: calc(100vh - 14rem);
+  max-height: calc(100dvh - 14rem);   /* 모바일 주소창 대응 */
+  display: flex;
+  flex-direction: column;
+}
+/* 단어/뜻 영역은 항상 보이도록 고정, 설명 영역만 스크롤 */
+#learning-card-front > #word-header,
+#learning-card-front > #meaning-container { flex-shrink: 0; }
 #learning-back-title   { color: var(--nm-text) !important; }
 #learning-back-content { color: var(--nm-text-sub) !important; }
 
