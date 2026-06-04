@@ -247,43 +247,68 @@ const app = {
     },
 
 async syncOfflineData() {
-        if (!state.userId) return;
+        if (!state.userId || this._isSyncing) return;   // 동시 실행 방지(이중 집계 차단)
+        this._isSyncing = true;
 
         const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
         const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
 
-const timeToSync = parseInt(localStorage.getItem(timeKey) || '0');
+        const timeToSync = parseInt(localStorage.getItem(timeKey) || '0', 10);
         const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
         const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
 
-        // (기존의 removeItem 3줄은 삭제됨 — 여기에 아무것도 없음)
-
         try {
-            if (timeToSync > 0) {
-                await api.updateStudyTime(timeToSync);
-                localStorage.removeItem(timeKey);          // 성공 후 삭제
+            // 1) 학습 시간: 성공 시 '싱크한 양'만 차감 (await 중 쌓인 시간 보존)
+            try {
+                if (timeToSync > 0) {
+                    await api.updateStudyTime(timeToSync);
+                    const left = parseInt(localStorage.getItem(timeKey) || '0', 10) - timeToSync;
+                    if (left > 0) localStorage.setItem(timeKey, String(left));
+                    else localStorage.removeItem(timeKey);
+                }
+            } catch (error) {
+                console.error("학습 시간 동기화 실패:", error);
             }
-        } catch (error) {
-            console.error("학습 시간 동기화 실패:", error);   // 복구 줄 삭제 (안 지웠으니 그대로 남아있음)
-        }
 
-        try {
-            if (statsToSync) {
-                await api.syncQuizHistory(statsToSync);
-                localStorage.removeItem(quizKey);
+            // 2) 퀴즈 통계: 싱크한 total/correct 만큼만 차감
+            try {
+                if (statsToSync) {
+                    await api.syncQuizHistory(statsToSync);
+                    const cur = JSON.parse(localStorage.getItem(quizKey) || '{}');
+                    for (const type in statsToSync) {
+                        if (!cur[type]) continue;
+                        cur[type].total   -= statsToSync[type].total   || 0;
+                        cur[type].correct -= statsToSync[type].correct || 0;
+                        if (cur[type].total <= 0) delete cur[type];
+                    }
+                    if (Object.keys(cur).length > 0) localStorage.setItem(quizKey, JSON.stringify(cur));
+                    else localStorage.removeItem(quizKey);
+                }
+            } catch (error) {
+                console.error("퀴즈 기록 동기화 실패:", error);
             }
-        } catch (error) {
-            console.error("퀴즈 기록 동기화 실패:", error);
-        }
 
-        try {
-            if (progressToSync && Object.keys(progressToSync).length > 0) {
-                await api.syncProgressUpdates(progressToSync);
-                localStorage.removeItem(progressKey);
+            // 3) 진행도: 싱크한 값이 그대로면 삭제 (await 중 바뀐 값은 보존)
+            try {
+                if (progressToSync && Object.keys(progressToSync).length > 0) {
+                    await api.syncProgressUpdates(progressToSync);
+                    const cur = JSON.parse(localStorage.getItem(progressKey) || '{}');
+                    for (const word in progressToSync) {
+                        if (!cur[word]) continue;
+                        for (const key in progressToSync[word]) {
+                            if (cur[word][key] === progressToSync[word][key]) delete cur[word][key];
+                        }
+                        if (Object.keys(cur[word]).length === 0) delete cur[word];
+                    }
+                    if (Object.keys(cur).length > 0) localStorage.setItem(progressKey, JSON.stringify(cur));
+                    else localStorage.removeItem(progressKey);
+                }
+            } catch (error) {
+                console.error("단어 진행도 동기화 실패:", error);
             }
-        } catch (error) {
-            console.error("단어 진행도 동기화 실패:", error);
+        } finally {
+            this._isSyncing = false;
         }
     },
 
