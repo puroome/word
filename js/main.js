@@ -246,7 +246,7 @@ const app = {
         document.addEventListener('searchWord', (e) => this.searchWordInLearningMode(e.detail));
     },
 
-async syncOfflineData() {
+    async syncOfflineData() {
         if (!state.userId || this._isSyncing) return;   // 동시 실행 방지(이중 집계 차단)
         this._isSyncing = true;
 
