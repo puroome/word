@@ -490,6 +490,99 @@ export const learningMode = {
         }
     },
 
+    // [편집-뒤로가기] 현재 편집창 값 읽기(변경 감지/비교용)
+    _readEditorValues() {
+        if (this.state.editingSide === 'back') {
+            const s = document.getElementById('edit-sample-input');
+            return { side: 'back', sample: s ? s.value : '' };
+        }
+        const w = document.getElementById('edit-word-input');
+        const m = document.getElementById('edit-meaning-input');
+        const ex = document.getElementById('edit-explanation-input');
+        return {
+            side: 'front',
+            word: w ? w.value : '',
+            meaning: m ? m.innerHTML : '',
+            explanation: ex ? ex.innerHTML : '',
+        };
+    },
+
+    // [편집-뒤로가기] 진입 시점 대비 내용이 바뀌었는지 판단
+    isEditDirty() {
+        const snap = this.state.editSnapshot;
+        if (!snap) return false;
+        const cur = this._readEditorValues();
+        if (snap.side !== cur.side) return true;
+        if (cur.side === 'back') return cur.sample !== snap.sample;
+        return cur.word !== snap.word || cur.meaning !== snap.meaning || cur.explanation !== snap.explanation;
+    },
+
+    // [편집-뒤로가기] 저장 없이 편집모드만 종료(카드에 머무름)
+    cancelEditMode() {
+        const wordData = this.state.currentWordList[this.state.currentIndex];
+        const side = this.state.editingSide;
+
+        this.state.isEditing = false;
+        this.state.editingSide = null;
+        this.state.editSnapshot = null;
+
+        // 새 카드 작성 취소 → 임시 카드 제거 후 인접 카드로
+        if (wordData && wordData.isNew) {
+            this.state.currentWordList.splice(this.state.currentIndex, 1);
+            if (this.state.currentWordList.length === 0) {
+                window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+                return;
+            }
+            if (this.state.currentIndex >= this.state.currentWordList.length) {
+                this.state.currentIndex = this.state.currentWordList.length - 1;
+            }
+            this.displayWord(this.state.currentIndex, true);
+            return;
+        }
+
+        if (side === 'back') {
+            this.navigateBackToBack(0);
+        } else {
+            this.displayWord(this.state.currentIndex, true);
+        }
+    },
+
+    // [편집-뒤로가기] 편집 중 브라우저 뒤로가기를 '편집 종료'로 처리(홈 이동 방지)
+    async handleBackWhileEditing() {
+        // 뒤로가기를 흡수해 카드에 머무르게 함(히스토리 상태 되밀기)
+        const currentWord = this.state.currentWordList[this.state.currentIndex]?.word;
+        const fullIndex = currentWord ? state.wordList.findIndex(w => w.word === currentWord) : -1;
+        try {
+            history.pushState(
+                { mode: 'learning', options: fullIndex > -1 ? { startIndex: fullIndex } : {} },
+                '', '#learning'
+            );
+        } catch (e) { console.warn('편집 중 뒤로가기 처리 실패:', e); }
+
+        if (this._backEditHandling) return;   // 확인창이 떠 있는 동안 중복 진입 방지
+        this._backEditHandling = true;
+        try {
+            if (this.isEditDirty()) {
+                const save = await ui.showConfirmModal({
+                    title: '💾 저장 확인',
+                    message: '수정사항이 있습니다.<br>저장하시겠습니까?',
+                    confirmLabel: '네',
+                    cancelLabel: '아니오'
+                });
+                if (save) {
+                    await this.saveAndExitEditMode();
+                } else {
+                    this.cancelEditMode();
+                }
+            } else {
+                this.cancelEditMode();
+            }
+        } finally {
+            this._backEditHandling = false;
+            this.state.editSnapshot = null;
+        }
+    },
+
     async createNewCard() {
         const tempCard = {
             word: "",
