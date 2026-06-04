@@ -808,6 +808,19 @@ export const learningMode = {
         const targetIndex = state.wordList.findIndex(w => w.word === word);
         if (targetIndex === -1) return;
 
+        // [B] 점프 전 위치를 히스토리에 남겨 '뒤로가기'로 복귀 가능하게 함
+        //  - 현재 단어를 전체목록 기준 인덱스로 환산(오답/즐겨찾기 모드에서도 안전)
+        const currentWord = this.state.currentWordList[this.state.currentIndex]?.word;
+        const returnIndex = currentWord ? state.wordList.findIndex(w => w.word === currentWord) : -1;
+        try {
+            if (returnIndex > -1) {
+                history.replaceState({ mode: 'learning', options: { startIndex: returnIndex } }, '', location.href);
+            }
+            history.pushState({ mode: 'learning', options: { startIndex: targetIndex } }, '', '#learning');
+        } catch (e) {
+            console.warn('jumpToWord 히스토리 처리 실패:', e);
+        }
+
         // 일반 학습 모드(전체 목록)로 전환해서 점프
         this.state.isMistakeMode = false;
         this.state.isFavoriteMode = false;
