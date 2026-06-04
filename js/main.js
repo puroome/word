@@ -217,6 +217,11 @@ const app = {
         });
 
         window.addEventListener('popstate', (e) => {
+            // [편집-뒤로가기] 편집 중이면 화면 이동 대신 '편집 종료(필요 시 저장 확인)'로 처리
+            if (learningMode.state.isEditing) {
+                learningMode.handleBackWhileEditing();
+                return;
+            }
             this.syncOfflineData();
             const mode = e.state?.mode || 'selection';
             const options = e.state?.options || {};
