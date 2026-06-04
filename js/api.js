@@ -6,6 +6,7 @@ let database = null;
 let activeSpeakId = 0;
 let cachedVoice = null;
 let cachedVoiceSet = null;
+let loadWordListPromise = null;   // 진행 중인 단어목록 fetch (중복 요청 방지)
 
 export const api = {
 
@@ -36,24 +37,32 @@ export const api = {
 
         if (state.isWordListReady && !force) return;
 
-        const { ref, get } = window.firebaseSDK;
-        try {
+        // 이미 같은 요청이 진행 중이면 그 Promise를 재사용 (Firebase 중복 호출 방지)
+        if (loadWordListPromise) return loadWordListPromise;
+
+        loadWordListPromise = (async () => {
+            const { ref, get } = window.firebaseSDK;
             const dbRef = ref(database, '/vocabulary');
             const snapshot = await get(dbRef);
             const data = snapshot.val();
             if (!data) throw new Error("Firebase에 단어 데이터가 없습니다.");
 
             const wordsArray = Object.values(data).sort((a, b) => a.index - b.index);
-
             state.wordList = wordsArray;
             state.isWordListReady = true;
 
             const newTimestamp = Date.now();
-            const cachePayload = { timestamp: newTimestamp, words: wordsArray };
-            localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(cachePayload));
+            localStorage.setItem(
+                state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE,
+                JSON.stringify({ timestamp: newTimestamp, words: wordsArray })
+            );
             state.lastCacheTimestamp = newTimestamp;
-        } catch (error) {
-            throw error;
+        })();
+
+        try {
+            await loadWordListPromise;
+        } finally {
+            loadWordListPromise = null;
         }
     },
 
@@ -311,14 +320,15 @@ export const api = {
 
     async updateStudyTime(seconds) {
         if (!state.userId || seconds < 1) return;
-        const { doc, setDoc, getDoc } = window.firebaseSDK;
+        const { doc, setDoc, increment } = window.firebaseSDK;
         const today = utils.getLocalDateString();
         const historyRef = doc(db, 'users', state.userId, 'history', 'study');
         try {
-            const docSnap = await getDoc(historyRef);
-            const currentSeconds = (docSnap.exists() && docSnap.data()[today]) ? docSnap.data()[today] : 0;
-            await setDoc(historyRef, { [today]: currentSeconds + seconds }, { merge: true });
-        } catch (error) { console.error(error); }
+            await setDoc(historyRef, { [today]: increment(seconds) }, { merge: true });
+        } catch (error) {
+            console.error(error);
+            throw error;   // 실패를 syncOfflineData에 전달해 로컬 데이터 보존
+        }
     },
 
     async getStudyHistory() {
@@ -377,14 +387,14 @@ export const api = {
                 }
             }
             await setDoc(historyRef, { [today]: todayData }, { merge: true });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); throw e; }
     },
 
     async syncProgressUpdates(progressToSync) {
         if (!state.userId || !progressToSync || Object.keys(progressToSync).length === 0) return;
         const { doc, setDoc } = window.firebaseSDK;
         const progressRef = doc(db, 'users', state.userId, 'progress', 'main');
-        try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); }
+        try { await setDoc(progressRef, progressToSync, { merge: true }); } catch (error) { console.error(error); throw error; }
     },
 
     async generateAIExamples(wordData, currentMeaning, count = 2) {
