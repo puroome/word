@@ -218,6 +218,89 @@ export const ui = {
         });
     },
 
+    // 예문 한 줄(<p>)을 생성: 클릭/호버 시 번역 툴팁 + TTS, *강조*→interactive 단어 분해.
+    // 호출부별 차이는 options로 주입한다.
+    //  - leadingNode: 문장 앞에 붙일 요소(이모지 span / 🤖 버튼 등)
+    //  - getSpeakText(p): 클릭·번역 대상 텍스트(기본: 전달된 sentenceText 그대로)
+    //  - shouldIgnoreClick(e): true면 클릭 무시(단어/버튼 클릭 통과용)
+    //  - contentCursorText: 본문 span에 cursor:text 적용 여부
+    //  - resetTargetOnContentHover: 본문 span hover 시 번역 타깃 해제 여부
+    buildSentenceRow(sentenceText, options = {}) {
+        const {
+            leadingNode = null,
+            getSpeakText = () => sentenceText,
+            shouldIgnoreClick = () => false,
+            contentCursorText = false,
+            resetTargetOnContentHover = false,
+        } = options;
+
+        const p = document.createElement('p');
+        p.className = 'p-2 rounded transition-colors hover:bg-white cursor-pointer relative group shadow-sm hover:shadow';
+
+        const showTranslation = async (event) => {
+            state.activeTranslationTarget = p;
+            this.showTranslationTooltip("Translating...", event);
+            const translatedText = await api.translate(getSpeakText(p));
+            if (state.activeTranslationTarget !== p) return;
+            this.showTranslationTooltip(translatedText, event);
+        };
+
+        p.onclick = (e) => {
+            if (shouldIgnoreClick(e)) return;
+            api.speak(getSpeakText(p), 'sample');
+            showTranslation(e);
+        };
+
+        p.addEventListener('mouseenter', (e) => {
+            if (e.target === p) {
+                clearTimeout(state.translationTimer);
+                state.activeTranslationTarget = p;
+                state.translationTimer = setTimeout(() => {
+                    if (state.activeTranslationTarget === p) {
+                        showTranslation(e);
+                    }
+                }, 1000);
+            }
+        });
+
+        p.addEventListener('mouseleave', () => {
+            clearTimeout(state.translationTimer);
+            if (state.activeTranslationTarget === p) {
+                state.activeTranslationTarget = null;
+            }
+            this.hideTranslationTooltip();
+        });
+
+        if (leadingNode) p.appendChild(leadingNode);
+
+        const sentenceContent = document.createElement('span');
+        sentenceContent.className = 'sentence-content-area';
+        if (contentCursorText) sentenceContent.style.cursor = 'text';
+
+        if (resetTargetOnContentHover) {
+            sentenceContent.addEventListener('mouseenter', () => {
+                clearTimeout(state.translationTimer);
+                if (state.activeTranslationTarget === p) {
+                    state.activeTranslationTarget = null;
+                }
+                this.hideTranslationTooltip();
+            });
+        }
+
+        sentenceText.split(/(\*.*?\*)/g).forEach(part => {
+            if (part.startsWith('*') && part.endsWith('*')) {
+                const strong = document.createElement('strong');
+                strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
+                sentenceContent.appendChild(strong);
+            } else if (part) {
+                sentenceContent.appendChild(this.createInteractiveFragment(part, true));
+            }
+        });
+        p.appendChild(sentenceContent);
+
+        return p;
+    },
+
     displaySentences(sentences, containerElement) {
         containerElement.innerHTML = '';
         const emojiList = ['🐭','🐮','🐯','🐰','🐲','🐍','🐴','🐑','🐒','🐔','🐶','🐷','🐋','🦐','🦉','🐝','🐞','🦋','🐜'];
@@ -230,71 +313,17 @@ export const ui = {
                 return;
             }
 
-            const p = document.createElement('p');
-            p.className = 'p-2 rounded transition-colors hover:bg-white cursor-pointer relative group shadow-sm hover:shadow';
-
-            const showTranslation = async (event) => {
-                state.activeTranslationTarget = p;
-                this.showTranslationTooltip("Translating...", event);
-                const translatedText = await api.translate(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''));
-                if (state.activeTranslationTarget !== p) return;
-                this.showTranslationTooltip(translatedText, event);
-            };
-
-            p.onclick = (e) => {
-                if (e.target.closest('.sentence-content-area .interactive-word')) return;
-                api.speak(p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''), 'sample');
-                showTranslation(e);
-            };
-
-            p.addEventListener('mouseenter', (e) => {
-                if (e.target === p) {
-                    clearTimeout(state.translationTimer);
-                    state.activeTranslationTarget = p;
-                    state.translationTimer = setTimeout(() => {
-                        if (state.activeTranslationTarget === p) {
-                            showTranslation(e);
-                        }
-                    }, 1000);
-                }
-            });
-
-            p.addEventListener('mouseleave', () => {
-                clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
-                }
-                this.hideTranslationTooltip();
-            });
-
             const emojiSpan = document.createElement('span');
             emojiSpan.textContent = emojiList[index % emojiList.length];
             emojiSpan.className = 'float-left mr-2 select-none text-xl leading-none mt-1';
-            p.appendChild(emojiSpan);
 
-            const sentenceContent = document.createElement('span');
-            sentenceContent.className = 'sentence-content-area';
-            sentenceContent.style.cursor = 'text';
-
-            sentenceContent.addEventListener('mouseenter', () => {
-                clearTimeout(state.translationTimer);
-                if (state.activeTranslationTarget === p) {
-                    state.activeTranslationTarget = null;
-                }
-                this.hideTranslationTooltip();
+            const p = this.buildSentenceRow(sentence, {
+                leadingNode: emojiSpan,
+                getSpeakText: (p) => p.textContent.replace(/^[\u{1F000}-\u{1F9FF}.]\s*/u, ''),
+                shouldIgnoreClick: (e) => e.target.closest('.sentence-content-area .interactive-word'),
+                contentCursorText: true,
+                resetTargetOnContentHover: true,
             });
-
-            const sentenceParts = sentence.split(/(\*.*?\*)/g);
-            sentenceParts.forEach(part => {
-                if (part.startsWith('*') && part.endsWith('*')) {
-                    const strong = document.createElement('strong');
-                    strong.appendChild(this.createInteractiveFragment(part.slice(1, -1), true));
-                    sentenceContent.appendChild(strong);
-                } else if (part) {
-                    sentenceContent.appendChild(this.createInteractiveFragment(part, true));
-                }
-            });
-            p.appendChild(sentenceContent);
             containerElement.appendChild(p);
         });
     },

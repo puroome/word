@@ -453,7 +453,7 @@ promptForRangeValue(targetButton) {
         replayBtn.onmouseout  = () => { replayBtn.style.background = '#ef4444'; };
 
         replayBtn.onclick = (e) => {
-            const escapedWord = question.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const escapedWord = utils.escapeRegExp(question.word);
             const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
             const blankedSentence = question.sentence.replace(regex, '___________');
             ui.showTranslationTooltip(blankedSentence, e);
@@ -668,7 +668,7 @@ showSessionResultModal(isFinal = false) {
             .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, "")
             .replace(/\*/g, '').trim();
 
-        const placeholderRegex = new RegExp(`\\b${correctWordData.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+        const placeholderRegex = new RegExp(`\\b${utils.escapeRegExp(correctWordData.word)}\\b`, 'i');
         if (!firstLine.match(placeholderRegex)) return null;
         const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
 
@@ -691,7 +691,7 @@ showSessionResultModal(isFinal = false) {
         const firstLine = correctWordData.sample.split('\n')[0]
             .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, '')
             .replace(/\*/g, '').trim();
-        const placeholderRegex = new RegExp(`\\b${correctWordData.word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+        const placeholderRegex = new RegExp(`\\b${utils.escapeRegExp(correctWordData.word)}\\b`, 'i');
         if (!firstLine.match(placeholderRegex)) return null;
         const koreanMeaning = await api.translate(firstLine);
         if (!koreanMeaning || koreanMeaning.includes('실패') || koreanMeaning.includes('오류')) return null;
@@ -711,7 +711,7 @@ showSessionResultModal(isFinal = false) {
         if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
         const enableBtn = () => { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } };
 
-        const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const escapedWord = utils.escapeRegExp(word);
         const regex = new RegExp(`\\b${escapedWord}\\b`, 'i');
         const modified = sentence.replace(regex, '; blank ;');
 

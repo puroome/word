@@ -5,6 +5,11 @@ export const utils = {
         return word.replace(/[.#$[\]/]/g, '_');
     },
 
+    // 정규식 특수문자 이스케이프 (new RegExp에 안전하게 삽입)
+    escapeRegExp(str) {
+        return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    },
+
     _wordIndexMap: null,
     _wordIndexSourceLen: -1,
 

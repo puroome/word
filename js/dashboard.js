@@ -2,6 +2,11 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
 
+const QUIZ_TYPES = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION', 'LISTENING_QUIZ'];
+
+// 퀴즈 타입별 {correct,total} 누적용 빈 통계 객체 생성
+const makeQuizStats = () => Object.fromEntries(QUIZ_TYPES.map(type => [type, { correct: 0, total: 0 }]));
+
 let chartJsPromise = null;
 
 const loadChartJs = () => {
@@ -123,12 +128,7 @@ export const dashboard = {
         }
 
 
-        const totalQuizStats = {
-    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-    'LISTENING_QUIZ': { correct: 0, total: 0 },
-};
+        const totalQuizStats = makeQuizStats();
 
         for (let i = 0; i < 7; i++) {
             const loopDate = new Date(today);
@@ -205,12 +205,7 @@ createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LIST
         if (textSummaryContainer) {
             const getStatsForPeriod = (days) => {
                 let totalSeconds = 0;
-                const quizStats = {
-    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-    'LISTENING_QUIZ': { correct: 0, total: 0 },
-};
+                const quizStats = makeQuizStats();
 
                 for (let i = 0; i < days; i++) {
                     const loopDate = new Date(today);
@@ -232,12 +227,7 @@ createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LIST
 
             const totalStudySeconds = Object.values(studyHistory).reduce((sum, dailySeconds) => sum + (dailySeconds || 0), 0);
 
-            const quizHistoryTotal = {
-    'MULTIPLE_CHOICE_MEANING': { correct: 0, total: 0 },
-    'FILL_IN_THE_BLANK': { correct: 0, total: 0 },
-    'MULTIPLE_CHOICE_DEFINITION': { correct: 0, total: 0 },
-    'LISTENING_QUIZ': { correct: 0, total: 0 },
-};
+            const quizHistoryTotal = makeQuizStats();
             if(quizHistory) {
                 Object.values(quizHistory).forEach(daily => {
                      Object.entries(daily).forEach(([type, stats]) => {

@@ -8,6 +8,41 @@ let cachedVoice = null;
 let cachedVoiceSet = null;
 let loadWordListPromise = null;   // 진행 중인 단어목록 fetch (중복 요청 방지)
 
+// GAS(Apps Script) 요청 URL 빌더 (action + 쿼리 파라미터). undefined 값은 생략.
+function buildScriptUrl(action, params = {}) {
+    const url = new URL(config.SCRIPT_URL);
+    url.searchParams.append('action', action);
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) url.searchParams.append(key, value);
+    }
+    return url.toString();
+}
+
+// 시트 동기화용 fire-and-forget GAS 호출 (응답을 기다리지 않음)
+function fireScript(action, params = {}, { successLog, failWarn, errorLog = '시트 통신 에러:' } = {}) {
+    if (!config.SCRIPT_URL) return;
+    fetch(buildScriptUrl(action, params))
+        .then(r => r.json())
+        .then(d => {
+            if (!d.success) { if (failWarn) console.warn(failWarn, d.message); }
+            else if (successLog) console.log(successLog);
+        })
+        .catch(e => console.error(errorLog, e));
+}
+
+// WORD_LIST_CACHE를 읽어 words 배열을 변형한 뒤 다시 저장
+function updateWordListCache(mutate, errorMsg) {
+    try {
+        const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
+        if (!cachedData) return;
+        const parsedCache = JSON.parse(cachedData);
+        mutate(parsedCache.words, parsedCache);
+        localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
+    } catch (e) {
+        if (errorMsg) console.error(errorMsg, e);
+    }
+}
+
 export const api = {
 
     init(firestoreInstance, realtimeDbInstance) {
@@ -202,11 +237,7 @@ export const api = {
                 return "설정 오류: 서버 주소 없음";
             }
 
-            const url = new URL(scriptBaseUrl);
-            url.searchParams.append('action', 'translate');
-            url.searchParams.append('text', text);
-
-            const response = await fetch(url.toString());
+            const response = await fetch(buildScriptUrl('translate', { text }));
 
             if (!response.ok) {
                 throw new Error(`HTTP Error: ${response.status}`);
@@ -294,26 +325,15 @@ export const api = {
 
         wordObj.except = newExceptStatus;
 
-        try {
-            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                const target = parsedCache.words.find(w => w.word === word);
-                if (target) target.except = newExceptStatus;
-                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
-            }
-        } catch (e) { console.error('캐시 업데이트 오류', e); }
+        updateWordListCache(words => {
+            const target = words.find(w => w.word === word);
+            if (target) target.except = newExceptStatus;
+        }, '캐시 업데이트 오류');
 
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'toggle_except');
-            scriptUrl.searchParams.append('word', word);
-            scriptUrl.searchParams.append('value', newExceptStatus ? '1' : '');
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => { if (!d.success) console.warn('GAS except 오류', d.message); })
-                .catch(e => console.error('GAS except fetch 오류', e));
-        }
+        fireScript('toggle_except', { word, value: newExceptStatus ? '1' : '' }, {
+            failWarn: 'GAS except 오류',
+            errorLog: 'GAS except fetch 오류',
+        });
 
         return newExceptStatus;
     },
@@ -410,12 +430,7 @@ export const api = {
                 return [];
             }
 
-            const url = new URL(scriptBaseUrl);
-            url.searchParams.append('action', 'generate_ai_examples');
-            url.searchParams.append('word', word);
-            url.searchParams.append('count', count);
-
-            const response = await fetch(url.toString());
+            const response = await fetch(buildScriptUrl('generate_ai_examples', { word, count }));
 
             if (!response.ok) {
                 throw new Error(`HTTP Error: ${response.status}`);
@@ -443,11 +458,7 @@ export const api = {
                 throw new Error("Config Error: SCRIPT_URL is missing.");
             }
 
-            const url = new URL(scriptBaseUrl);
-            url.searchParams.append('action', 'fetch_word_info_from_ai');
-            url.searchParams.append('word', word);
-
-            const response = await fetch(url.toString());
+            const response = await fetch(buildScriptUrl('fetch_word_info_from_ai', { word }));
 
             if (!response.ok) {
                 throw new Error(`API Error (${response.status})`);
@@ -473,62 +484,37 @@ export const api = {
     },
 
     async saveAISamplesToSheet(wordData, fullEnText) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'save_ai_sample');
-            scriptUrl.searchParams.append('word', wordData.word);
-            scriptUrl.searchParams.append('ai_text', fullEnText);
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 저장 실패:", d.message);
-                    else console.log("✅ 시트 저장 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        fireScript('save_ai_sample', { word: wordData.word, ai_text: fullEnText }, {
+            successLog: "✅ 시트 저장 성공",
+            failWarn: "시트 저장 실패:",
+        });
 
         const aiSampleObj = { en: fullEnText, ko: "" };
 
-        try {
-            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                const targetIndex = parsedCache.words.findIndex(w => w.word === wordData.word);
-                if (targetIndex !== -1) {
-                    parsedCache.words[targetIndex].AISample = aiSampleObj;
-                    localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
-                    console.log("✅ 로컬 캐시 업데이트 완료");
-                }
+        updateWordListCache(words => {
+            const targetIndex = words.findIndex(w => w.word === wordData.word);
+            if (targetIndex !== -1) {
+                words[targetIndex].AISample = aiSampleObj;
+                console.log("✅ 로컬 캐시 업데이트 완료");
             }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 실패:", e);
-        }
+        }, "로컬 캐시 업데이트 실패:");
     },
 
     async updateWordDetails(originalWord, updateData) {
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'update_word_data');
-            scriptUrl.searchParams.append('original_word', originalWord);
-
-            if (updateData.word !== undefined) scriptUrl.searchParams.append('word', updateData.word);
-            if (updateData.pos !== undefined) scriptUrl.searchParams.append('pos', updateData.pos);
-            if (updateData.meaning !== undefined) scriptUrl.searchParams.append('meaning', updateData.meaning);
-            if (updateData.explanation !== undefined) scriptUrl.searchParams.append('explanation', updateData.explanation);
-
-            if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
-                scriptUrl.searchParams.append('manual_sample', updateData.manual_sample || updateData.sample);
-            }
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 수정 실패:", d.message);
-                    else console.log("✅ 시트 수정 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
+        const params = {
+            original_word: originalWord,
+            word: updateData.word,
+            pos: updateData.pos,
+            meaning: updateData.meaning,
+            explanation: updateData.explanation,
+        };
+        if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
+            params.manual_sample = updateData.manual_sample || updateData.sample;
         }
+        fireScript('update_word_data', params, {
+            successLog: "✅ 시트 수정 성공",
+            failWarn: "시트 수정 실패:",
+        });
 
         const updateLocalList = (list) => {
             const targetIndex = list.findIndex(w => w.word === originalWord);
@@ -547,16 +533,7 @@ export const api = {
 
         updateLocalList(state.wordList);
 
-        try {
-            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                updateLocalList(parsedCache.words);
-                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
-            }
-        } catch (e) {
-            console.error("캐시 업데이트 오류:", e);
-        }
+        updateWordListCache(words => updateLocalList(words), "캐시 업데이트 오류:");
     },
 
     async createWord(cardData, afterWord = null) {
@@ -608,49 +585,29 @@ export const api = {
             }
         }
 
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'create_word');
-            scriptUrl.searchParams.append('word', cardData.word);
-            scriptUrl.searchParams.append('pos', cardData.pos || "");
-            scriptUrl.searchParams.append('meaning', cardData.meaning || "");
-            scriptUrl.searchParams.append('explanation', cardData.explanation || "");
-            scriptUrl.searchParams.append('manual_sample', cardData.manual_sample || cardData.sample || "");
+        fireScript('create_word', {
+            word: cardData.word,
+            pos: cardData.pos || "",
+            meaning: cardData.meaning || "",
+            explanation: cardData.explanation || "",
+            manual_sample: cardData.manual_sample || cardData.sample || "",
+            after_word: afterWord || undefined,
+        }, { failWarn: "시트 생성 실패:" });
 
+        updateWordListCache((words, cache) => {
+            const arr = words || [];
+
+            let localInsertPos = arr.length;
             if (afterWord) {
-                scriptUrl.searchParams.append('after_word', afterWord);
+                const fIndex = arr.findIndex(w => w.word === afterWord);
+                if (fIndex !== -1) localInsertPos = fIndex + 1;
             }
 
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 생성 실패:", d.message);
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+            arr.splice(localInsertPos, 0, newWordObj);
 
-        try {
-            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                const words = parsedCache.words || [];
-
-                let localInsertPos = words.length;
-                if (afterWord) {
-                    const fIndex = words.findIndex(w => w.word === afterWord);
-                    if (fIndex !== -1) localInsertPos = fIndex + 1;
-                }
-
-                words.splice(localInsertPos, 0, newWordObj);
-
-                parsedCache.words = words;
-                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
-
-                state.wordList = words;
-            }
-        } catch (e) {
-            console.error("로컬 캐시 업데이트 중 오류:", e);
-        }
+            cache.words = arr;
+            state.wordList = arr;
+        }, "로컬 캐시 업데이트 중 오류:");
 
         utils.invalidateWordIndexMap();
     },
@@ -666,30 +623,16 @@ export const api = {
             }
         }
 
-        if (config.SCRIPT_URL) {
-            const scriptUrl = new URL(config.SCRIPT_URL);
-            scriptUrl.searchParams.append('action', 'delete_word');
-            scriptUrl.searchParams.append('word', word);
-
-            fetch(scriptUrl.toString())
-                .then(r => r.json())
-                .then(d => {
-                    if (!d.success) console.warn("시트 삭제 실패:", d.message);
-                    else console.log("✅ 시트 삭제 성공");
-                })
-                .catch(e => console.error("시트 통신 에러:", e));
-        }
+        fireScript('delete_word', { word }, {
+            successLog: "✅ 시트 삭제 성공",
+            failWarn: "시트 삭제 실패:",
+        });
 
         state.wordList = state.wordList.filter(w => w.word !== word);
         utils.invalidateWordIndexMap();
 
-        try {
-            const cachedData = localStorage.getItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE);
-            if (cachedData) {
-                const parsedCache = JSON.parse(cachedData);
-                parsedCache.words = parsedCache.words.filter(w => w.word !== word);
-                localStorage.setItem(state.LOCAL_STORAGE_KEYS.WORD_LIST_CACHE, JSON.stringify(parsedCache));
-            }
-        } catch (e) {}
+        updateWordListCache((words, cache) => {
+            cache.words = words.filter(w => w.word !== word);
+        });
     }
 };

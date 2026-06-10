@@ -644,7 +644,7 @@ export const learningMode = {
         const includesMatches = [];
         const fuzzyMatches = [];
 
-        const searchRegex = new RegExp(`\\b${lowerCaseStartWord.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+        const searchRegex = new RegExp(`\\b${utils.escapeRegExp(lowerCaseStartWord)}\\b`, 'i');
         const explanationMatches = [];
 
         for (let index = 0; index < this.state.currentWordList.length; index++) {
@@ -1099,8 +1099,6 @@ export const learningMode = {
         container.appendChild(btn);
     },
     renderAIContentRow(container, wordData, sentenceText, index, allSentences) {
-        const p = document.createElement('p');
-        p.className = 'p-2 rounded transition-colors hover:bg-white cursor-pointer relative group shadow-sm hover:shadow';
         const botBtn = document.createElement('button');
         botBtn.className = "float-left mr-2 text-base focus:outline-none transition-transform hover:scale-110";
         botBtn.innerHTML = "🤖";
@@ -1123,51 +1121,11 @@ export const learningMode = {
                 window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
             }
         };
-        p.appendChild(botBtn);
-        const showTranslation = async (event) => {
-            state.activeTranslationTarget = p;
-            ui.showTranslationTooltip("Translating...", event);
-            const translatedText = await api.translate(sentenceText);
-            if (state.activeTranslationTarget !== p) return;
-            ui.showTranslationTooltip(translatedText, event);
-        };
-        p.onclick = (e) => {
-            if (e.target === botBtn || e.target.closest('button')) return;
-            if (e.target.closest('.interactive-word')) return;
-            api.speak(sentenceText, 'sample');
-            showTranslation(e);
-        };
-        p.addEventListener('mouseenter', (e) => {
-             if (e.target === p) {
-                clearTimeout(state.translationTimer);
-                state.activeTranslationTarget = p;
-                state.translationTimer = setTimeout(() => {
-                    if (state.activeTranslationTarget === p) {
-                        showTranslation(e);
-                    }
-                }, 1000);
-             }
+
+        const p = ui.buildSentenceRow(sentenceText, {
+            leadingNode: botBtn,
+            shouldIgnoreClick: (e) => e.target === botBtn || e.target.closest('button') || e.target.closest('.interactive-word'),
         });
-        p.addEventListener('mouseleave', () => {
-            clearTimeout(state.translationTimer);
-            if (state.activeTranslationTarget === p) {
-                state.activeTranslationTarget = null;
-            }
-            ui.hideTranslationTooltip();
-        });
-        const sentenceContent = document.createElement('span');
-        sentenceContent.className = 'sentence-content-area';
-        const sentenceParts = sentenceText.split(/(\*.*?\*)/g);
-        sentenceParts.forEach(part => {
-            if (part.startsWith('*') && part.endsWith('*')) {
-                const strong = document.createElement('strong');
-                strong.appendChild(ui.createInteractiveFragment(part.slice(1, -1), true));
-                sentenceContent.appendChild(strong);
-            } else if (part) {
-                sentenceContent.appendChild(ui.createInteractiveFragment(part, true));
-            }
-        });
-        p.appendChild(sentenceContent);
         container.appendChild(p);
     }
 };
