@@ -62,6 +62,29 @@ function buildHeaderMap(headerRow) {
   return map;
 }
 
+// 스크립트 락을 잡고 fn 실행 후 항상 해제. 락 획득 실패 시 표준 오류 throw.
+function withScriptLock(fn) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (_) {
+    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 시트 + 헤더 행 + 헤더→열 인덱스 맵을 한 번에 반환
+function getSheetContext(sheetName = WORDS_SHEET_NAME) {
+  const sheet = getSheet(sheetName);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colMap = buildHeaderMap(headers);
+  return { sheet, headers, colMap };
+}
+
 function findRowByWord(sheet, wordColIndex, wordToFind) {
   if (!wordToFind) return -1;
   const lastRow = sheet.getLastRow();
@@ -229,9 +252,7 @@ function handleSaveAiSample(e) {
   const aiText  = e.parameter.ai_text;
   if (!word || aiText === undefined) throw new Error('word, ai_text 파라미터가 필요합니다.');
 
-  const sheet   = getSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colMap  = buildHeaderMap(headers);
+  const { sheet, colMap } = getSheetContext();
 
   if (colMap['word'] === undefined || colMap['aisample'] === undefined) {
     throw new Error('Word 또는 AISample 헤더를 찾을 수 없습니다.');
@@ -248,20 +269,11 @@ function handleSaveAiSample(e) {
 }
 
 function handleUpdateWordData(e) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (_) {
-    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
-  }
-
-  try {
+  return withScriptLock(() => {
     const originalWord = e.parameter.original_word;
     if (!originalWord) throw new Error('original_word 파라미터가 필요합니다.');
 
-    const sheet   = getSheet();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const colMap  = buildHeaderMap(headers);
+    const { sheet, colMap } = getSheetContext();
 
     const rowIdx = findRowByWord(sheet, colMap['word'], originalWord);
     if (rowIdx === -1) throw new Error(`시트에서 단어 '${originalWord}'를 찾을 수 없습니다.`);
@@ -299,20 +311,11 @@ function handleUpdateWordData(e) {
     }
 
     return { success: true, message: '단어 수정 및 동기화 완료' };
-  } finally {
-    lock.releaseLock();
-  }
+  });
 }
 
 function handleCreateWord(e) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (_) {
-    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
-  }
-
-  try {
+  return withScriptLock(() => {
     const word         = e.parameter.word;
     const afterWord    = e.parameter.after_word || '';
     const pos          = e.parameter.pos          || '';
@@ -322,9 +325,7 @@ function handleCreateWord(e) {
 
     if (!word) throw new Error('단어가 누락되었습니다.');
 
-    const sheet   = getSheet();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const colMap  = buildHeaderMap(headers);
+    const { sheet, headers, colMap } = getSheetContext();
 
     const newRow = new Array(headers.length).fill('');
     if (colMap['word']         !== undefined) newRow[colMap['word']]         = word;
@@ -348,26 +349,15 @@ function handleCreateWord(e) {
     SpreadsheetApp.flush();
 
     return { success: true, message: '시트 단어 생성 완료' };
-  } finally {
-    lock.releaseLock();
-  }
+  });
 }
 
 function handleDeleteWord(e) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (_) {
-    throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
-  }
-
-  try {
+  return withScriptLock(() => {
     const word = e.parameter.word;
     if (!word) throw new Error('삭제할 단어가 없습니다.');
 
-    const sheet   = getSheet();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const colMap  = buildHeaderMap(headers);
+    const { sheet, colMap } = getSheetContext();
 
     const rowIdx = findRowByWord(sheet, colMap['word'], word);
     if (rowIdx === -1) throw new Error(`시트에서 단어 '${word}'를 찾을 수 없습니다.`);
@@ -376,9 +366,7 @@ function handleDeleteWord(e) {
     SpreadsheetApp.flush();
 
     return { success: true, message: '시트 단어 삭제 완료' };
-  } finally {
-    lock.releaseLock();
-  }
+  });
 }
 
 function handleToggleExcept(e) {
@@ -386,9 +374,7 @@ function handleToggleExcept(e) {
     const value = e.parameter.value;
     if (!word) throw new Error('word 파라미터가 없습니다.');
 
-    const sheet = getSheet();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const colMap  = buildHeaderMap(headers);
+    const { sheet, colMap } = getSheetContext();
 
     if (colMap['except'] === undefined) {
         const lastCol = sheet.getLastColumn() + 1;
