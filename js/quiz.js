@@ -2,6 +2,11 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { ui } from './ui.js';
 import { utils, playSequence, correctBeep, incorrectBeep } from './utils.js';
+import { emit } from './events.js';
+
+// 예문에서 제거할 이모지/기호 유니코드 범위 (global 플래그라 replace 후 lastIndex 자동 리셋)
+const EMOJI_REGEX = /[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu;
+
 export const quizMode = {
     state: {
         currentQuiz: {},
@@ -109,7 +114,7 @@ document.addEventListener('keydown', (e) => {
     },
     async start(quizType) {
         this.state.currentQuizType = quizType;
-        window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz-play' } }));
+        emit.navigate('quiz-play');
     },
     reset(showSelection = true) {
         this.state.currentQuiz = {};
@@ -232,7 +237,7 @@ promptForRangeValue(targetButton) {
                     console.error("Error saving quiz range to localStorage", e);
                 }
             } else {
-                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "숫자만 입력 가능합니다.", isError: true } }));
+                emit.toast("숫자만 입력 가능합니다.", true);
             }
         }
         this.hideRangeInput();
@@ -300,7 +305,7 @@ promptForRangeValue(targetButton) {
                  this.showSessionResultModal(true);
             } else {
                  this.showFinishedScreen("No more quizzes!");
-                 setTimeout(() => window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } })), 800);
+                 setTimeout(() => emit.navigate('quiz'), 800);
             }
         }
     },
@@ -347,62 +352,74 @@ promptForRangeValue(targetButton) {
         return wrongAnswers;
     },
 
-    async generateSingleQuiz() {
+    // 출제 범위 내에서 풀 자격이 있는 후보 단어를 선별해 셔플 후 반환.
+    // wordToExclude: 직전 출제어 제외(프리로드용), rangeOverride: 범위 강제 지정.
+    _collectQuizCandidates(quizType, { wordToExclude = null, rangeOverride = null } = {}) {
         const allWords = state.wordList || [];
-        if (allWords.length === 0) return null;
+        if (allWords.length === 0) return { allWords, candidates: [] };
 
-        const { startIndex, endIndex } = this._getWordRange(allWords);
+        const { startIndex, endIndex } = this._getWordRange(allWords, rangeOverride);
         const wordsInRange = allWords.slice(startIndex, endIndex + 1);
-        if (wordsInRange.length === 0) return null;
+        if (wordsInRange.length === 0) return { allWords, candidates: [] };
 
-        const currentQuizType = this.state.currentQuizType;
         const unsynced = utils.getUnsyncedProgress();
 
         let candidates = wordsInRange.filter(wordObj => {
             const word = wordObj.word;
             if (wordObj.except === true) return false;
+            if (wordToExclude && word === wordToExclude) return false;
             if (this.state.answeredWords.has(word)) return false;
             if (this.state.isPracticeMode) return true;
-            if (unsynced[word] && unsynced[word][currentQuizType] === 'correct') return false;
+            if (unsynced[word] && unsynced[word][quizType] === 'correct') return false;
             const serverProgress = state.currentProgress[word];
-            if (!unsynced[word] && serverProgress && serverProgress[currentQuizType] === 'correct') return false;
+            if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
             return true;
         });
-        if (currentQuizType === 'FILL_IN_THE_BLANK' || currentQuizType === 'LISTENING_QUIZ') {
+        if (quizType === 'FILL_IN_THE_BLANK' || quizType === 'LISTENING_QUIZ') {
             candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
         }
-        if (candidates.length === 0) return null;
         utils.shuffleArray(candidates);
+        return { allWords, candidates };
+    },
 
-        // 동기 생성(영한/빈칸): 네트워크가 없으니 순차로 빠르게
-        if (currentQuizType === 'MULTIPLE_CHOICE_MEANING' || currentQuizType === 'FILL_IN_THE_BLANK') {
-            for (const wordData of candidates) {
-                const quiz = currentQuizType === 'MULTIPLE_CHOICE_MEANING'
-                    ? this.createMeaningQuiz(wordData, allWords)
-                    : this.createBlankQuiz(wordData, allWords);
-                if (quiz) return quiz;
-            }
+    // 후보 목록에서 첫 유효 퀴즈를 생성. 동기형(영한/빈칸)은 순차로,
+    // 네트워크형(영영/듣기)은 5개씩 병렬 시도. exhaustive=false면 첫 배치(5개)만 시도(프리로드용).
+    async _makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive = true } = {}) {
+        if (candidates.length === 0) return null;
+
+        if (quizType === 'MULTIPLE_CHOICE_MEANING') {
+            for (const w of candidates) { const q = this.createMeaningQuiz(w, allWords); if (q) return q; }
+            return null;
+        }
+        if (quizType === 'FILL_IN_THE_BLANK') {
+            for (const w of candidates) { const q = this.createBlankQuiz(w, allWords); if (q) return q; }
             return null;
         }
 
-        // 네트워크 생성(영영/듣기): 후보를 5개씩 병렬 시도하고 첫 성공을 사용
-        const makeQuiz = (wordData) => currentQuizType === 'MULTIPLE_CHOICE_DEFINITION'
-            ? this.createDefinitionQuiz(wordData, allWords)
-            : this.createListeningClozeQuiz(wordData, allWords);
+        const makeQuiz = (w) => quizType === 'MULTIPLE_CHOICE_DEFINITION'
+            ? this.createDefinitionQuiz(w, allWords)
+            : this.createListeningClozeQuiz(w, allWords);
         const BATCH_SIZE = 5;
-        for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+        const limit = exhaustive ? candidates.length : Math.min(BATCH_SIZE, candidates.length);
+        for (let i = 0; i < limit; i += BATCH_SIZE) {
             const batch = candidates.slice(i, i + BATCH_SIZE);
             try {
-                return await Promise.any(batch.map(async (wordData) => {
-                    const quiz = await makeQuiz(wordData);
-                    if (!quiz) throw new Error('no-quiz');   // null은 실패로 간주
-                    return quiz;
+                return await Promise.any(batch.map(async (w) => {
+                    const q = await makeQuiz(w);
+                    if (!q) throw new Error('no-quiz');   // null은 실패로 간주
+                    return q;
                 }));
             } catch (_) {
                 // 이 배치 전부 실패 → 다음 배치 시도
             }
         }
         return null;
+    },
+
+    async generateSingleQuiz() {
+        const quizType = this.state.currentQuizType;
+        const { allWords, candidates } = this._collectQuizCandidates(quizType);
+        return this._makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive: true });
     },
     renderQuiz(quizData) {
         const { type, question, choices } = quizData;
@@ -545,8 +562,8 @@ showSessionResultModal(isFinal = false) {
     continueAfterResult() {
         this.elements.modal.classList.add('hidden');
         if (this.state.isFinalResult) {
-            window.dispatchEvent(new CustomEvent('syncRequest'));
-            window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'quiz' } }));
+            emit.sync();
+            emit.navigate('quiz');
             return;
         }
         this.state.sessionAnsweredInSet = 0;
@@ -560,8 +577,16 @@ showSessionResultModal(isFinal = false) {
         this.state.sessionAnsweredInSet = 0;
         this.state.sessionCorrectInSet = 0;
         this.state.sessionMistakes = [];
-        window.dispatchEvent(new CustomEvent('syncRequest'));
-        window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'mistakeReview', options: { mistakeWords: mistakes } } }));
+        emit.sync();
+        emit.navigate('mistakeReview', { mistakeWords: mistakes });
+    },
+
+    // 저장된 범위 값을 읽어 [1..totalWords]로 검증. 유효하면 숫자, 아니면 null.
+    _readValidRangeValue(key, totalWords) {
+        const saved = localStorage.getItem(key);
+        if (saved === null) return null;
+        const parsed = parseInt(saved);
+        return (!isNaN(parsed) && parsed >= 1 && parsed <= totalWords) ? parsed : null;
     },
 
     async preloadAllQuizTypesBasedOnSavedRange() {
@@ -572,18 +597,11 @@ showSessionResultModal(isFinal = false) {
         let startValue = 1;
         let endValue = state.wordList.length;
         try {
-            const savedStart = localStorage.getItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START);
-            const savedEnd = localStorage.getItem(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END);
             const totalWords = state.wordList.length || 1;
-
-            if (savedStart !== null) {
-                const parsedStart = parseInt(savedStart);
-                if (!isNaN(parsedStart) && parsedStart >= 1 && parsedStart <= totalWords) startValue = parsedStart;
-            }
-            if (savedEnd !== null) {
-                const parsedEnd = parseInt(savedEnd);
-                if (!isNaN(parsedEnd) && parsedEnd >= 1 && parsedEnd <= totalWords) endValue = parsedEnd;
-            }
+            const s = this._readValidRangeValue(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_START, totalWords);
+            const e = this._readValidRangeValue(state.LOCAL_STORAGE_KEYS.QUIZ_RANGE_END, totalWords);
+            if (s !== null) startValue = s;
+            if (e !== null) endValue = e;
         } catch(e) { console.warn("Error reading saved range for initial preload:", e); }
 
         const quizTypes = Object.keys(this.state.preloadedQuizzes);
@@ -605,55 +623,9 @@ showSessionResultModal(isFinal = false) {
         }
     },
     async _generateSingleQuizForPreload(quizType, wordToExclude = null, rangeOverride = null) {
-        const allWords = state.wordList || [];
-        if (allWords.length === 0) return null;
-
-        const { startIndex, endIndex } = this._getWordRange(allWords, rangeOverride);
-        const wordsInRange = allWords.slice(startIndex, endIndex + 1);
-        if (wordsInRange.length === 0) return null;
-
-        const unsynced = utils.getUnsyncedProgress();
-
-        let candidates = wordsInRange.filter(wordObj => {
-            const word = wordObj.word;
-            if (wordObj.except === true) return false;
-            if (word === wordToExclude) return false;
-            if (this.state.answeredWords.has(word)) return false;
-            if (this.state.isPracticeMode) return true;
-            if (unsynced[word] && unsynced[word][quizType] === 'correct') return false;
-            const serverProgress = state.currentProgress[word];
-            if (!unsynced[word] && serverProgress && serverProgress[quizType] === 'correct') return false;
-            return true;
-        });
-                if (quizType === 'FILL_IN_THE_BLANK' || quizType === 'LISTENING_QUIZ') {
-            candidates = candidates.filter(w => w.sample && w.sample.trim() !== '');
-        }
-        if (candidates.length === 0) return null;
-        utils.shuffleArray(candidates);
-
-        // 동기 생성: 유효한 첫 후보 반환
-        if (quizType === 'MULTIPLE_CHOICE_MEANING') {
-            for (const w of candidates) { const q = this.createMeaningQuiz(w, allWords); if (q) return q; }
-            return null;
-        }
-        if (quizType === 'FILL_IN_THE_BLANK') {
-            for (const w of candidates) { const q = this.createBlankQuiz(w, allWords); if (q) return q; }
-            return null;
-        }
-
-        // 네트워크 생성(영영/듣기): 첫 5개를 병렬 시도 (프리로드는 1개만 있으면 됨)
-        const makeQuiz = (w) => quizType === 'MULTIPLE_CHOICE_DEFINITION'
-            ? this.createDefinitionQuiz(w, allWords)
-            : this.createListeningClozeQuiz(w, allWords);
-        try {
-            return await Promise.any(candidates.slice(0, 5).map(async (w) => {
-                const q = await makeQuiz(w);
-                if (!q) throw new Error('no-quiz');
-                return q;
-            }));
-        } catch (_) {
-            return null;
-        }
+        const { allWords, candidates } = this._collectQuizCandidates(quizType, { wordToExclude, rangeOverride });
+        // 프리로드는 1개만 있으면 되므로 네트워크형도 첫 배치(5개)만 시도
+        return this._makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive: false });
     },
     createMeaningQuiz(correctWordData, allWordsData) {
         const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'meaning', true);
@@ -661,15 +633,21 @@ showSessionResultModal(isFinal = false) {
         const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers).slice(0, 3)]);
         return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctWordData.meaning };
     },
-    createBlankQuiz(correctWordData, allWordsData) {
-        if (!correctWordData.sample || !correctWordData.sample.trim()) return null;
-
-        const firstLine = correctWordData.sample.split('\n')[0]
-            .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, "")
+    // 예문 첫 줄을 정리(이모지/강조 제거)하고 표제어 포함 여부를 확인.
+    // 미포함이면 null, 포함이면 {firstLine, placeholderRegex} 반환.
+    _prepareClozeSentence(wordData) {
+        if (!wordData.sample || !wordData.sample.trim()) return null;
+        const firstLine = wordData.sample.split('\n')[0]
+            .replace(EMOJI_REGEX, '')
             .replace(/\*/g, '').trim();
-
-        const placeholderRegex = new RegExp(`\\b${utils.escapeRegExp(correctWordData.word)}\\b`, 'i');
+        const placeholderRegex = new RegExp(`\\b${utils.escapeRegExp(wordData.word)}\\b`, 'i');
         if (!firstLine.match(placeholderRegex)) return null;
+        return { firstLine, placeholderRegex };
+    },
+    createBlankQuiz(correctWordData, allWordsData) {
+        const prepared = this._prepareClozeSentence(correctWordData);
+        if (!prepared) return null;
+        const { firstLine, placeholderRegex } = prepared;
         const sentenceWithBlank = firstLine.replace(placeholderRegex, "___BLANK___").trim();
 
         const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);
@@ -687,12 +665,9 @@ showSessionResultModal(isFinal = false) {
     },
 
     async createListeningClozeQuiz(correctWordData, allWordsData) {
-        if (!correctWordData.sample || !correctWordData.sample.trim()) return null;
-        const firstLine = correctWordData.sample.split('\n')[0]
-            .replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA70}-\u{1FAFF}]/gu, '')
-            .replace(/\*/g, '').trim();
-        const placeholderRegex = new RegExp(`\\b${utils.escapeRegExp(correctWordData.word)}\\b`, 'i');
-        if (!firstLine.match(placeholderRegex)) return null;
+        const prepared = this._prepareClozeSentence(correctWordData);
+        if (!prepared) return null;
+        const { firstLine } = prepared;
         const koreanMeaning = await api.translate(firstLine);
         if (!koreanMeaning || koreanMeaning.includes('실패') || koreanMeaning.includes('오류')) return null;
         const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'word', false);

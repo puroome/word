@@ -2,6 +2,7 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
 import { ui } from './ui.js';
+import { emit } from './events.js';
 
 export const learningMode = {
     state: {
@@ -68,7 +69,7 @@ export const learningMode = {
         });
         this.elements.startWordInput.addEventListener('input', (e) => {
             e.target.value = e.target.value.replace(/[^a-zA-Z\s'-]/g, (match) => {
-                if (match) window.dispatchEvent(new CustomEvent('showImeWarning'));
+                if (match) emit.imeWarning();
                 return '';
             });
         });
@@ -168,6 +169,103 @@ export const learningMode = {
         ui.showCardContextMenu(e);
     },
 
+    // contenteditable 에디터(뜻/설명)에 서식 툴팁·붙여넣기 정리·단축키 동작을 부착한다.
+    // editor.value를 innerHTML과 동기화해 저장 로직이 일관되게 읽도록 한다.
+    _attachRichTextEditor(editor) {
+        editor.value = editor.innerHTML;
+        editor.addEventListener('input', () => {
+            editor.value = editor.innerHTML;
+        });
+
+        const showFormatTooltip = () => {
+            const existing = document.getElementById('format-tooltip');
+            if (existing) existing.remove();
+
+            const selection = window.getSelection();
+            if (!selection.rangeCount || selection.isCollapsed) return;
+
+            const range = selection.getRangeAt(0);
+            if (!editor.contains(range.commonAncestorContainer) && editor !== range.commonAncestorContainer) return;
+
+            const rect = range.getBoundingClientRect();
+            const tooltip = document.createElement('div');
+            tooltip.id = 'format-tooltip';
+            tooltip.className = 'format-tooltip';
+            tooltip.style.zIndex = '10000';
+
+            tooltip.style.top = `${rect.top - 50}px`;
+            tooltip.style.left = `${rect.left}px`;
+
+            const actions = [
+                { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
+                { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
+                { label: '🟢', cmd: 'foreColor', val: '#008000' },
+                { label: '🚫', cmd: 'removeFormat', val: null }
+            ];
+
+            actions.forEach(act => {
+                const btn = document.createElement('button');
+                btn.textContent = act.label;
+                btn.className = 'format-btn';
+                btn.onmousedown = (e) => {
+                    e.preventDefault();
+                    document.execCommand(act.cmd, false, act.val);
+                    editor.value = editor.innerHTML;
+                };
+                tooltip.appendChild(btn);
+            });
+            document.body.appendChild(tooltip);
+        };
+
+        editor.addEventListener('mouseup', () => setTimeout(showFormatTooltip, 10));
+
+        editor.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+            document.execCommand('insertText', false, text);
+            editor.value = editor.innerHTML;
+        });
+
+        editor.addEventListener('keyup', (e) => {
+            if (e.shiftKey) setTimeout(showFormatTooltip, 10);
+        });
+
+        editor.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    range.deleteContents();
+
+                    const br = document.createElement("br");
+                    range.insertNode(br);
+
+                    range.setStartAfter(br);
+                    range.setEndAfter(br);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+
+                    editor.value = editor.innerHTML;
+                }
+                return;
+            }
+
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'b') {
+                    e.preventDefault();
+                    document.execCommand('bold');
+                }
+                if (e.key === 'i') {
+                    e.preventDefault();
+                    document.execCommand('italic');
+                }
+            }
+        });
+    },
+
     async enterEditMode(side) {
         this.state.isEditing = true;
         const wordData = this.state.currentWordList[this.state.currentIndex];
@@ -212,100 +310,7 @@ export const learningMode = {
                 ];
 
                 richEditors.forEach(editor => {
-                    if (!editor) return;
-
-                    editor.value = editor.innerHTML;
-                    editor.addEventListener('input', () => {
-                        editor.value = editor.innerHTML;
-                    });
-
-                    const showFormatTooltip = () => {
-                        const existing = document.getElementById('format-tooltip');
-                        if (existing) existing.remove();
-
-                        const selection = window.getSelection();
-                        if (!selection.rangeCount || selection.isCollapsed) return;
-
-                        const range = selection.getRangeAt(0);
-                        if (!editor.contains(range.commonAncestorContainer) && editor !== range.commonAncestorContainer) return;
-
-                        const rect = range.getBoundingClientRect();
-                        const tooltip = document.createElement('div');
-                        tooltip.id = 'format-tooltip';
-                        tooltip.className = 'format-tooltip';
-                        tooltip.style.zIndex = '10000';
-
-                        tooltip.style.top = `${rect.top - 50}px`;
-                        tooltip.style.left = `${rect.left}px`;
-
-                        const actions = [
-                            { label: '🔴', cmd: 'foreColor', val: '#FF0000' },
-                            { label: '🔵', cmd: 'foreColor', val: '#0000FF' },
-                            { label: '🟢', cmd: 'foreColor', val: '#008000' },
-                            { label: '🚫', cmd: 'removeFormat', val: null }
-                        ];
-
-                        actions.forEach(act => {
-                            const btn = document.createElement('button');
-                            btn.textContent = act.label;
-                            btn.className = 'format-btn';
-                            btn.onmousedown = (e) => {
-                                e.preventDefault();
-                                document.execCommand(act.cmd, false, act.val);
-                                editor.value = editor.innerHTML;
-                            };
-                            tooltip.appendChild(btn);
-                        });
-                        document.body.appendChild(tooltip);
-                    };
-
-                    editor.addEventListener('mouseup', () => setTimeout(showFormatTooltip, 10));
-
-                    editor.addEventListener('paste', (e) => {
-                        e.preventDefault();
-                        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-                        document.execCommand('insertText', false, text);
-                        editor.value = editor.innerHTML;
-                    });
-
-                    editor.addEventListener('keyup', (e) => {
-                        if (e.shiftKey) setTimeout(showFormatTooltip, 10);
-                    });
-
-                    editor.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            const selection = window.getSelection();
-                            if (selection.rangeCount > 0) {
-                                const range = selection.getRangeAt(0);
-                                range.deleteContents();
-
-                                const br = document.createElement("br");
-                                range.insertNode(br);
-
-                                range.setStartAfter(br);
-                                range.setEndAfter(br);
-                                selection.removeAllRanges();
-                                selection.addRange(range);
-
-                                editor.value = editor.innerHTML;
-                            }
-                            return;
-                        }
-
-                        if (e.ctrlKey || e.metaKey) {
-                            if (e.key === 'b') {
-                                e.preventDefault();
-                                document.execCommand('bold');
-                            }
-                            if (e.key === 'i') {
-                                e.preventDefault();
-                                document.execCommand('italic');
-                            }
-                        }
-                    });
+                    if (editor) this._attachRichTextEditor(editor);
                 });
 
                 if (autoBtn) {
@@ -318,7 +323,7 @@ export const learningMode = {
                         targetWord = targetWord.replace(/\s*\[.*?\]$/, '');
 
                         if (!targetWord) {
-                            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "단어를 먼저 입력하세요.", isError: true } }));
+                            emit.toast("단어를 먼저 입력하세요.", true);
                             return;
                         }
 
@@ -348,14 +353,14 @@ export const learningMode = {
                                 const newSampleText = aiData.samples.join('\n');
                                 const originalSample = wordData.sample || "";
                                 wordData.sample = originalSample.trim() ? (originalSample.trim() + "\n\n" + newSampleText) : newSampleText;
-                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `예문 ${aiData.samples.length}개 추가됨` } }));
+                                emit.toast(`예문 ${aiData.samples.length}개 추가됨`);
                             } else {
-                                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "뜻/설명 추가 완료" } }));
+                                emit.toast("뜻/설명 추가 완료");
                             }
 
                         } catch (e) {
                             console.error(e);
-                            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "AI 요청 실패", isError: true } }));
+                            emit.toast("AI 요청 실패", true);
                         } finally {
                             autoBtn.disabled = false;
                             autoBtn.innerHTML = `🪄 AI 자동 완성`;
@@ -408,14 +413,14 @@ export const learningMode = {
                 }
 
                 if (!newWord) {
-                     window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "표제어를 입력해주세요.", isError: true } }));
+                     emit.toast("표제어를 입력해주세요.", true);
                      return;
                 }
 
                 if (newWord !== wordData.word) {
                     const isDuplicate = state.wordList.some(w => w.word.toLowerCase() === newWord.toLowerCase() && w !== wordData);
                     if (isDuplicate) {
-                        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "이미 존재하는 단어입니다.", isError: true } }));
+                        emit.toast("이미 존재하는 단어입니다.", true);
                         return;
                     }
                 }
@@ -443,7 +448,7 @@ export const learningMode = {
                     wordData.sample = newSample;
                     delete wordData.isNew;
 
-                    window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "새 카드가 저장되었습니다." } }));
+                    emit.toast("새 카드가 저장되었습니다.");
 
                 } else {
                     await api.updateWordDetails(wordData.word, {
@@ -467,7 +472,7 @@ export const learningMode = {
                 const newSampleText = sampleInput.value;
                 if (wordData.isNew) {
                      if (!wordData.word) {
-                         window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "앞면의 표제어를 먼저 입력해주세요.", isError: true } }));
+                         emit.toast("앞면의 표제어를 먼저 입력해주세요.", true);
                          return;
                      }
                      wordData.sample = newSampleText;
@@ -530,7 +535,7 @@ export const learningMode = {
         if (wordData && wordData.isNew) {
             this.state.currentWordList.splice(this.state.currentIndex, 1);
             if (this.state.currentWordList.length === 0) {
-                window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+                emit.navigate('selection');
                 return;
             }
             if (this.state.currentIndex >= this.state.currentWordList.length) {
@@ -884,8 +889,8 @@ export const learningMode = {
         this.state.currentWordList = mistakeWords.map(word => wordMap.get(word)).filter(Boolean);
         this.state.currentIndex = 0;
         if (this.state.currentWordList.length === 0) {
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "오답 노트에 단어가 없습니다.", isError: true } }));
-            window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+            emit.toast("오답 노트에 단어가 없습니다.", true);
+            emit.navigate('selection');
             return;
         }
         this.launchApp();
@@ -896,8 +901,8 @@ export const learningMode = {
         if (!state.isWordListReady) { await api.loadWordList(); await api.loadUserProgress(); }
         const favoriteWords = utils.getFavoriteWords();
         if(favoriteWords.length === 0) {
-            window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "즐겨찾기에 등록된 단어가 없습니다.", isError: true } }));
-            window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+            emit.toast("즐겨찾기에 등록된 단어가 없습니다.", true);
+            emit.navigate('selection');
             return;
         }
         const wordMap = new Map(state.wordList.map(wordObj => [wordObj.word, wordObj]));
@@ -1035,8 +1040,8 @@ export const learningMode = {
         if (this.state.isFavoriteMode && !newStatus) {
             this.state.currentWordList.splice(this.state.currentIndex, 1);
             if (this.state.currentWordList.length === 0) {
-                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "즐겨찾기 목록이 비었습니다." } }));
-                window.dispatchEvent(new CustomEvent('navigate', { detail: { mode: 'selection' } }));
+                emit.toast("즐겨찾기 목록이 비었습니다.");
+                emit.navigate('selection');
                 return;
             }
             if(this.state.currentIndex >= this.state.currentWordList.length) {
@@ -1118,7 +1123,7 @@ export const learningMode = {
                 console.error(err);
                 botBtn.innerHTML = "⚠️";
                 botBtn.disabled = false;
-                window.dispatchEvent(new CustomEvent('showToast', { detail: { message: "재생성 실패", isError: true } }));
+                emit.toast("재생성 실패", true);
             }
         };
 

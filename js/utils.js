@@ -32,10 +32,14 @@ export const utils = {
         this._wordIndexSourceLen = -1;
     },
 
+    // Date → 로컬 타임존 기준 'YYYY-MM-DD' 문자열
+    toLocalDateString(date) {
+        const offset = date.getTimezoneOffset() * 60000;
+        return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+    },
+
     getLocalDateString() {
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+        return this.toLocalDateString(new Date());
     },
 
     getUnsyncedProgress() {

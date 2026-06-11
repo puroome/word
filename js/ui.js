@@ -2,6 +2,7 @@ import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords, utils } from './utils.js';
 import { learningMode } from './learning.js';
+import { emit } from './events.js';
 
 export const ui = {
     hideAllMenus() {
@@ -36,6 +37,46 @@ export const ui = {
         });
     },
 
+    // 단어 span에 클릭/우클릭/롱프레스(터치) 상호작용을 부착한다.
+    // 호출부별 차이는 옵션으로 주입한다.
+    //  - onActivate: 클릭/탭 시 동작 (발음 또는 카드 점프 등)
+    //  - stopPropagation: 예문 속 단어처럼 상위 클릭으로의 전파를 막을지
+    //  - longPressMs: 롱프레스 → 우클릭 컨텍스트 메뉴 임계시간
+    //  - passiveTouchStart: touchstart 리스너를 passive로 등록할지
+    //  - speakOnTap: 터치 탭(이동 없이 뗌) 시 단어를 발음할지
+    _attachWordInteractions(span, word, {
+        onActivate,
+        stopPropagation = false,
+        longPressMs = 800,
+        passiveTouchStart = false,
+        speakOnTap = false,
+    } = {}) {
+        span.onclick = (e) => {
+            if (stopPropagation) e.stopPropagation();
+            clearTimeout(state.longPressTimer);
+            onActivate();
+        };
+        span.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (stopPropagation) e.stopPropagation();
+            this.showWordContextMenu(e, word);
+        };
+        let touchMove = false;
+        span.addEventListener('touchstart', (e) => {
+            if (stopPropagation) e.stopPropagation();
+            touchMove = false;
+            clearTimeout(state.longPressTimer);
+            state.longPressTimer = setTimeout(() => {
+                if (!touchMove) this.showWordContextMenu(e, word);
+            }, longPressMs);
+        }, passiveTouchStart ? { passive: true } : undefined);
+        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
+        span.addEventListener('touchend', () => {
+            clearTimeout(state.longPressTimer);
+            if (speakOnTap && !touchMove) api.speak(word, 'word');
+        });
+    },
+
     createInteractiveFragment(content, isForSampleSentence = false, treatAsPhrase = false) {
         const fragment = document.createDocumentFragment();
         if (!content || !content.trim()) return fragment;
@@ -67,31 +108,12 @@ export const ui = {
                         const span = document.createElement('span');
                         span.textContent = part;
                         span.className = 'interactive-word';
-
-                        span.onclick = (e) => {
-                            if (isForSampleSentence) e.stopPropagation();
-                            clearTimeout(state.longPressTimer);
-                            api.speak(part, 'word');
-                        };
-                        span.oncontextmenu = (e) => {
-                            e.preventDefault();
-                            if (isForSampleSentence) e.stopPropagation();
-                            this.showWordContextMenu(e, part);
-                        };
-                        let touchMove = false;
-                        span.addEventListener('touchstart', (e) => {
-                            if (isForSampleSentence) e.stopPropagation();
-                            touchMove = false;
-                            state.longPressTimer = setTimeout(() => {
-                                this.showWordContextMenu(e, part);
-                            }, 800);
+                        this._attachWordInteractions(span, part, {
+                            onActivate: () => api.speak(part, 'word'),
+                            stopPropagation: isForSampleSentence,
+                            longPressMs: 800,
+                            speakOnTap: true,
                         });
-                        span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-                        span.addEventListener('touchend', () => {
-                            clearTimeout(state.longPressTimer);
-                            if (!touchMove) api.speak(part, 'word');
-                        });
-
                         textFragment.appendChild(span);
                     } else {
                         textFragment.appendChild(document.createTextNode(part));
@@ -133,25 +155,11 @@ export const ui = {
             const linkedWord = (wordMap.has(lower) && lower !== currentWordLower) ? wordMap.get(lower) : null;
 
             span.className = linkedWord ? 'interactive-word linked-word' : 'interactive-word';
-
-            span.onclick = () => {
-                clearTimeout(state.longPressTimer);
-                if (linkedWord) {
-                    learningMode.jumpToWord(linkedWord);
-                } else {
-                    api.speak(phrase, 'word');
-                }
-            };
-            span.oncontextmenu = (e) => { e.preventDefault(); this.showWordContextMenu(e, phrase); };
-
-            let touchMove = false;
-            span.addEventListener('touchstart', (e) => {
-                touchMove = false;
-                clearTimeout(state.longPressTimer);
-                state.longPressTimer = setTimeout(() => { if (!touchMove) this.showWordContextMenu(e, phrase); }, 700);
-            }, { passive: true });
-            span.addEventListener('touchmove', () => { touchMove = true; clearTimeout(state.longPressTimer); });
-            span.addEventListener('touchend', () => { clearTimeout(state.longPressTimer); });
+            this._attachWordInteractions(span, phrase, {
+                onActivate: () => linkedWord ? learningMode.jumpToWord(linkedWord) : api.speak(phrase, 'word'),
+                longPressMs: 700,
+                passiveTouchStart: true,
+            });
 
             return span;
         };
@@ -363,7 +371,7 @@ export const ui = {
         this._positionMenu(menu, x, y);
 
         const encodedWord = encodeURIComponent(word);
-        document.getElementById('search-app-context-btn').onclick = () => { document.dispatchEvent(new CustomEvent('searchWord', { detail: word })); this.hideWordContextMenu(); };
+        document.getElementById('search-app-context-btn').onclick = () => { emit.searchWord(word); this.hideWordContextMenu(); };
         document.getElementById('search-daum-context-btn').onclick = () => { window.open(`https://dic.daum.net/search.do?q=${encodedWord}`, 'dict_daum'); this.hideWordContextMenu(); };
         document.getElementById('search-naver-context-btn').onclick = () => { window.open(`https://en.dict.naver.com/#/search?query=${encodedWord}`, 'dict_naver'); this.hideWordContextMenu(); };
         document.getElementById('search-etym-context-btn').onclick = () => { window.open(`https://www.etymonline.com/search?q=${encodedWord}`, 'dict_etym'); this.hideWordContextMenu(); };

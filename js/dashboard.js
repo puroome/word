@@ -7,6 +7,17 @@ const QUIZ_TYPES = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CH
 // 퀴즈 타입별 {correct,total} 누적용 빈 통계 객체 생성
 const makeQuizStats = () => Object.fromEntries(QUIZ_TYPES.map(type => [type, { correct: 0, total: 0 }]));
 
+// 하루치 퀴즈 기록(dayData)을 누적 통계(target)에 합산
+const mergeQuizDay = (target, dayData) => {
+    if (!dayData) return;
+    for (const type in target) {
+        if (dayData[type]) {
+            target[type].correct += dayData[type].correct || 0;
+            target[type].total += dayData[type].total || 0;
+        }
+    }
+};
+
 let chartJsPromise = null;
 
 const loadChartJs = () => {
@@ -92,199 +103,184 @@ export const dashboard = {
         const quizHistory = await api.getQuizHistory();
         const today = new Date();
 
+        this._renderStudyTimeChart(studyHistory, today);
+        this._renderQuizDoughnuts(quizHistory, today);
+        this._renderTextSummary(studyHistory, quizHistory, today);
+    },
+
+    // 최근 7일 학습시간 막대 차트
+    _renderStudyTimeChart(studyHistory, today) {
         const labels = [];
         const data = [];
         for (let i = 6; i >= 0; i--) {
             const loopDate = new Date(today);
             loopDate.setDate(loopDate.getDate() - i);
-            const offset = loopDate.getTimezoneOffset() * 60000;
-            const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
+            const dateString = utils.toLocalDateString(loopDate);
             labels.push(`${loopDate.getMonth() + 1}/${loopDate.getDate()}`);
             data.push(Math.round((studyHistory[dateString] || 0) / 60));
         }
         const studyTimeCtx = document.getElementById('study-time-chart')?.getContext('2d');
-        if (studyTimeCtx) {
-            this.state.charts.push(new Chart(studyTimeCtx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '학습 시간 (분)',
-                        data: data,
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
+        if (!studyTimeCtx) return;
+        this.state.charts.push(new Chart(studyTimeCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '학습 시간 (분)',
+                    data: data,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, suggestedMax: 60 }
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, suggestedMax: 60 }
-                    },
-                    plugins: { legend: { display: false } }
+                plugins: { legend: { display: false } }
+            }
+        }));
+    },
+
+    // 도넛 차트 하나 생성 (정답률 + 중앙 라벨)
+    _createDoughnutChart(elementId, labelId, labelText, stats) {
+        const ctx = document.getElementById(elementId)?.getContext('2d');
+        if (!ctx) return;
+
+        const correct   = stats.correct || 0;
+        const total     = stats.total   || 0;
+        const incorrect = total - correct;
+        const accuracy  = total > 0 ? ((correct / total) * 100).toFixed(0) : 0;
+
+        const labelEl = document.getElementById(labelId);
+        if (labelEl) labelEl.textContent = `${labelText} (${correct}/${total})`;
+
+        this.state.charts.push(new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: total > 0 ? ['정답', '오답'] : ['기록 없음'],
+                datasets: [{
+                    data: total > 0 ? [correct, incorrect > 0 ? incorrect : 0.0001] : [0, 1],
+                    backgroundColor: total > 0 ? ['#34D399', '#F87171'] : ['#E5E7EB', '#E5E7EB'],
+                    hoverBackgroundColor: total > 0 ? ['#10B981', '#EF4444'] : ['#D1D5DB', '#D1D5DB'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '70%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false },
                 }
-            }));
-        }
+            },
+            plugins: [{
+                id: 'doughnutLabel',
+                beforeDraw: (chart) => {
+                    const { ctx, width, height } = chart;
+                    ctx.restore();
+                    const fontSize = (height / 100).toFixed(2);
+                    ctx.font = `bold ${fontSize}em sans-serif`;
+                    ctx.textBaseline = 'middle';
+                    const text = total > 0 ? `${accuracy}%` : '-';
+                    const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                    const textY = height / 2;
+                    ctx.fillStyle = total > 0 ? '#374151' : '#9CA3AF';
+                    ctx.fillText(text, textX, textY);
+                    ctx.save();
+                }
+            }]
+        }));
+    },
 
-
+    // 최근 7일 퀴즈 유형별 정답률 도넛 4종
+    _renderQuizDoughnuts(quizHistory, today) {
         const totalQuizStats = makeQuizStats();
-
         for (let i = 0; i < 7; i++) {
             const loopDate = new Date(today);
             loopDate.setDate(loopDate.getDate() - i);
-            const offset = loopDate.getTimezoneOffset() * 60000;
-            const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
-            if (quizHistory[dateString]) {
-                for (const type in totalQuizStats) {
-                    if (quizHistory[dateString][type]) {
-                        totalQuizStats[type].correct += quizHistory[dateString][type].correct || 0;
-                        totalQuizStats[type].total += quizHistory[dateString][type].total || 0;
-                    }
-                }
+            const dateString = utils.toLocalDateString(loopDate);
+            mergeQuizDay(totalQuizStats, quizHistory[dateString]);
+        }
+        this._createDoughnutChart('quiz1-chart', 'quiz1-label', '영한', totalQuizStats['MULTIPLE_CHOICE_MEANING']);
+        this._createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸', totalQuizStats['FILL_IN_THE_BLANK']);
+        this._createDoughnutChart('quiz3-chart', 'quiz3-label', '영영', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
+        this._createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LISTENING_QUIZ']);
+    },
+
+    // 30일/누적 텍스트 요약 카드
+    _renderTextSummary(studyHistory, quizHistory, today) {
+        const textSummaryContainer = document.getElementById('dashboard-text-summary');
+        if (!textSummaryContainer) return;
+
+        const getStatsForPeriod = (days) => {
+            let totalSeconds = 0;
+            const quizStats = makeQuizStats();
+            for (let i = 0; i < days; i++) {
+                const loopDate = new Date(today);
+                loopDate.setDate(loopDate.getDate() - i);
+                const dateString = utils.toLocalDateString(loopDate);
+                totalSeconds += studyHistory[dateString] || 0;
+                mergeQuizDay(quizStats, quizHistory[dateString]);
             }
+            return { totalSeconds, quizStats };
+        };
+
+        const totalStudySeconds = Object.values(studyHistory).reduce((sum, dailySeconds) => sum + (dailySeconds || 0), 0);
+
+        const quizHistoryTotal = makeQuizStats();
+        if (quizHistory) {
+            Object.values(quizHistory).forEach(daily => mergeQuizDay(quizHistoryTotal, daily));
         }
 
-        const createDoughnutChart = (elementId, labelId, labelText, stats) => {
-            const ctx = document.getElementById(elementId)?.getContext('2d');
-            if (!ctx) return;
+        const stats30 = getStatsForPeriod(30);
 
-            const correct   = stats.correct || 0;
-            const total     = stats.total   || 0;
-            const incorrect = total - correct;
-            const accuracy  = total > 0 ? ((correct / total) * 100).toFixed(0) : 0;
-
-            const labelEl = document.getElementById(labelId);
-            if (labelEl) labelEl.textContent = `${labelText} (${correct}/${total})`;
-
-            this.state.charts.push(new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: total > 0 ? ['정답', '오답'] : ['기록 없음'],
-                    datasets: [{
-                        data: total > 0 ? [correct, incorrect > 0 ? incorrect : 0.0001] : [0, 1],
-                        backgroundColor: total > 0 ? ['#34D399', '#F87171'] : ['#E5E7EB', '#E5E7EB'],
-                        hoverBackgroundColor: total > 0 ? ['#10B981', '#EF4444'] : ['#D1D5DB', '#D1D5DB'],
-                        borderWidth: 0,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    cutout: '70%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { enabled: false },
-                    }
-                },
-                plugins: [{
-                    id: 'doughnutLabel',
-                    beforeDraw: (chart) => {
-                        const { ctx, width, height } = chart;
-                        ctx.restore();
-                        const fontSize = (height / 100).toFixed(2);
-                        ctx.font = `bold ${fontSize}em sans-serif`;
-                        ctx.textBaseline = 'middle';
-                        const text = total > 0 ? `${accuracy}%` : '-';
-                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
-                        const textY = height / 2;
-                        ctx.fillStyle = total > 0 ? '#374151' : '#9CA3AF';
-                        ctx.fillText(text, textX, textY);
-                        ctx.save();
-                    }
-                }]
-            }));
-        };
-        createDoughnutChart('quiz1-chart', 'quiz1-label', '영한', totalQuizStats['MULTIPLE_CHOICE_MEANING']);
-createDoughnutChart('quiz2-chart', 'quiz2-label', '빈칸', totalQuizStats['FILL_IN_THE_BLANK']);
-createDoughnutChart('quiz3-chart', 'quiz3-label', '영영', totalQuizStats['MULTIPLE_CHOICE_DEFINITION']);
-createDoughnutChart('quiz4-chart', 'quiz4-label', '듣기', totalQuizStats['LISTENING_QUIZ']);
-
-
-        const textSummaryContainer = document.getElementById('dashboard-text-summary');
-        if (textSummaryContainer) {
-            const getStatsForPeriod = (days) => {
-                let totalSeconds = 0;
-                const quizStats = makeQuizStats();
-
-                for (let i = 0; i < days; i++) {
-                    const loopDate = new Date(today);
-                    loopDate.setDate(loopDate.getDate() - i);
-                    const offset = loopDate.getTimezoneOffset() * 60000;
-                    const dateString = new Date(loopDate.getTime() - offset).toISOString().slice(0, 10);
-                    totalSeconds += studyHistory[dateString] || 0;
-                    if (quizHistory[dateString]) {
-                        for (const type in quizStats) {
-                            if(quizHistory[dateString][type]) {
-                                quizStats[type].correct += quizHistory[dateString][type].correct || 0;
-                                quizStats[type].total += quizHistory[dateString][type].total || 0;
-                            }
-                        }
-                    }
-                }
-                return { totalSeconds, quizStats };
-            }
-
-            const totalStudySeconds = Object.values(studyHistory).reduce((sum, dailySeconds) => sum + (dailySeconds || 0), 0);
-
-            const quizHistoryTotal = makeQuizStats();
-            if(quizHistory) {
-                Object.values(quizHistory).forEach(daily => {
-                     Object.entries(daily).forEach(([type, stats]) => {
-                         if (quizHistoryTotal[type] && stats) {
-                            quizHistoryTotal[type].correct += stats.correct || 0;
-                            quizHistoryTotal[type].total += stats.total || 0;
-                         }
-                    });
-                });
-            }
-
-            const stats30 = getStatsForPeriod(30);
-
-            const createSummaryCardHTML = (title, totalSeconds, quizStats) => {
-                const quizTypes = {
-    'MULTIPLE_CHOICE_MEANING': '영한',
-    'FILL_IN_THE_BLANK': '빈칸',
-    'MULTIPLE_CHOICE_DEFINITION': '영영',
-    'LISTENING_QUIZ': '듣기',
-};
-
-                let quizHTML = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-1 text-center">';
-                for (const type in quizTypes) {
-                    const stats = quizStats[type] || { correct: 0, total: 0 };
-                    const accuracy = stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(0) : 0;
-                    quizHTML += `
-                        <div class="bg-white p-2 rounded-lg shadow-sm">
-                            <p class="text-sm font-semibold text-gray-500">${quizTypes[type]}</p>
-                            <p class="font-bold text-gray-800 text-xl">${accuracy}%</p>
-                            <p class="text-xs text-gray-400">(${stats.correct}/${stats.total})</p>
-                        </div>
-                    `;
-                }
-                quizHTML += '</div>';
-
-                return `
-                    <div class="bg-gray-50 p-4 rounded-xl shadow-inner">
-                        <h4 class="font-bold text-gray-700 mb-4 text-lg text-center">
-                            ${title}
-                            <span class="font-normal text-gray-500">(${utils.formatSeconds(totalSeconds)})</span>
-                        </h4>
-                        <div class="space-y-3">
-                            ${quizHTML}
-                        </div>
-                    </div>
-                `;
+        const createSummaryCardHTML = (title, totalSeconds, quizStats) => {
+            const quizTypes = {
+                'MULTIPLE_CHOICE_MEANING': '영한',
+                'FILL_IN_THE_BLANK': '빈칸',
+                'MULTIPLE_CHOICE_DEFINITION': '영영',
+                'LISTENING_QUIZ': '듣기',
             };
 
-            const card30Days = createSummaryCardHTML('최근 30일 기록', stats30.totalSeconds, stats30.quizStats);
-            const cardTotal = createSummaryCardHTML('누적 총학습 기록', totalStudySeconds, quizHistoryTotal);
+            let quizHTML = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-1 text-center">';
+            for (const type in quizTypes) {
+                const stats = quizStats[type] || { correct: 0, total: 0 };
+                const accuracy = stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(0) : 0;
+                quizHTML += `
+                    <div class="bg-white p-2 rounded-lg shadow-sm">
+                        <p class="text-sm font-semibold text-gray-500">${quizTypes[type]}</p>
+                        <p class="font-bold text-gray-800 text-xl">${accuracy}%</p>
+                        <p class="text-xs text-gray-400">(${stats.correct}/${stats.total})</p>
+                    </div>
+                `;
+            }
+            quizHTML += '</div>';
 
-            textSummaryContainer.innerHTML = `
-                <div class="space-y-6">
-                    ${card30Days}
-                    ${cardTotal}
+            return `
+                <div class="bg-gray-50 p-4 rounded-xl shadow-inner">
+                    <h4 class="font-bold text-gray-700 mb-4 text-lg text-center">
+                        ${title}
+                        <span class="font-normal text-gray-500">(${utils.formatSeconds(totalSeconds)})</span>
+                    </h4>
+                    <div class="space-y-3">
+                        ${quizHTML}
+                    </div>
                 </div>
             `;
-        }
+        };
+
+        const card30Days = createSummaryCardHTML('최근 30일 기록', stats30.totalSeconds, stats30.quizStats);
+        const cardTotal = createSummaryCardHTML('누적 총학습 기록', totalStudySeconds, quizHistoryTotal);
+
+        textSummaryContainer.innerHTML = `
+            <div class="space-y-6">
+                ${card30Days}
+                ${cardTotal}
+            </div>
+        `;
     }
 };

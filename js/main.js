@@ -330,27 +330,33 @@ const app = {
         this._renderMode(mode, options);
     },
 
-async _renderMode(mode, options = {}) {
+    // 화면 전환 시 모든 모드 컨테이너/상단 버튼을 숨긴다(이후 모드별로 필요한 것만 다시 표시).
+    _hideAllScreens() {
+        [
+            this.elements.refreshBtn,
+            this.elements.selectionScreen,
+            this.elements.quizModeContainer,
+            this.elements.learningModeContainer,
+            this.elements.dashboardContainer,
+            this.elements.homeBtn,
+            this.elements.logoutBtn,
+            this.elements.ttsToggleBtn,
+            this.elements.progressBarContainer,
+            this.elements.practiceModeControl,
+            learningMode.elements.fixedButtons,
+            learningMode.elements.appContainer,
+            learningMode.elements.startScreen,
+        ].forEach(el => el && el.classList.add('hidden'));
+    },
+
+    async _renderMode(mode, options = {}) {
         studyTracker.stopAndSave();
 
         if (window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
 
-        if (this.elements.refreshBtn) this.elements.refreshBtn.classList.add('hidden');
-
-        this.elements.selectionScreen.classList.add('hidden');
-        this.elements.quizModeContainer.classList.add('hidden');
-        this.elements.learningModeContainer.classList.add('hidden');
-        this.elements.dashboardContainer.classList.add('hidden');
-        this.elements.homeBtn.classList.add('hidden');
-        this.elements.logoutBtn.classList.add('hidden');
-        this.elements.ttsToggleBtn.classList.add('hidden');
-        this.elements.progressBarContainer.classList.add('hidden');
-        this.elements.practiceModeControl.classList.add('hidden');
-        learningMode.elements.fixedButtons.classList.add('hidden');
-        learningMode.elements.appContainer.classList.add('hidden');
-        learningMode.elements.startScreen.classList.add('hidden');
+        this._hideAllScreens();
 
         const showCommonButtons = () => {
             this.elements.homeBtn.classList.remove('hidden');
