@@ -1,6 +1,6 @@
 {
   "name": "단어장",
-  "short_name": "word",
+  "short_name": "Word",
   "start_url": "/word/",
   "display": "standalone",
   "orientation": "portrait",
@@ -9,12 +9,12 @@
   "scope": "/word/",
   "icons": [
     {
-      "src": "icon_192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icon_512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
