@@ -4,8 +4,8 @@
   "start_url": "/word/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#1B2130",
+  "theme_color": "#1B2130",
   "scope": "/word/",
   "icons": [
     {
