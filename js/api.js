@@ -193,7 +193,11 @@ export const api = {
                 };
 
                 utterance.onerror = (e) => {
-                    console.error("TTS 오류:", e);
+                    // 'interrupted'/'canceled'는 다음 발음이 이전 발음을 취소할 때
+                    // 정상적으로 발생하는 이벤트이므로 오류로 취급하지 않는다.
+                    if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                        console.error("TTS 오류:", e);
+                    }
                     state.isSpeaking = false;
                     resolve();
                 };

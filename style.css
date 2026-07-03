@@ -237,7 +237,7 @@ body {
 #quiz-question-display {
   background:
     repeating-linear-gradient(to bottom, transparent 0 27px, rgba(61, 107, 198, 0.14) 27px 28px),
-    var(--paper-3) !important;
+    #E9F5EC !important;
   border: 1px solid var(--paper-edge) !important;
   border-left: 3px solid rgba(217, 83, 74, 0.55) !important;
   box-shadow: var(--press) !important;
@@ -423,7 +423,7 @@ body {
 
 /* 하단 이동 버튼 */
 #learning-fixed-buttons {
-  background: linear-gradient(to top, rgba(27, 33, 48, 0.97) 30%, transparent) !important;
+  background: transparent !important;
 }
 #prev-btn, #next-btn {
   background: var(--desk-2) !important;
@@ -645,4 +645,37 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* ---------- 퀴즈 유형 이미지: 원본 3:4 비율을 그대로 유지 ----------
+   원본 퀴즈 이미지는 300×400(3:4)입니다. 기존 4:5 컨테이너와 흰 테두리가
+   상·하단을 잘라내고 둥근 카드처럼 보이게 했으므로, 이 영역에서는 제거합니다. */
+#start-meaning-quiz-btn,
+#start-blank-quiz-btn,
+#start-definition-quiz-btn,
+#start-listening-quiz-btn {
+  aspect-ratio: 3 / 4 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+#start-meaning-quiz-btn img,
+#start-blank-quiz-btn img,
+#start-definition-quiz-btn img,
+#start-listening-quiz-btn img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0 !important;
+}
+
+#start-meaning-quiz-btn:hover,
+#start-blank-quiz-btn:hover,
+#start-definition-quiz-btn:hover,
+#start-listening-quiz-btn:hover {
+  box-shadow: none !important;
 }

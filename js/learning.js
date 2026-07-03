@@ -18,6 +18,26 @@ export const learningMode = {
         editSnapshot: null,
     },
     elements: {},
+    _speakTimer: null,
+    // 카드를 빠르게 넘길 때(키보드/드래그) 지나가는 카드마다 TTS가 실행되지 않도록,
+    // 잠시 멈춰 '정착한' 카드만 읽어 준다.
+    _speakWordDebounced(word) {
+        clearTimeout(this._speakTimer);
+        this._speakTimer = setTimeout(() => {
+            this._speakTimer = null;
+            api.speak(word, 'word');
+        }, 300);
+    },
+    // 단어를 직접 눌러 듣는 등 명시적 요청은 대기 중인 예약을 취소하고 즉시 읽는다.
+    _speakWordNow(word) {
+        clearTimeout(this._speakTimer);
+        this._speakTimer = null;
+        api.speak(word, 'word');
+    },
+    _cancelPendingSpeak() {
+        clearTimeout(this._speakTimer);
+        this._speakTimer = null;
+    },
     init() {
         this.elements = {
             startScreen: document.getElementById('learning-start-screen'),
@@ -82,7 +102,7 @@ export const learningMode = {
 
         this.elements.wordDisplay.addEventListener('click', () => {
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word && !this.state.isEditing) { api.speak(word, 'word'); }
+            if (word && !this.state.isEditing) { this._speakWordNow(word); }
         });
 
         const preventCardMenu = (e, side) => {
@@ -776,7 +796,8 @@ export const learningMode = {
         this.elements.wordDisplay.textContent = wordData.word;
         this.adjustWordFontSize();
 
-        if (wordData.word && !silent) { api.speak(wordData.word, 'word'); }
+        if (wordData.word && !silent) { this._speakWordDebounced(wordData.word); }
+        else { this._cancelPendingSpeak(); }
 
         this.elements.meaningDisplay.innerHTML = '';
         if (wordData.meaning) {
@@ -950,7 +971,7 @@ export const learningMode = {
         else if (e.key === 'b' || e.key === '.' || e.key === ' ') {
             e.preventDefault();
             const word = this.state.currentWordList[this.state.currentIndex]?.word;
-            if (word) api.speak(word, 'word');
+            if (word) this._speakWordNow(word);
         } else if (e.key.toLowerCase() === 'z') { e.preventDefault(); this.navigateBackToBack(-1); }
         else if (e.key.toLowerCase() === 'x') { e.preventDefault(); this.navigateBackToBack(1); }
     },
