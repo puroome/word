@@ -648,18 +648,21 @@ body {
 }
 
 
-/* ---------- 퀴즈 유형 이미지: 원본 3:4 비율을 그대로 유지 ----------
-   원본 퀴즈 이미지는 300×400(3:4)입니다. 기존 4:5 컨테이너와 흰 테두리가
-   상·하단을 잘라내고 둥근 카드처럼 보이게 했으므로, 이 영역에서는 제거합니다. */
+/* ---------- 퀴즈 유형 이미지: 흰 테두리의 떠 있는 카드 ----------
+   원본 비율(3:4)은 유지하고, 바깥에 하얀 띠·둥근 모서리·그림자를 적용합니다. */
 #start-meaning-quiz-btn,
 #start-blank-quiz-btn,
 #start-definition-quiz-btn,
 #start-listening-quiz-btn {
+  box-sizing: border-box;
   aspect-ratio: 3 / 4 !important;
-  border: 0 !important;
-  outline: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  overflow: hidden;
+  background: #fff !important;
+  border: 4px solid #fff !important;
+  outline: 1px solid rgba(73, 83, 101, 0.16) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 7px 15px rgba(30, 41, 59, 0.24) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease !important;
 }
 
 #start-meaning-quiz-btn img,
@@ -670,12 +673,12 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 0 !important;
+  border-radius: 8px !important;
 }
 
 #start-meaning-quiz-btn:hover,
 #start-blank-quiz-btn:hover,
 #start-definition-quiz-btn:hover,
 #start-listening-quiz-btn:hover {
-  box-shadow: none !important;
+  box-shadow: 0 13px 24px rgba(30, 41, 59, 0.30) !important;
 }
