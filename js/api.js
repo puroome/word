@@ -3,31 +3,46 @@ import { translationCache, utils } from './utils.js';
 
 let db = null;
 let database = null;
+let auth = null;
 let activeSpeakId = 0;
 let cachedVoice = null;
 let cachedVoiceSet = null;
 let loadWordListPromise = null;   // 진행 중인 단어목록 fetch (중복 요청 방지)
 
+async function getAuthToken() {
+    if (!auth?.currentUser) {
+        throw new Error('로그인이 필요합니다.');
+    }
+    return auth.currentUser.getIdToken();
+}
+
 // GAS(Apps Script) 요청 URL 빌더 (action + 쿼리 파라미터). undefined 값은 생략.
-function buildScriptUrl(action, params = {}) {
+async function buildScriptUrl(action, params = {}) {
     const url = new URL(config.SCRIPT_URL);
     url.searchParams.append('action', action);
+    url.searchParams.append('id_token', await getAuthToken());
     for (const [key, value] of Object.entries(params)) {
         if (value !== undefined) url.searchParams.append(key, value);
     }
     return url.toString();
 }
 
-// 시트 동기화용 fire-and-forget GAS 호출 (응답을 기다리지 않음)
-function fireScript(action, params = {}, { successLog, failWarn, errorLog = '시트 통신 에러:' } = {}) {
-    if (!config.SCRIPT_URL) return;
-    fetch(buildScriptUrl(action, params))
-        .then(r => r.json())
-        .then(d => {
-            if (!d.success) { if (failWarn) console.warn(failWarn, d.message); }
-            else if (successLog) console.log(successLog);
-        })
-        .catch(e => console.error(errorLog, e));
+async function callScript(action, params = {}, { successLog, failWarn } = {}) {
+    if (!config.SCRIPT_URL) throw new Error('서버 주소가 설정되지 않았습니다.');
+
+    const response = await fetch(await buildScriptUrl(action, params));
+    if (!response.ok) {
+        throw new Error(`서버 통신 실패 (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!data.success) {
+        if (failWarn) console.warn(failWarn, data.message);
+        throw new Error(data.message || '서버 요청 실패');
+    }
+
+    if (successLog) console.log(successLog);
+    return data;
 }
 
 // WORD_LIST_CACHE를 읽어 words 배열을 변형한 뒤 다시 저장
@@ -45,9 +60,10 @@ function updateWordListCache(mutate, errorMsg) {
 
 export const api = {
 
-    init(firestoreInstance, realtimeDbInstance) {
+    init(firestoreInstance, realtimeDbInstance, authInstance) {
         db = firestoreInstance;
         database = realtimeDbInstance;
+        auth = authInstance;
     },
 
     async loadWordList(force = false) {
@@ -241,14 +257,7 @@ export const api = {
                 return "설정 오류: 서버 주소 없음";
             }
 
-            const response = await fetch(buildScriptUrl('translate', { text }));
-
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
-            }
-
-            const data = await response.json();
-
+            const data = await callScript('translate', { text });
             if (data.success) {
                 const translatedText = data.translatedText;
                 try {
@@ -327,17 +336,16 @@ export const api = {
 
         const newExceptStatus = !wordObj.except;
 
+        await callScript('toggle_except', { word, value: newExceptStatus ? '1' : '' }, {
+            failWarn: 'GAS except 오류',
+        });
+
         wordObj.except = newExceptStatus;
 
         updateWordListCache(words => {
             const target = words.find(w => w.word === word);
             if (target) target.except = newExceptStatus;
         }, '캐시 업데이트 오류');
-
-        fireScript('toggle_except', { word, value: newExceptStatus ? '1' : '' }, {
-            failWarn: 'GAS except 오류',
-            errorLog: 'GAS except fetch 오류',
-        });
 
         return newExceptStatus;
     },
@@ -434,14 +442,7 @@ export const api = {
                 return [];
             }
 
-            const response = await fetch(buildScriptUrl('generate_ai_examples', { word, count }));
-
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
-            }
-
-            const data = await response.json();
-
+            const data = await callScript('generate_ai_examples', { word, count });
             if (data.success) {
                 console.log("✅ 예문 생성 완료 (GAS 응답):", data.results);
                 return data.results;
@@ -462,14 +463,7 @@ export const api = {
                 throw new Error("Config Error: SCRIPT_URL is missing.");
             }
 
-            const response = await fetch(buildScriptUrl('fetch_word_info_from_ai', { word }));
-
-            if (!response.ok) {
-                throw new Error(`API Error (${response.status})`);
-            }
-
-            const data = await response.json();
-
+            const data = await callScript('fetch_word_info_from_ai', { word });
             if (data.success) {
                 const cleanJson = data.result;
 
@@ -488,7 +482,7 @@ export const api = {
     },
 
     async saveAISamplesToSheet(wordData, fullEnText) {
-        fireScript('save_ai_sample', { word: wordData.word, ai_text: fullEnText }, {
+        await callScript('save_ai_sample', { word: wordData.word, ai_text: fullEnText }, {
             successLog: "✅ 시트 저장 성공",
             failWarn: "시트 저장 실패:",
         });
@@ -515,7 +509,7 @@ export const api = {
         if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
             params.manual_sample = updateData.manual_sample || updateData.sample;
         }
-        fireScript('update_word_data', params, {
+        await callScript('update_word_data', params, {
             successLog: "✅ 시트 수정 성공",
             failWarn: "시트 수정 실패:",
         });
@@ -538,6 +532,9 @@ export const api = {
         updateLocalList(state.wordList);
 
         updateWordListCache(words => updateLocalList(words), "캐시 업데이트 오류:");
+        if (updateData.word && updateData.word !== originalWord) {
+            utils.invalidateWordIndexMap();
+        }
     },
 
     async createWord(cardData, afterWord = null) {
@@ -579,27 +576,30 @@ export const api = {
             index: newFirebaseIndex
         };
 
-        if (database) {
-            try {
-                const { ref, update } = window.firebaseSDK;
-                update(ref(database, `vocabulary/${utils.toFirebaseKey(cardData.word)}`), newWordObj)
-                    .catch(e => console.error("Firebase 단어 생성 실패:", e));
-            } catch (e) {
-                console.error("Firebase 단어 생성 호출 오류:", e);
-            }
-        }
-
-        fireScript('create_word', {
+        await callScript('create_word', {
             word: cardData.word,
             pos: cardData.pos || "",
             meaning: cardData.meaning || "",
             explanation: cardData.explanation || "",
             manual_sample: cardData.manual_sample || cardData.sample || "",
             after_word: afterWord || undefined,
+            index: newFirebaseIndex,
         }, { failWarn: "시트 생성 실패:" });
 
-        updateWordListCache((words, cache) => {
-            const arr = words || [];
+        const upsertWordIntoList = (list) => {
+            const arr = Array.isArray(list) ? list : [];
+            const existingIndex = arr.findIndex(w => w.word === newWordObj.word);
+            if (existingIndex !== -1) {
+                Object.assign(arr[existingIndex], newWordObj);
+                return arr;
+            }
+
+            const tempIndex = arr.findIndex(w => w.isNew && !w.word);
+            if (tempIndex !== -1) {
+                Object.assign(arr[tempIndex], newWordObj);
+                delete arr[tempIndex].isNew;
+                return arr;
+            }
 
             let localInsertPos = arr.length;
             if (afterWord) {
@@ -608,26 +608,21 @@ export const api = {
             }
 
             arr.splice(localInsertPos, 0, newWordObj);
+            return arr;
+        };
 
-            cache.words = arr;
-            state.wordList = arr;
+        upsertWordIntoList(state.wordList);
+
+        updateWordListCache((words, cache) => {
+            cache.words = upsertWordIntoList(words);
         }, "로컬 캐시 업데이트 중 오류:");
 
         utils.invalidateWordIndexMap();
+        return newWordObj;
     },
 
     async deleteWord(word) {
-        if (database) {
-            try {
-                const { ref, remove } = window.firebaseSDK;
-                remove(ref(database, `vocabulary/${utils.toFirebaseKey(word)}`))
-                    .catch(e => console.error("Firebase 단어 삭제 실패:", e));
-            } catch (e) {
-                console.error("Firebase 단어 삭제 호출 오류:", e);
-            }
-        }
-
-        fireScript('delete_word', { word }, {
+        await callScript('delete_word', { word }, {
             successLog: "✅ 시트 삭제 성공",
             failWarn: "시트 삭제 실패:",
         });

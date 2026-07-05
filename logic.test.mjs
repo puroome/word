@@ -61,6 +61,10 @@ test('특수문자를 리터럴로 이스케이프', () => {
     assert.ok(!re.test('axbxxc'));
 });
 
+test('HTML 특수문자를 안전하게 이스케이프', () => {
+    assert.equal(utils.escapeHtml(`<tag>"'&`), '&lt;tag&gt;&quot;&#39;&amp;');
+});
+
 group('utils.shuffleArray / pickRandomItems');
 test('shuffleArray는 같은 원소 집합을 유지(순열)', () => {
     const arr = [1, 2, 3, 4, 5, 6, 7, 8];

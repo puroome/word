@@ -1,5 +1,7 @@
 const GEMINI_MODEL_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const WORDS_SHEET_NAME = 'Words';
+const DEFAULT_ALLOWED_USER_EMAIL = 'puroome@gmail.com';
+const DEFAULT_FIREBASE_WEB_API_KEY = 'AIzaSyAX-cFBU45qFZTAtLYPTolSzqqLTfEvjP0';
 
 function getFirebaseConfig() {
   const props = PropertiesService.getScriptProperties();
@@ -15,9 +17,46 @@ function getGeminiApiKey() {
   return key;
 }
 
+function getAllowedUserEmail() {
+  return PropertiesService.getScriptProperties().getProperty('ALLOWED_USER_EMAIL') || DEFAULT_ALLOWED_USER_EMAIL;
+}
+
+function getFirebaseWebApiKey() {
+  return PropertiesService.getScriptProperties().getProperty('FIREBASE_WEB_API_KEY') || DEFAULT_FIREBASE_WEB_API_KEY;
+}
+
+function requireAuthorizedUser(e) {
+  const idToken = e.parameter.id_token;
+  if (!idToken) throw new Error('인증 정보가 없습니다. 다시 로그인해주세요.');
+
+  const response = UrlFetchApp.fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${getFirebaseWebApiKey()}`,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ idToken }),
+      muteHttpExceptions: true,
+    }
+  );
+
+  const code = response.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('로그인 검증에 실패했습니다.');
+  }
+
+  const data = JSON.parse(response.getContentText() || '{}');
+  const user = data.users && data.users[0];
+  const allowedEmail = getAllowedUserEmail().toLowerCase();
+  if (!user || String(user.email || '').toLowerCase() !== allowedEmail) {
+    throw new Error('허용되지 않은 사용자입니다.');
+  }
+  return user;
+}
+
 function doGet(e) {
   try {
     const action = e.parameter.action;
+    requireAuthorizedUser(e);
     let result;
 
     switch (action) {
@@ -166,19 +205,11 @@ function toFirebaseKey(word) {
 }
 
 function patchWordInFirebase(word, fields) {
-  try {
-    callFirebaseRtdb(`vocabulary/${toFirebaseKey(word)}`, 'PATCH', fields);
-  } catch (e) {
-    console.warn(`Firebase PATCH 실패 (${word}):`, e.message);
-  }
+  callFirebaseRtdb(`vocabulary/${toFirebaseKey(word)}`, 'PATCH', fields);
 }
 
 function deleteWordFromFirebase(word) {
-  try {
-    callFirebaseRtdb(`vocabulary/${toFirebaseKey(word)}`, 'DELETE');
-  } catch (e) {
-    console.warn(`Firebase DELETE 실패 (${word}):`, e.message);
-  }
+  callFirebaseRtdb(`vocabulary/${toFirebaseKey(word)}`, 'DELETE');
 }
 
 
@@ -322,6 +353,7 @@ function handleCreateWord(e) {
     const meaning      = e.parameter.meaning      || '';
     const explanation  = e.parameter.explanation  || '';
     const manualSample = e.parameter.manual_sample || '';
+    const indexValue   = Number(e.parameter.index || 0);
 
     if (!word) throw new Error('단어가 누락되었습니다.');
 
@@ -334,21 +366,48 @@ function handleCreateWord(e) {
     if (colMap['explanation']  !== undefined) newRow[colMap['explanation']]  = explanation;
     if (colMap['manualsample'] !== undefined) newRow[colMap['manualsample']] = manualSample;
 
+    let insertedRowIdx = -1;
     if (afterWord) {
       const afterRowIdx = findRowByWord(sheet, colMap['word'], afterWord);
       if (afterRowIdx !== -1) {
         sheet.insertRowAfter(afterRowIdx);
-        sheet.getRange(afterRowIdx + 1, 1, 1, newRow.length).setValues([newRow]);
+        insertedRowIdx = afterRowIdx + 1;
+        sheet.getRange(insertedRowIdx, 1, 1, newRow.length).setValues([newRow]);
       } else {
         sheet.appendRow(newRow);
+        insertedRowIdx = sheet.getLastRow();
       }
     } else {
       sheet.appendRow(newRow);
+      insertedRowIdx = sheet.getLastRow();
     }
 
     SpreadsheetApp.flush();
 
-    return { success: true, message: '시트 단어 생성 완료' };
+    const firebaseWord = {
+      word,
+      pos,
+      meaning,
+      explanation,
+      sample: manualSample,
+      AISample: null,
+      except: false,
+      index: Number.isFinite(indexValue) ? indexValue : 0,
+    };
+
+    try {
+      callFirebaseRtdb(`vocabulary/${toFirebaseKey(word)}`, 'PUT', firebaseWord);
+    } catch (firebaseError) {
+      if (insertedRowIdx > 0) {
+        try {
+          sheet.deleteRow(insertedRowIdx);
+          SpreadsheetApp.flush();
+        } catch (_) {}
+      }
+      throw firebaseError;
+    }
+
+    return { success: true, message: '단어 생성 및 동기화 완료' };
   });
 }
 
@@ -362,10 +421,11 @@ function handleDeleteWord(e) {
     const rowIdx = findRowByWord(sheet, colMap['word'], word);
     if (rowIdx === -1) throw new Error(`시트에서 단어 '${word}'를 찾을 수 없습니다.`);
 
+    deleteWordFromFirebase(word);
     sheet.deleteRow(rowIdx);
     SpreadsheetApp.flush();
 
-    return { success: true, message: '시트 단어 삭제 완료' };
+    return { success: true, message: '단어 삭제 및 동기화 완료' };
   });
 }
 

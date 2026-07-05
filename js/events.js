@@ -16,4 +16,7 @@ export const emit = {
     searchWord(word) {
         document.dispatchEvent(new CustomEvent('searchWord', { detail: word }));
     },
+    jumpToWord(word) {
+        document.dispatchEvent(new CustomEvent('jumpToWord', { detail: word }));
+    },
 };

@@ -1,6 +1,74 @@
 import { state } from './config.js';
 
 export const utils = {
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
+    sanitizeRichHtml(value) {
+        const rawHtml = String(value ?? '');
+        if (!rawHtml) return '';
+        if (typeof document === 'undefined') return this.escapeHtml(rawHtml);
+
+        const template = document.createElement('template');
+        template.innerHTML = rawHtml;
+        const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'SPAN', 'FONT']);
+        const colorPattern = /^(#[0-9a-f]{3,8}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(0|1|0?\.\d+)\s*\))$/i;
+
+        const sanitizeNode = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return document.createTextNode(node.nodeValue);
+            }
+
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return document.createDocumentFragment();
+            }
+
+            const tagName = node.tagName;
+            const children = document.createDocumentFragment();
+            node.childNodes.forEach(child => children.appendChild(sanitizeNode(child)));
+
+            if (!allowedTags.has(tagName)) {
+                return children;
+            }
+
+            if (tagName === 'BR') return document.createElement('br');
+
+            const normalizedTag = tagName === 'FONT' ? 'span' : tagName.toLowerCase();
+            const cleanEl = document.createElement(normalizedTag);
+            cleanEl.appendChild(children);
+
+            const rawColor = tagName === 'FONT'
+                ? node.getAttribute('color')
+                : (node.style && node.style.color);
+            const color = (rawColor || '').trim();
+            if (color && colorPattern.test(color)) {
+                cleanEl.style.color = color;
+            }
+
+            return cleanEl;
+        };
+
+        const output = document.createElement('div');
+        template.content.childNodes.forEach(child => output.appendChild(sanitizeNode(child)));
+        return output.innerHTML;
+    },
+
+    richHtmlToPlainText(value) {
+        const html = this.sanitizeRichHtml(value).replace(/<br\s*\/?>/gi, '\n');
+        if (typeof document === 'undefined') {
+            return html.replace(/<[^>]+>/g, '');
+        }
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        return temp.textContent || '';
+    },
+
     toFirebaseKey(word) {
         return word.replace(/[.#$[\]/]/g, '_');
     },

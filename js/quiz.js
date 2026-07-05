@@ -454,18 +454,28 @@ promptForRangeValue(targetButton) {
             questionDisplay.appendChild(p);
         } else if (type === 'MULTIPLE_CHOICE_MEANING') {
             questionDisplay.classList.add('items-center', 'justify-center');
-            questionDisplay.innerHTML = `<h1 id="quiz-word" class="text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer">${question.word}</h1>`;
-            questionDisplay.querySelector('#quiz-word').onclick = () => { api.speak(question.word, 'word'); };
+            const h1 = document.createElement('h1');
+            h1.id = 'quiz-word';
+            h1.className = 'text-3xl sm:text-4xl font-bold text-center text-gray-800 cursor-pointer';
+            h1.textContent = question.word;
+            h1.onclick = () => { api.speak(question.word, 'word'); };
+            questionDisplay.appendChild(h1);
             } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
         questionDisplay.classList.add('items-start', 'text-left');
-        questionDisplay.innerHTML = `<p class="text-lg sm:text-xl text-gray-800 leading-relaxed">${question.definition}</p>`;
+        const p = document.createElement('p');
+        p.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed';
+        p.textContent = question.definition;
+        questionDisplay.appendChild(p);
 } else if (type === 'LISTENING_QUIZ') {
         questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
         replayBtn.style.cssText = 'flex-shrink:0;width:2.4rem;height:2.4rem;border-radius:9999px;background:#ef4444;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;';
 
-        replayBtn.innerHTML = `<span style="font-weight:bold; font-size:16px; color:white;">T</span>`;
+        const replayText = document.createElement('span');
+        replayText.style.cssText = 'font-weight:bold; font-size:16px; color:white;';
+        replayText.textContent = 'T';
+        replayBtn.appendChild(replayText);
         replayBtn.onmouseover = () => { replayBtn.style.background = '#dc2626'; };
         replayBtn.onmouseout  = () => { replayBtn.style.background = '#ef4444'; };
 
@@ -490,7 +500,12 @@ promptForRangeValue(targetButton) {
         choices.forEach((choice, index) => {
             const li = document.createElement('li');
             li.className = 'choice-item border-2 border-gray-300 py-3 px-4 rounded-lg cursor-pointer flex items-start transition-all text-lg hover:bg-blue-50';
-            li.innerHTML = `<span class="font-bold mr-3 text-blue-600">${index + 1}.</span> <span>${choice}</span>`;
+            const indexSpan = document.createElement('span');
+            indexSpan.className = 'font-bold mr-3 text-blue-600';
+            indexSpan.textContent = `${index + 1}.`;
+            const choiceSpan = document.createElement('span');
+            choiceSpan.textContent = choice;
+            li.append(indexSpan, choiceSpan);
             li._choice = choice;
             li.onclick = () => this.checkAnswer(li, choice);
             this.elements.choices.appendChild(li);
@@ -500,7 +515,9 @@ promptForRangeValue(targetButton) {
         passLi.className = 'choice-item p-4 rounded-lg cursor-pointer flex items-center justify-center transition-all font-bold text-lg';
         passLi.style.setProperty('background', '#ffe4e6CC', 'important');
         passLi.style.setProperty('color', '#1f2937', 'important');
-        passLi.innerHTML = `<span>PASS</span>`;
+        const passSpan = document.createElement('span');
+        passSpan.textContent = 'PASS';
+        passLi.appendChild(passSpan);
         passLi.onclick = () => this.checkAnswer(passLi, 'USER_PASSED');
         this.elements.choices.appendChild(passLi);
         this.elements.choices.classList.remove('disabled');

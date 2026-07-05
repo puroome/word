@@ -88,7 +88,7 @@ const app = {
             const auth = getAuth(firebaseApp);
             const db = getFirestore(firebaseApp);
 
-            api.init(db, database);
+            api.init(db, database, auth);
 
             onAuthStateChanged(auth, async (user) => {
                 if (user && user.email === config.ALLOWED_USER_EMAIL) {
@@ -259,11 +259,21 @@ const app = {
         const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
 
-        const timeToSync = parseInt(localStorage.getItem(timeKey) || '0', 10);
-        const statsToSync = JSON.parse(localStorage.getItem(quizKey) || 'null');
-        const progressToSync = JSON.parse(localStorage.getItem(progressKey) || 'null');
-
         try {
+            const readJson = (key) => {
+                try {
+                    return JSON.parse(localStorage.getItem(key) || 'null');
+                } catch (error) {
+                    console.warn(`로컬 동기화 데이터가 손상되어 초기화합니다: ${key}`, error);
+                    localStorage.removeItem(key);
+                    return null;
+                }
+            };
+
+            const timeToSync = parseInt(localStorage.getItem(timeKey) || '0', 10);
+            const statsToSync = readJson(quizKey);
+            const progressToSync = readJson(progressKey);
+
             // 1) 학습 시간: 성공 시 '싱크한 양'만 차감 (await 중 쌓인 시간 보존)
             try {
                 if (timeToSync > 0) {

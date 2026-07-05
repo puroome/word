@@ -151,6 +151,7 @@ export const learningMode = {
         });
 
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
+        document.addEventListener('jumpToWord', (e) => this.jumpToWord(e.detail));
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
         document.addEventListener('touchend', this.handleTouchEnd.bind(this));
         this.elements.progressBarTrack.addEventListener('mousedown', this.handleProgressBarInteraction.bind(this));
@@ -186,7 +187,32 @@ export const learningMode = {
             return;
         }
         e.preventDefault();
-        ui.showCardContextMenu(e);
+        const currentWord = this.state.currentWordList[this.state.currentIndex];
+        ui.showCardContextMenu(e, currentWord, (wordData) => this.deleteCard(wordData));
+    },
+
+    async deleteCard(currentWord) {
+        if (!currentWord?.word) return;
+        try {
+            await api.deleteWord(currentWord.word);
+        } catch (error) {
+            console.error(error);
+            emit.toast(`삭제 실패: ${error.message}`, true);
+            return;
+        }
+
+        this.state.currentWordList = this.state.currentWordList.filter(w => w.word !== currentWord.word);
+
+        if (this.state.currentIndex >= this.state.currentWordList.length) {
+            this.state.currentIndex = Math.max(0, this.state.currentWordList.length - 1);
+        }
+
+        if (this.state.currentWordList.length === 0) {
+            emit.toast("모든 단어가 삭제되었습니다.");
+            emit.navigate('selection');
+        } else {
+            this.displayWord(this.state.currentIndex, true);
+        }
     },
 
     // contenteditable 에디터(뜻/설명)에 서식 툴팁·붙여넣기 정리·단축키 동작을 부착한다.
@@ -299,14 +325,14 @@ export const learningMode = {
                 <div class="flex flex-col gap-2">
                     <input type="text" id="edit-word-input" 
                         class="w-full text-center p-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" 
-                        value="${wordInputValue}" placeholder="Word [POS]">
+                        value="${utils.escapeHtml(wordInputValue)}" placeholder="Word [POS]">
                     <button id="auto-fill-btn" class="self-center text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full transition-colors mb-2 font-semibold shadow-sm flex items-center gap-1">
                         🪄 AI 자동 완성
                     </button>
                 </div>
             `;
 
-            const currentMeaning = (wordData.meaning || "").replace(/\n/g, '<br>');
+            const currentMeaning = utils.sanitizeRichHtml((wordData.meaning || "").replace(/\n/g, '<br>'));
             this.elements.meaningDisplay.innerHTML = `
                 <div id="edit-meaning-input" 
                      contenteditable="true" 
@@ -314,7 +340,7 @@ export const learningMode = {
                      style="min-height: 80px; outline: none; white-space: pre-wrap; user-select: text;">${currentMeaning}</div>
             `;
 
-            const currentExplanation = (wordData.explanation || "").replace(/\n/g, '<br>');
+            const currentExplanation = utils.sanitizeRichHtml((wordData.explanation || "").replace(/\n/g, '<br>'));
             this.elements.explanationDisplay.innerHTML = `
                 <div id="edit-explanation-input" 
                      contenteditable="true" 
@@ -357,10 +383,11 @@ export const learningMode = {
                                 if (newData) {
                                     const original = inputElem.innerText.trim();
                                     const originalHtml = inputElem.innerHTML;
+                                    const safeNewData = utils.sanitizeRichHtml(String(newData).replace(/\n/g, '<br>'));
                                     if (original && !original.includes(newData)) {
-                                        inputElem.innerHTML = originalHtml + "<br><br>" + newData;
+                                        inputElem.innerHTML = utils.sanitizeRichHtml(originalHtml) + "<br><br>" + safeNewData;
                                     } else if (!original) {
-                                        inputElem.innerHTML = newData;
+                                        inputElem.innerHTML = safeNewData;
                                     }
                                     inputElem.value = inputElem.innerHTML;
                                 }
@@ -391,7 +418,7 @@ export const learningMode = {
 
         } else {
             let currentSample = wordData.sample || "";
-            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${currentSample}</textarea>`;
+            this.elements.backContent.innerHTML = `<textarea id="edit-sample-input" class="w-full h-full p-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" rows="10" placeholder="예문">${utils.escapeHtml(currentSample)}</textarea>`;
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'none';
         }
@@ -407,6 +434,7 @@ export const learningMode = {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
 
+        try {
         if (side === 'front') {
             const wordInput = document.getElementById('edit-word-input');
             const meaningInput = document.getElementById('edit-meaning-input');
@@ -415,8 +443,8 @@ export const learningMode = {
             if (wordInput && meaningInput && explanationInput) {
                 const rawWordValue = wordInput.value.trim();
 
-                const newMeaning = meaningInput.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-                const newExplanation = explanationInput.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+                const newMeaning = utils.sanitizeRichHtml(meaningInput.innerHTML).replace(/<br\s*\/?>/gi, '\n');
+                const newExplanation = utils.sanitizeRichHtml(explanationInput.innerHTML).replace(/<br\s*\/?>/gi, '\n');
 
                 const newSample = wordData.sample || "";
 
@@ -503,6 +531,11 @@ export const learningMode = {
             }
              const aiSection = this.elements.backContent.parentNode.querySelector('.ai-gen-section');
              if(aiSection) aiSection.style.display = 'block';
+        }
+        } catch (error) {
+            console.error(error);
+            emit.toast(`저장 실패: ${error.message}`, true);
+            return;
         }
 
         this.state.isEditing = false;
@@ -711,9 +744,9 @@ export const learningMode = {
             ...fuzzyMatches
         ].slice(0, 50);
 
-        let title = `<strong>'${startWord}'</strong> 검색 결과`;
+        let title = `'${startWord}' 검색 결과`;
         if (vocabSuggestions.length === 0 && explanationMatches.length === 0) {
-            title = `<strong>'${startWord}'</strong>에 대한 검색 결과가 없습니다.`;
+            title = `'${startWord}'에 대한 검색 결과가 없습니다.`;
         }
 
         this.displaySuggestions(vocabSuggestions, explanationMatches, title);
@@ -721,7 +754,14 @@ export const learningMode = {
 
     showError(message) {
         this.elements.loader.querySelector('.loader').style.display = 'none';
-        this.elements.loaderText.innerHTML = `<p class="text-red-500 font-bold">오류 발생</p><p class="text-sm text-gray-600 mt-2 break-all">${message}</p>`;
+        this.elements.loaderText.replaceChildren();
+        const title = document.createElement('p');
+        title.className = 'text-red-500 font-bold';
+        title.textContent = '오류 발생';
+        const body = document.createElement('p');
+        body.className = 'text-sm text-gray-600 mt-2 break-all';
+        body.textContent = message;
+        this.elements.loaderText.append(title, body);
     },
     launchApp() {
         this.elements.startScreen.classList.add('hidden');
@@ -753,12 +793,15 @@ export const learningMode = {
         this.elements.loader.classList.add('hidden');
         this.elements.startScreen.classList.remove('hidden');
         this.elements.startInputContainer.classList.add('hidden');
-        this.elements.suggestionsTitle.innerHTML = title;
+        this.elements.suggestionsTitle.textContent = title;
 
         const populateList = (listElement, suggestions) => {
             listElement.innerHTML = '';
             if (suggestions.length === 0) {
-                listElement.innerHTML = '<p class="text-gray-400 text-sm p-3">결과 없음</p>';
+                const empty = document.createElement('p');
+                empty.className = 'text-gray-400 text-sm p-3';
+                empty.textContent = '결과 없음';
+                listElement.appendChild(empty);
                 return;
             }
             suggestions.forEach(({ word, index }) => {
@@ -805,7 +848,7 @@ export const learningMode = {
             this.elements.meaningDisplay.appendChild(ui.createInteractiveFragment(meaningHtml));
         }
 
-        ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation);
+        ui.renderExplanationText(this.elements.explanationDisplay, wordData.explanation, wordData.word);
         this.elements.explanationContainer.classList.remove('hidden');
         const hasSample = wordData.sample && wordData.sample.trim() !== '';
         const sampleImgUrl = 'images/cat-delivery.png';
@@ -1079,12 +1122,17 @@ export const learningMode = {
         if (!this.elements.exceptIcon) return;
         this.elements.exceptIcon.style.opacity = isExcluded ? '1' : '0';
     },
-        async toggleExcept() {
+    async toggleExcept() {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         if (!wordData) return;
-        const newStatus = await api.toggleExcept(wordData.word);
-        wordData.except = newStatus;
-        this.updateExceptIcon(newStatus);
+        try {
+            const newStatus = await api.toggleExcept(wordData.word);
+            wordData.except = newStatus;
+            this.updateExceptIcon(newStatus);
+        } catch (error) {
+            console.error(error);
+            emit.toast(`제외 설정 실패: ${error.message}`, true);
+        }
     },
     appendAIGenButton(container, wordData) {
         let section = container.querySelector('.ai-gen-section');
@@ -1113,8 +1161,8 @@ export const learningMode = {
             try {
                 const newSentences = await api.generateAIExamples(wordData, wordData.meaning, 2);
                 const fullText = newSentences.join('\n');
+                await api.saveAISamplesToSheet(wordData, fullText);
                 wordData.AISample = { en: fullText, ko: "" };
-                api.saveAISamplesToSheet(wordData, fullText);
                 this.appendAIGenButton(container.parentNode, wordData);
             } catch (err) {
                 console.error(err);
@@ -1136,8 +1184,8 @@ export const learningMode = {
                 const [newSentence] = await api.generateAIExamples(wordData, wordData.meaning, 1);
                 allSentences[index] = newSentence;
                 const fullText = allSentences.join('\n');
-                wordData.AISample = { en: fullText, ko: "" };
                 await api.saveAISamplesToSheet(wordData, fullText);
+                wordData.AISample = { en: fullText, ko: "" };
                 const section = container.parentNode;
                 this.appendAIGenButton(section.parentNode, wordData);
             } catch (err) {

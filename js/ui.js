@@ -1,7 +1,6 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { nonInteractiveWords, utils } from './utils.js';
-import { learningMode } from './learning.js';
 import { emit } from './events.js';
 
 export const ui = {
@@ -82,7 +81,7 @@ export const ui = {
         if (!content || !content.trim()) return fragment;
 
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = content;
+        tempDiv.innerHTML = utils.sanitizeRichHtml(content);
 
         const walkAndProcess = (node) => {
             if (node.nodeType === 3) {
@@ -138,9 +137,9 @@ export const ui = {
         return fragment;
     },
 
-    renderExplanationText(targetElement, text) {
+    renderExplanationText(targetElement, text, currentWord = '') {
         const wordMap = utils.getWordIndexMap();
-        const currentWordLower = (learningMode.state.currentWordList[learningMode.state.currentIndex]?.word || '').toLowerCase();
+        const currentWordLower = (currentWord || '').toLowerCase();
 
         // 설명 속 영어 단어 span 하나를 만들어 반환 (카드로 존재하면 점프 링크로)
         const buildWordSpan = (phrase) => {
@@ -156,7 +155,7 @@ export const ui = {
 
             span.className = linkedWord ? 'interactive-word linked-word' : 'interactive-word';
             this._attachWordInteractions(span, phrase, {
-                onActivate: () => linkedWord ? learningMode.jumpToWord(linkedWord) : api.speak(phrase, 'word'),
+                onActivate: () => linkedWord ? emit.jumpToWord(linkedWord) : api.speak(phrase, 'word'),
                 longPressMs: 700,
                 passiveTouchStart: true,
             });
@@ -171,7 +170,7 @@ export const ui = {
         if (/<[a-z][\s\S]*>/i.test(text)) {
             const phraseRegex = /(\[.*?\])|([a-zA-Z0-9'-]+(?:[\s'-]*[a-zA-Z0-9'-]+)*)/g;
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = text;
+            tempDiv.innerHTML = utils.sanitizeRichHtml(text);
 
             const walk = (node) => {
                 if (node.nodeType === 3) { // 텍스트 노드
@@ -394,19 +393,18 @@ export const ui = {
         if (menu) menu.classList.add('hidden');
     },
 
-    showCardContextMenu(event) {
+    showCardContextMenu(event, currentWord, onDelete) {
         this.hideAllMenus();
 
         const menu = document.getElementById('card-context-menu');
         if (!menu) return;
 
-        const currentWord = learningMode.state.currentWordList[learningMode.state.currentIndex];
         const deleteBtn = document.getElementById('delete-card-btn');
 
         if (deleteBtn && currentWord) {
             deleteBtn.onclick = () => {
                 this.hideAllMenus();
-                this.showDeleteConfirm(currentWord);
+                this.showDeleteConfirm(currentWord, onDelete);
             };
         }
 
@@ -414,36 +412,25 @@ export const ui = {
         this._positionMenu(menu, x, y);
     },
 
-    showDeleteConfirm(currentWord) {
+    showDeleteConfirm(currentWord, onDelete) {
         const modal = document.getElementById('nice-alert-modal');
         const msgEl = document.getElementById('nice-msg');
         const confirmBtn = document.getElementById('nice-confirm');
         const cancelBtn = document.getElementById('nice-cancel');
         if (!modal || !msgEl || !confirmBtn || !cancelBtn) return;
 
-        msgEl.innerHTML = `'<b>${currentWord.word}</b>' 단어를<br>정말 삭제하시겠습니까?`;
+        msgEl.replaceChildren(
+            document.createTextNode(`'${currentWord.word}' 단어를`),
+            document.createElement('br'),
+            document.createTextNode('정말 삭제하시겠습니까?')
+        );
         modal.style.display = 'flex';
 
         cancelBtn.onclick = () => { modal.style.display = 'none'; };
 
         confirmBtn.onclick = async () => {
             modal.style.display = 'none';
-
-            await api.deleteWord(currentWord.word);
-
-            const currentList = learningMode.state.currentWordList;
-            learningMode.state.currentWordList = currentList.filter(w => w.word !== currentWord.word);
-
-            if (learningMode.state.currentIndex >= learningMode.state.currentWordList.length) {
-                learningMode.state.currentIndex = Math.max(0, learningMode.state.currentWordList.length - 1);
-            }
-
-            if (learningMode.state.currentWordList.length === 0) {
-                alert("모든 단어가 삭제되었습니다.");
-                location.reload();
-            } else {
-                learningMode.displayWord(learningMode.state.currentIndex, true);
-            }
+            if (onDelete) await onDelete(currentWord);
         };
     },
     // [편집-뒤로가기] '카드 삭제' 모달을 재활용한 예/아니오 확인창 (Promise<boolean> 반환)
@@ -457,7 +444,7 @@ export const ui = {
             if (!modal || !msgEl || !confirmBtn || !cancelBtn) { resolve(false); return; }
 
             if (titleEl) titleEl.textContent = title;
-            msgEl.innerHTML = message;
+            msgEl.innerHTML = utils.sanitizeRichHtml(message);
             confirmBtn.textContent = confirmLabel;
             cancelBtn.textContent = cancelLabel;
             modal.style.display = 'flex';
