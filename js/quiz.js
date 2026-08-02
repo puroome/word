@@ -11,6 +11,10 @@ export const quizMode = {
     state: {
         currentQuiz: {},
         currentQuizType: null,
+        sessionMode: 'SINGLE',
+        sessionLimit: 10,
+        mixedQuizTypes: [],
+        reviewQueue: [],
         isPracticeMode: false,
         sessionAnsweredInSet: 0,
         sessionCorrectInSet: 0,
@@ -29,6 +33,8 @@ export const quizMode = {
             startBlankQuizBtn: document.getElementById('start-blank-quiz-btn'),
             startDefinitionQuizBtn: document.getElementById('start-definition-quiz-btn'),
             startListeningQuizBtn: document.getElementById('start-listening-quiz-btn'),
+            startMixedQuizBtn: document.getElementById('start-mixed-quiz-btn'),
+            mixedTypeButtons: Array.from(document.querySelectorAll('.mixed-type-btn')),
             loader: document.getElementById('quiz-loader'),
             loaderText: document.getElementById('quiz-loader-text'),
             contentContainer: document.getElementById('quiz-content-container'),
@@ -56,6 +62,10 @@ export const quizMode = {
         this.elements.startBlankQuizBtn.addEventListener('click', () => this.start('FILL_IN_THE_BLANK'));
                 this.elements.startDefinitionQuizBtn.addEventListener('click', () => this.start('MULTIPLE_CHOICE_DEFINITION'));
         this.elements.startListeningQuizBtn.addEventListener('click', () => this.start('LISTENING_QUIZ'));
+        this.elements.startMixedQuizBtn.addEventListener('click', () => this.start('MIXED'));
+        this.elements.mixedTypeButtons.forEach(button => {
+            button.addEventListener('click', () => this.toggleMixedType(button));
+        });
 
         this.elements.quizRangeStart.addEventListener('click', (e) => this.promptForRangeValue(e.target));
         this.elements.quizRangeEnd.addEventListener('click', (e) => this.promptForRangeValue(e.target));
@@ -113,8 +123,46 @@ document.addEventListener('keydown', (e) => {
         });
     },
     async start(quizType) {
-        this.state.currentQuizType = quizType;
+        const mixedTypes = this.elements.mixedTypeButtons
+            .filter(button => button.getAttribute('aria-pressed') === 'true')
+            .map(button => button.dataset.quizType);
+        if (quizType === 'MIXED' && mixedTypes.length < 2) {
+            emit.toast('혼합할 퀴즈 유형을 두 개 이상 선택하세요.', true);
+            return;
+        }
+        this.configureSession({
+            mixed: quizType === 'MIXED',
+            mixedTypes
+        });
+        if (quizType !== 'MIXED') {
+            this.state.sessionMode = 'SINGLE';
+            this.state.currentQuizType = quizType;
+        }
         emit.navigate('quiz-play');
+    },
+    toggleMixedType(button) {
+        const selected = button.getAttribute('aria-pressed') === 'true';
+        button.setAttribute('aria-pressed', String(!selected));
+    },
+    configureSession(options = {}) {
+        if (options.reviewItems?.length) {
+            this.state.sessionMode = 'REVIEW';
+            this.state.reviewQueue = [...options.reviewItems];
+            this.state.sessionLimit = this.state.reviewQueue.length;
+            this.state.currentQuizType = this.state.reviewQueue[0].quizType;
+            return;
+        }
+        this.state.reviewQueue = [];
+        this.state.sessionLimit = 10;
+        this.state.sessionMode = options.mixed ? 'MIXED' : 'SINGLE';
+        this.state.mixedQuizTypes = options.mixed && options.mixedTypes?.length
+            ? [...options.mixedTypes]
+            : [];
+        if (options.mixed) this.state.currentQuizType = this._pickMixedQuizType();
+    },
+    _pickMixedQuizType() {
+        const types = this.state.mixedQuizTypes;
+        return types[Math.floor(Math.random() * types.length)];
     },
     reset(showSelection = true) {
         this.state.currentQuiz = {};
@@ -124,6 +172,8 @@ document.addEventListener('keydown', (e) => {
         if (showSelection) {
             this.state.answeredWords.clear();
             this.state.currentQuizType = null;
+            this.state.sessionMode = 'SINGLE';
+            this.state.reviewQueue = [];
         }
 
         this.elements.loader.querySelector('.loader').style.display = 'block';
@@ -264,8 +314,12 @@ promptForRangeValue(targetButton) {
     async displayNextQuiz() {
         this.showLoader(true, "다음 문제 생성 중...");
         let nextQuiz = null;
+        if (this.state.sessionMode === 'MIXED') {
+            this.state.currentQuizType = this._pickMixedQuizType();
+        }
         const type = this.state.currentQuizType;
         let preloaded = this.state.preloadedQuizzes[type];
+        if (this.state.sessionMode !== 'SINGLE') preloaded = null;
 
         if (preloaded) {
             const allWords = state.wordList || [];
@@ -293,7 +347,7 @@ promptForRangeValue(targetButton) {
 
         if (!nextQuiz) {
             nextQuiz = await this.generateSingleQuiz();
-            if (nextQuiz) this.preloadNextQuiz(type, nextQuiz.question.word);
+            if (nextQuiz && this.state.sessionMode === 'SINGLE') this.preloadNextQuiz(type, nextQuiz.question.word);
         }
 
         if (nextQuiz) {
@@ -303,9 +357,10 @@ promptForRangeValue(targetButton) {
         } else {
             if (this.state.sessionAnsweredInSet > 0) {
                  this.showSessionResultModal(true);
-            } else {
-                 this.showFinishedScreen("No more quizzes!");
-                 setTimeout(() => emit.navigate('quiz'), 800);
+             } else {
+                  this.showFinishedScreen("No more quizzes!");
+                  const destination = this.state.sessionMode === 'REVIEW' ? 'selection' : 'quiz';
+                  setTimeout(() => emit.navigate(destination), 800);
             }
         }
     },
@@ -417,9 +472,33 @@ promptForRangeValue(targetButton) {
     },
 
     async generateSingleQuiz() {
-        const quizType = this.state.currentQuizType;
-        const { allWords, candidates } = this._collectQuizCandidates(quizType);
-        return this._makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive: true });
+        if (this.state.sessionMode === 'REVIEW') {
+            const allWords = state.wordList || [];
+            while (this.state.reviewQueue.length > 0) {
+                const { word, quizType } = this.state.reviewQueue.shift();
+                const wordData = allWords.find(item => item.word === word);
+                if (!wordData || utils.getCombinedProgress(word)[quizType] !== 'incorrect') continue;
+                const quiz = await this._makeQuizFromCandidates(quizType, [wordData], allWords, { exhaustive: true });
+                if (quiz) {
+                    this.state.currentQuizType = quizType;
+                    return quiz;
+                }
+            }
+            return null;
+        }
+        const types = this.state.sessionMode === 'MIXED'
+            ? utils.shuffleArray([...this.state.mixedQuizTypes])
+            : [this.state.currentQuizType];
+
+        for (const quizType of types) {
+            const { allWords, candidates } = this._collectQuizCandidates(quizType);
+            const quiz = await this._makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive: true });
+            if (quiz) {
+                this.state.currentQuizType = quizType;
+                return quiz;
+            }
+        }
+        return null;
     },
     renderQuiz(quizData) {
         const { type, question, choices } = quizData;
@@ -552,7 +631,7 @@ promptForRangeValue(targetButton) {
         const delayTime = (isCorrect && !isPass) ? 1200 : 2000;
 
         setTimeout(() => {
-            if (this.state.sessionAnsweredInSet >= 10) this.showSessionResultModal();
+            if (this.state.sessionAnsweredInSet >= this.state.sessionLimit) this.showSessionResultModal(true);
             else this.displayNextQuiz();
         }, delayTime);
     },
@@ -573,14 +652,17 @@ showSessionResultModal(isFinal = false) {
         this.elements.modalScore.textContent = `${this.state.sessionAnsweredInSet}문제 중 ${this.state.sessionCorrectInSet}개 정답!`;
         this.elements.modalMistakesBtn.classList.toggle('hidden', this.state.sessionMistakes.length === 0);
         this.state.isFinalResult = isFinal;
-        this.elements.modalContinueBtn.textContent = isFinal ? "퀴즈 유형으로" : "다음 퀴즈 계속";
+        this.elements.modalContinueBtn.textContent = isFinal
+            ? (this.state.sessionMode === 'REVIEW' ? "홈으로" : "퀴즈 유형으로")
+            : "다음 퀴즈 계속";
         this.elements.modal.classList.remove('hidden');
     },
     continueAfterResult() {
         this.elements.modal.classList.add('hidden');
         if (this.state.isFinalResult) {
+            const destination = this.state.sessionMode === 'REVIEW' ? 'selection' : 'quiz';
             emit.sync();
-            emit.navigate('quiz');
+            emit.navigate(destination);
             return;
         }
         this.state.sessionAnsweredInSet = 0;

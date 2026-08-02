@@ -233,6 +233,46 @@ body {
 #quiz-range-start:hover, #quiz-range-end:hover { transform: translateY(-1px); }
 #quiz-range-start:active, #quiz-range-end:active { box-shadow: var(--press) !important; transform: none; }
 
+#app-wrapper .mixed-type-btn,
+#app-wrapper #start-mixed-quiz-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  background: var(--paper-2) !important;
+  border: 1px solid var(--paper-edge) !important;
+  color: rgba(110, 102, 86, 0.6) !important;
+  box-shadow: var(--press) !important;
+  border-radius: 7px !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+
+#app-wrapper .mixed-type-btn { transform: translateY(1px); }
+#app-wrapper .mixed-type-btn:hover { color: rgba(110, 102, 86, 0.82) !important; }
+
+#app-wrapper .mixed-type-btn:active,
+#app-wrapper #start-mixed-quiz-btn:active {
+  box-shadow: var(--press) !important;
+  transform: translateY(1px);
+}
+
+#app-wrapper .mixed-type-btn[aria-pressed="true"] {
+  background: var(--paper-3) !important;
+  border-color: rgba(61, 107, 198, 0.42) !important;
+  color: var(--blue) !important;
+  box-shadow: var(--lift-sm) !important;
+  transform: translateY(-2px);
+}
+
+#app-wrapper #start-mixed-quiz-btn {
+  background: var(--hl) !important;
+  border-color: var(--hl-deep) !important;
+  color: var(--ink) !important;
+  letter-spacing: 0.06em;
+  box-shadow: var(--lift-sm) !important;
+}
+
+#app-wrapper #start-mixed-quiz-btn:hover {
+  transform: translateY(-2px);
+}
+
 /* 문제 칸 — 왼쪽 빨간 여백선 + 노트 괘선 */
 #quiz-question-display {
   background:

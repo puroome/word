@@ -1,5 +1,20 @@
 import { state } from './config.js';
 
+const QUIZ_TYPES = [
+    'MULTIPLE_CHOICE_MEANING',
+    'FILL_IN_THE_BLANK',
+    'MULTIPLE_CHOICE_DEFINITION',
+    'LISTENING_QUIZ'
+];
+
+function getStoredJson(key, fallback = {}) {
+    const raw = localStorage.getItem(key);
+    return {
+        raw,
+        value: raw ? JSON.parse(raw) : fallback
+    };
+}
+
 export const utils = {
     escapeHtml(value) {
         return String(value ?? '')
@@ -79,11 +94,10 @@ export const utils = {
     },
 
     _wordIndexMap: null,
-    _wordIndexSourceLen: -1,
+    _wordIndexSource: null,
 
     getWordIndexMap() {
-        // wordList 길이가 바뀌면(추가/삭제) 다시 생성
-        if (this._wordIndexMap && this._wordIndexSourceLen === state.wordList.length) {
+        if (this._wordIndexMap && this._wordIndexSource === state.wordList) {
             return this._wordIndexMap;
         }
         const map = new Map();
@@ -91,13 +105,13 @@ export const utils = {
             if (w.word) map.set(w.word.toLowerCase(), w.word);
         });
         this._wordIndexMap = map;
-        this._wordIndexSourceLen = state.wordList.length;
+        this._wordIndexSource = state.wordList;
         return map;
     },
 
     invalidateWordIndexMap() {
         this._wordIndexMap = null;
-        this._wordIndexSourceLen = -1;
+        this._wordIndexSource = null;
     },
 
     // Date → 로컬 타임존 기준 'YYYY-MM-DD' 문자열
@@ -112,12 +126,11 @@ export const utils = {
 
     getUnsyncedProgress() {
         try {
-            const raw = localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES);
+            const { raw, value } = getStoredJson(state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES);
             if (this._unsyncedCacheRaw === raw) return this._unsyncedCacheParsed;
-            const parsed = raw ? JSON.parse(raw) : {};
             this._unsyncedCacheRaw = raw;
-            this._unsyncedCacheParsed = parsed;
-            return parsed;
+            this._unsyncedCacheParsed = value;
+            return value;
         } catch (e) {
             console.warn("Error reading unsynced progress:", e);
             return {};
@@ -165,30 +178,10 @@ export const utils = {
     },
 
     pickRandomItems(array, count, excludeFilter = () => false) {
-        const result = [];
-        const len = array.length;
-        if (len < count * 3) {
-            const shuffled = [...array].filter(item => !excludeFilter(item));
-            this.shuffleArray(shuffled);
-            return shuffled.slice(0, count);
-        }
-
-        const seenIndices = new Set();
-        let attempts = 0;
-        const maxAttempts = count * 5;
-
-        while (result.length < count && attempts < maxAttempts) {
-            attempts++;
-            const idx = Math.floor(Math.random() * len);
-            if (seenIndices.has(idx)) continue;
-
-            const item = array[idx];
-            if (!excludeFilter(item)) {
-                seenIndices.add(idx);
-                result.push(item);
-            }
-        }
-        return result;
+        if (count <= 0) return [];
+        const candidates = array.filter(item => !excludeFilter(item));
+        this.shuffleArray(candidates);
+        return candidates.slice(0, count);
     },
 
     formatSeconds(totalSeconds) {
@@ -208,8 +201,7 @@ export const utils = {
         const progress = { ...(state.currentProgress[word] || {}), ...localStatus };
         if (Object.keys(progress).length === 0) return 'unseen';
 
-        const statuses = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION', 'LISTENING_QUIZ']
-            .map(type => progress[type] || 'unseen');
+        const statuses = QUIZ_TYPES.map(type => progress[type] || 'unseen');
         if (statuses.includes('incorrect')) return 'review';
         if (statuses.every(s => s === 'correct')) return 'learned';
         if (statuses.some(s => s === 'correct')) return 'learning';
@@ -242,6 +234,27 @@ export const utils = {
             }
         });
         return favoriteWords.sort((a, b) => b.time - a.time).map(item => item.word);
+    },
+
+    getCombinedProgress(word) {
+        return {
+            ...(state.currentProgress[word] || {}),
+            ...(this.getUnsyncedProgress()[word] || {})
+        };
+    },
+
+    getIncorrectQuizTypes(word) {
+        const progress = this.getCombinedProgress(word);
+        return QUIZ_TYPES.filter(type => progress[type] === 'incorrect');
+    },
+
+    getMistakeReviewItems() {
+        return state.wordList
+            .filter(wordObj => !wordObj.except)
+            .flatMap(wordObj =>
+                this.getIncorrectQuizTypes(wordObj.word)
+                    .map(quizType => ({ word: wordObj.word, quizType }))
+            );
     },
 
     addProgressUpdateToLocalSync(word, key, value) {

@@ -5,48 +5,84 @@ import { ui } from './ui.js';
 import { learningMode } from './learning.js';
 import { quizMode } from './quiz.js';
 import { dashboard } from './dashboard.js';
+import { features } from './features.js';
+import { statsStore } from './stats-store.js';
 
 const studyTracker = {
-    sessionSeconds: 0,
+    sessionSecondsByDate: {},
+    partialMilliseconds: 0,
     lastActivityTimestamp: 0,
+    lastCountTimestamp: 0,
     timerInterval: null,
     saveInterval: null,
-    INACTIVITY_LIMIT: 30000,
+    INACTIVITY_LIMIT: 120000,
+
+    _recordElapsed(now = Date.now()) {
+        if (!this.lastCountTimestamp) {
+            this.lastCountTimestamp = now;
+            return;
+        }
+        if (document.hidden) {
+            this.lastCountTimestamp = now;
+            return;
+        }
+        const activeUntil = Math.min(now, this.lastActivityTimestamp + this.INACTIVITY_LIMIT);
+        const elapsed = Math.max(0, activeUntil - this.lastCountTimestamp);
+        this.partialMilliseconds += elapsed;
+        const wholeSeconds = Math.floor(this.partialMilliseconds / 1000);
+        if (wholeSeconds > 0) {
+            const date = utils.getLocalDateString();
+            this.sessionSecondsByDate[date] =
+                Number(this.sessionSecondsByDate[date] || 0) + wholeSeconds;
+            this.partialMilliseconds -= wholeSeconds * 1000;
+        }
+        this.lastCountTimestamp = now;
+    },
 
     _flushSessionTime() {
-        if (this.sessionSeconds <= 0) return;
         try {
-            const currentLocalTime = parseInt(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME) || '0', 10);
-            localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, currentLocalTime + this.sessionSeconds);
-            this.sessionSeconds = 0;
+            Object.entries(this.sessionSecondsByDate).forEach(([date, seconds]) => {
+                statsStore.addStudySeconds(date, seconds);
+            });
+            this.sessionSecondsByDate = {};
         } catch (e) { console.error(e); }
     },
 
     start() {
         if (this.timerInterval) return;
-        this.lastActivityTimestamp = Date.now();
-        this.sessionSeconds = 0;
-        this.timerInterval = setInterval(() => {
-            if (document.hidden) return;
-            const now = Date.now();
-            if (now - this.lastActivityTimestamp < this.INACTIVITY_LIMIT) {
-                this.sessionSeconds++;
-            }
-        }, 1000);
-        this.saveInterval = setInterval(() => this._flushSessionTime(), 10000);
+        const now = Date.now();
+        this.lastActivityTimestamp = now;
+        this.lastCountTimestamp = now;
+        this.partialMilliseconds = 0;
+        this.sessionSecondsByDate = {};
+        this.timerInterval = setInterval(() => this._recordElapsed(), 1000);
+        this.saveInterval = setInterval(() => {
+            this._recordElapsed();
+            this._flushSessionTime();
+        }, 10000);
         ['click', 'keydown', 'touchstart'].forEach(event => document.body.addEventListener(event, this.recordActivity, true));
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
     },
     stopAndSave() {
         if (!this.timerInterval) return;
+        this._recordElapsed();
         clearInterval(this.timerInterval);
         clearInterval(this.saveInterval);
         this.timerInterval = null;
         this.saveInterval = null;
         this._flushSessionTime();
         ['click', 'keydown', 'touchstart'].forEach(event => document.body.removeEventListener(event, this.recordActivity, true));
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     },
     recordActivity() {
+        studyTracker._recordElapsed();
         studyTracker.lastActivityTimestamp = Date.now();
+    },
+    handleVisibilityChange() {
+        const now = Date.now();
+        studyTracker._recordElapsed(now);
+        if (!document.hidden) studyTracker.lastActivityTimestamp = now;
+        studyTracker.lastCountTimestamp = now;
     }
 };
 
@@ -77,7 +113,13 @@ const app = {
         lastUpdatedText: document.getElementById('last-updated-text'),
         practiceModeControl: document.getElementById('practice-mode-control'),
         practiceModeCheckbox: document.getElementById('practice-mode-checkbox'),
+        mistakeModeModal: document.getElementById('mistake-mode-modal'),
+        mistakeModeCount: document.getElementById('mistake-mode-count'),
+        mistakeVocabBtn: document.getElementById('mistake-vocab-btn'),
+        mistakeQuizBtn: document.getElementById('mistake-quiz-btn'),
+        mistakeModeCancelBtn: document.getElementById('mistake-mode-cancel-btn'),
     },
+    _pendingMistakeItems: [],
 
     init() {
         const startFirebaseApp = () => {
@@ -154,6 +196,7 @@ const app = {
         quizMode.init();
         learningMode.init();
         dashboard.init();
+        features.init();
 
         quizMode.preloadAllQuizTypesBasedOnSavedRange();
 
@@ -188,14 +231,35 @@ const app = {
         this.elements.selectLearningBtn.addEventListener('click', () => this.navigateTo('learning'));
         this.elements.selectDashboardBtn.addEventListener('click', () => this.navigateTo('dashboard'));
         this.elements.selectFavoritesBtn.addEventListener('click', () => this.navigateTo('favorites'));
-        this.elements.selectMistakesBtn.addEventListener('click', async () => {
-            const allWords = state.wordList;
-            const mistakeWords = allWords.filter(wordObj => utils.getWordStatus(wordObj.word) === 'review').map(wordObj => wordObj.word);
-            if (mistakeWords.length === 0) {
+        this.elements.selectMistakesBtn.addEventListener('click', () => {
+            const reviewItems = utils.getMistakeReviewItems();
+            if (reviewItems.length === 0) {
                 this.showToast('오답 노트에 단어가 없습니다.', true);
                 return;
             }
+            this._pendingMistakeItems = reviewItems;
+            const wordCount = new Set(reviewItems.map(item => item.word)).size;
+            this.elements.mistakeModeCount.textContent =
+                `${wordCount}개 단어 · ${reviewItems.length}개 오답 유형`;
+            this.elements.mistakeModeModal.classList.remove('hidden');
+        });
+        this.elements.mistakeVocabBtn.addEventListener('click', () => {
+            const mistakeWords = [...new Set(this._pendingMistakeItems.map(item => item.word))];
+            this.elements.mistakeModeModal.classList.add('hidden');
             this.navigateTo('mistakeReview', { mistakeWords });
+        });
+        this.elements.mistakeQuizBtn.addEventListener('click', () => {
+            const reviewItems = [...this._pendingMistakeItems];
+            this.elements.mistakeModeModal.classList.add('hidden');
+            this.navigateTo('quiz-play', { reviewItems });
+        });
+        this.elements.mistakeModeCancelBtn.addEventListener('click', () =>
+            this.elements.mistakeModeModal.classList.add('hidden')
+        );
+        this.elements.mistakeModeModal.addEventListener('click', event => {
+            if (event.target === this.elements.mistakeModeModal) {
+                this.elements.mistakeModeModal.classList.add('hidden');
+            }
         });
 
         this.elements.homeBtn.addEventListener('click', () => this.navigateTo('selection'));
@@ -252,14 +316,11 @@ const app = {
     },
 
     async syncOfflineData() {
-        if (!state.userId || this._isSyncing) return;   // 동시 실행 방지(이중 집계 차단)
-        this._isSyncing = true;
+        if (!state.userId) return;
+        if (this._syncPromise) return this._syncPromise;
 
-        const timeKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME;
-        const quizKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ;
         const progressKey = state.LOCAL_STORAGE_KEYS.UNSYNCED_PROGRESS_UPDATES;
-
-        try {
+        this._syncPromise = (async () => {
             const readJson = (key) => {
                 try {
                     return JSON.parse(localStorage.getItem(key) || 'null');
@@ -269,42 +330,29 @@ const app = {
                     return null;
                 }
             };
-
-            const timeToSync = parseInt(localStorage.getItem(timeKey) || '0', 10);
-            const statsToSync = readJson(quizKey);
+            const statsSnapshot = statsStore.snapshot();
             const progressToSync = readJson(progressKey);
+            const syncedSnapshot = { study: {}, quiz: {} };
 
-            // 1) 학습 시간: 성공 시 '싱크한 양'만 차감 (await 중 쌓인 시간 보존)
             try {
-                if (timeToSync > 0) {
-                    await api.updateStudyTime(timeToSync);
-                    const left = parseInt(localStorage.getItem(timeKey) || '0', 10) - timeToSync;
-                    if (left > 0) localStorage.setItem(timeKey, String(left));
-                    else localStorage.removeItem(timeKey);
+                if (Object.keys(statsSnapshot.study).length > 0) {
+                    await api.syncStudyHistory(statsSnapshot.study);
+                    syncedSnapshot.study = statsSnapshot.study;
                 }
             } catch (error) {
                 console.error("학습 시간 동기화 실패:", error);
             }
 
-            // 2) 퀴즈 통계: 싱크한 total/correct 만큼만 차감
             try {
-                if (statsToSync) {
-                    await api.syncQuizHistory(statsToSync);
-                    const cur = JSON.parse(localStorage.getItem(quizKey) || '{}');
-                    for (const type in statsToSync) {
-                        if (!cur[type]) continue;
-                        cur[type].total   -= statsToSync[type].total   || 0;
-                        cur[type].correct -= statsToSync[type].correct || 0;
-                        if (cur[type].total <= 0) delete cur[type];
-                    }
-                    if (Object.keys(cur).length > 0) localStorage.setItem(quizKey, JSON.stringify(cur));
-                    else localStorage.removeItem(quizKey);
+                if (Object.keys(statsSnapshot.quiz).length > 0) {
+                    await api.syncQuizHistory(statsSnapshot.quiz);
+                    syncedSnapshot.quiz = statsSnapshot.quiz;
                 }
             } catch (error) {
                 console.error("퀴즈 기록 동기화 실패:", error);
             }
+            statsStore.subtractSnapshot(syncedSnapshot);
 
-            // 3) 진행도: 싱크한 값이 그대로면 삭제 (await 중 바뀐 값은 보존)
             try {
                 if (progressToSync && Object.keys(progressToSync).length > 0) {
                     await api.syncProgressUpdates(progressToSync);
@@ -322,8 +370,12 @@ const app = {
             } catch (error) {
                 console.error("단어 진행도 동기화 실패:", error);
             }
+        })();
+
+        try {
+            await this._syncPromise;
         } finally {
-            this._isSyncing = false;
+            this._syncPromise = null;
         }
     },
 
@@ -386,6 +438,9 @@ const app = {
             showCommonButtons();
             this.elements.quizModeContainer.classList.remove('hidden');
             this.elements.practiceModeControl.classList.remove('hidden');
+            if (options.mixed || options.reviewItems) {
+                quizMode.configureSession(options);
+            }
             quizMode.reset(false);
             if (!state.isWordListReady) await api.loadWordList();
             quizMode.displayNextQuiz();
@@ -413,7 +468,8 @@ const app = {
         } else if (mode === 'dashboard') {
             this.elements.homeBtn.classList.remove('hidden');
             this.elements.dashboardContainer.classList.remove('hidden');
-            dashboard.render();
+            await this.syncOfflineData();
+            await dashboard.render();
         } else {
             this.elements.selectionScreen.classList.remove('hidden');
             this.elements.logoutBtn.classList.remove('hidden');
@@ -424,6 +480,8 @@ const app = {
 
             quizMode.reset();
             learningMode.reset();
+            await this.syncOfflineData();
+            await features.render();
         }
     },
     async forceReload() {

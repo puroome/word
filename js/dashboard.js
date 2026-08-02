@@ -1,6 +1,7 @@
 import { state } from './config.js';
 import { api } from './api.js';
 import { utils } from './utils.js';
+import { statsStore } from './stats-store.js';
 
 const QUIZ_TYPES = ['MULTIPLE_CHOICE_MEANING', 'FILL_IN_THE_BLANK', 'MULTIPLE_CHOICE_DEFINITION', 'LISTENING_QUIZ'];
 
@@ -92,6 +93,16 @@ export const dashboard = {
     async renderSummary() {
         this.destroyCharts();
 
+        const [remoteStudyHistory, remoteQuizHistory] = await Promise.all([
+            api.getStudyHistory(),
+            api.getQuizHistory()
+        ]);
+        const studyHistory = statsStore.mergeStudyHistory(remoteStudyHistory);
+        const quizHistory = statsStore.mergeQuizHistory(remoteQuizHistory);
+        const today = new Date();
+
+        this._renderTextSummary(studyHistory, quizHistory, today);
+
         try {
             await loadChartJs();
         } catch (e) {
@@ -99,13 +110,8 @@ export const dashboard = {
             return;
         }
 
-        const studyHistory = await api.getStudyHistory();
-        const quizHistory = await api.getQuizHistory();
-        const today = new Date();
-
         this._renderStudyTimeChart(studyHistory, today);
         this._renderQuizDoughnuts(quizHistory, today);
-        this._renderTextSummary(studyHistory, quizHistory, today);
     },
 
     // 최근 7일 학습시간 막대 차트
@@ -117,7 +123,7 @@ export const dashboard = {
             loopDate.setDate(loopDate.getDate() - i);
             const dateString = utils.toLocalDateString(loopDate);
             labels.push(`${loopDate.getMonth() + 1}/${loopDate.getDate()}`);
-            data.push(Math.round((studyHistory[dateString] || 0) / 60));
+            data.push(Math.floor((studyHistory[dateString] || 0) / 60));
         }
         const studyTimeCtx = document.getElementById('study-time-chart')?.getContext('2d');
         if (!studyTimeCtx) return;

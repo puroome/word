@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1B2130">
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body class="bg-slate-100 flex justify-center min-h-screen p-4 pb-24 overscroll-y-none">
 
@@ -64,7 +64,8 @@
 
             <div id="selection-screen" class="bg-white p-8 rounded-2xl shadow-lg text-center relative">
                 <h1 class="text-3xl font-bold text-gray-800 mb-2">어휘 학습</h1>
-                <p class="text-gray-600 mb-8">원하는 학습 방식을 선택하세요.</p>
+                <p class="text-gray-600">원하는 학습 방식을 선택하세요.</p>
+                <p id="today-summary" class="text-sm text-gray-500 mt-2 mb-8">오늘의 학습 기록을 불러오는 중...</p>
                 <div class="inline-block">
                     <div class="flex flex-col sm:flex-row justify-center items-center sm:gap-x-6 gap-y-4">
                         <div id="select-learning-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-rotate-2 w-44 h-44">
@@ -74,20 +75,22 @@
                             <img src="images/test.png" alt="퀴즈 모드" class="w-full h-full object-cover">
                         </div>
                     </div>
-                     <div class="grid grid-cols-2 gap-4 mt-4">
-                        <button id="select-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors flex items-center justify-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                            학습 통계
+                    <div class="grid grid-cols-2 gap-4 mt-4">
+                        <button id="select-favorites-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            즐겨찾기
                         </button>
                         <button id="select-mistakes-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors flex items-center justify-center gap-2">
                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10.4 12.6a2 2 0 1 1 3 3L8 21l-4 1 1-4Z"></path></svg>
                             오답 노트
                         </button>
                     </div>
-                    <button id="select-favorites-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors flex items-center justify-center gap-2 mt-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                        즐겨찾기
-                    </button>
+                    <div class="mt-4">
+                        <button id="select-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                            학습 통계
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -109,21 +112,28 @@
 </div>
                      </div>
                      <div id="dashboard-text-summary" class="mt-8"></div>
-                 </div>
-            </div>
+                  </div>
+             </div>
 
             <div id="quiz-mode-container" class="hidden bg-white w-full p-4 rounded-2xl shadow-lg">
                 <div id="quiz-selection-screen" class="text-center p-10">
                      <h1 class="text-2xl font-bold text-gray-800 mb-6">퀴즈 유형</h1>
-                     <div class="text-gray-600 mb-8">
+                      <div class="text-gray-600 mb-8">
                          <p>원하는 퀴즈 유형과 범위를 선택하세요.</p>
                          <div class="flex justify-center items-center mt-3 text-base font-semibold">
                              <span id="quiz-range-label" class="mr-1 cursor-pointer">🔒출제범위 :</span>
                              <button id="quiz-range-start" data-min="1" data-max="1" class="min-w-[1.5rem] text-center font-bold text-white bg-red-500 bg-opacity-30 hover:bg-opacity-60 rounded-md px-0.5 py-0.5 transition-colors">1</button>
                              <span class="mx-1">-</span>
                              <button id="quiz-range-end" data-min="1" data-max="1" class="min-w-[1.5rem] text-center font-bold text-white bg-red-500 bg-opacity-30 hover:bg-opacity-60 rounded-md px-0.5 py-0.5 transition-colors">1</button>
-                         </div>
-                     </div>
+                          </div>
+                          <div class="flex flex-wrap justify-center items-center gap-2 mt-4">
+                              <button class="mixed-type-btn w-9 h-9 rounded-lg border-2 border-gray-300 bg-white text-gray-600 font-bold transition-colors" data-quiz-type="MULTIPLE_CHOICE_MEANING" aria-pressed="false" title="영한 퀴즈">1</button>
+                              <button class="mixed-type-btn w-9 h-9 rounded-lg border-2 border-gray-300 bg-white text-gray-600 font-bold transition-colors" data-quiz-type="FILL_IN_THE_BLANK" aria-pressed="false" title="빈칸 퀴즈">2</button>
+                              <button class="mixed-type-btn w-9 h-9 rounded-lg border-2 border-gray-300 bg-white text-gray-600 font-bold transition-colors" data-quiz-type="MULTIPLE_CHOICE_DEFINITION" aria-pressed="false" title="영영 퀴즈">3</button>
+                              <button class="mixed-type-btn w-9 h-9 rounded-lg border-2 border-gray-300 bg-white text-gray-600 font-bold transition-colors" data-quiz-type="LISTENING_QUIZ" aria-pressed="false" title="듣기 퀴즈">4</button>
+                              <button id="start-mixed-quiz-btn" class="ml-1 font-bold h-9 px-4 rounded-lg transition-colors">MIX</button>
+                          </div>
+                      </div>
                                     <div class="grid grid-cols-2 sm:grid-cols-4 justify-center items-center gap-3 sm:gap-4 w-full mx-auto">
                     <div id="start-meaning-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-rotate-2 w-full aspect-[3/4]">
                         <img src="images/quiz1.webp?v=3" alt="" class="w-full h-full object-cover">
@@ -137,7 +147,7 @@
                     <div id="start-listening-quiz-btn" class="relative cursor-pointer overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-rotate-2 w-full aspect-[3/4]">
                         <img src="images/quiz4.webp?v=3" alt="" class="w-full h-full object-cover">
                     </div>
-                </div>
+                    </div>
                 </div>
                 <div id="quiz-loader" class="hidden text-center p-10">
                     <div class="loader mx-auto"></div>
@@ -273,6 +283,24 @@
                  <button id="quiz-result-mistakes-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors">미니 오답노트</button>
                 <button id="quiz-result-continue-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors">다음 퀴즈 계속</button>
             </div>
+        </div>
+    </div>
+
+    <div id="mistake-mode-modal" class="hidden fixed inset-0 bg-black/50 z-[250] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-7 text-center w-full max-w-sm">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">오답 노트</h2>
+            <p id="mistake-mode-count" class="text-gray-500 mb-6"></p>
+            <div class="grid grid-cols-2 gap-3">
+                <button id="mistake-vocab-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-3 rounded-xl">
+                    <span class="block text-2xl mb-1">📖</span>
+                    어휘카드
+                </button>
+                <button id="mistake-quiz-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-3 rounded-xl">
+                    <span class="block text-2xl mb-1">✏️</span>
+                    퀴즈카드
+                </button>
+            </div>
+            <button id="mistake-mode-cancel-btn" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg">취소</button>
         </div>
     </div>
 

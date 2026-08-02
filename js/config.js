@@ -32,6 +32,8 @@ export const state = {
         LAST_INDEX: 'student_lastIndex_main',
         UNSYNCED_TIME: 'student_unsyncedTime_main',
         UNSYNCED_QUIZ: 'student_unsyncedQuizStats_main',
+        UNSYNCED_TIME_BY_DATE: 'student_unsyncedTimeByDate_main',
+        UNSYNCED_QUIZ_BY_DATE: 'student_unsyncedQuizByDate_main',
         UNSYNCED_PROGRESS_UPDATES: 'student_unsyncedProgress_main',
         PRACTICE_MODE: 'student_practiceMode_main',
         QUIZ_RANGE_START: 'student_quizRangeStart_main',

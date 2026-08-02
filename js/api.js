@@ -1,5 +1,6 @@
 import { config, state } from './config.js';
 import { translationCache, utils } from './utils.js';
+import { statsStore } from './stats-store.js';
 
 let db = null;
 let database = null;
@@ -350,13 +351,19 @@ export const api = {
         return newExceptStatus;
     },
 
-    async updateStudyTime(seconds) {
-        if (!state.userId || seconds < 1) return;
+    async syncStudyHistory(studyByDate) {
+        if (!state.userId || !studyByDate || Object.keys(studyByDate).length === 0) return;
         const { doc, setDoc, increment } = window.firebaseSDK;
-        const today = utils.getLocalDateString();
         const historyRef = doc(db, 'users', state.userId, 'history', 'study');
         try {
-            await setDoc(historyRef, { [today]: increment(seconds) }, { merge: true });
+            const payload = {};
+            Object.entries(studyByDate).forEach(([date, seconds]) => {
+                const amount = Math.max(0, Math.floor(Number(seconds) || 0));
+                if (amount > 0) payload[date] = increment(amount);
+            });
+            if (Object.keys(payload).length > 0) {
+                await setDoc(historyRef, payload, { merge: true });
+            }
         } catch (error) {
             console.error(error);
             throw error;   // 실패를 syncOfflineData에 전달해 로컬 데이터 보존
@@ -393,32 +400,33 @@ export const api = {
 
     saveQuizHistoryToLocal(quizType, isCorrect) {
         try {
-            const stats = JSON.parse(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ) || '{}');
-            if (!stats[quizType]) stats[quizType] = { total: 0, correct: 0 };
-            stats[quizType].total += 1;
-            if (isCorrect) stats[quizType].correct += 1;
-            localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ, JSON.stringify(stats));
+            statsStore.addQuizResult(utils.getLocalDateString(), quizType, isCorrect);
         } catch (e) {}
     },
 
-    async syncQuizHistory(statsToSync) {
-        if (!state.userId || !statsToSync) return;
-        const { doc, setDoc, getDoc } = window.firebaseSDK;
-        const today = utils.getLocalDateString();
+    async syncQuizHistory(statsByDate) {
+        if (!state.userId || !statsByDate || Object.keys(statsByDate).length === 0) return;
+        const { doc, setDoc, increment } = window.firebaseSDK;
         const historyRef = doc(db, 'users', state.userId, 'history', 'quiz');
         try {
-            const docSnap = await getDoc(historyRef);
-            const data = docSnap.exists() ? docSnap.data() : {};
-            const todayData = data[today] || {};
-            for (const type in statsToSync) {
-                if (statsToSync.hasOwnProperty(type)) {
-                    const typeStats = todayData[type] || { correct: 0, total: 0 };
-                    typeStats.total += statsToSync[type].total;
-                    typeStats.correct += statsToSync[type].correct;
-                    todayData[type] = typeStats;
-                }
+            const payload = {};
+            Object.entries(statsByDate).forEach(([date, daily]) => {
+                payload[date] = {};
+                Object.entries(daily || {}).forEach(([type, stats]) => {
+                    const total = Math.max(0, Number(stats.total || 0));
+                    const correct = Math.max(0, Number(stats.correct || 0));
+                    if (total > 0) {
+                        payload[date][type] = {
+                            total: increment(total),
+                            correct: increment(correct)
+                        };
+                    }
+                });
+                if (Object.keys(payload[date]).length === 0) delete payload[date];
+            });
+            if (Object.keys(payload).length > 0) {
+                await setDoc(historyRef, payload, { merge: true });
             }
-            await setDoc(historyRef, { [today]: todayData }, { merge: true });
         } catch (e) { console.error(e); throw e; }
     },
 

@@ -14,6 +14,7 @@ globalThis.localStorage = {
 import { state } from './js/config.js';
 import { utils } from './js/utils.js';
 import { quizMode } from './js/quiz.js';
+import { statsStore } from './js/stats-store.js';
 
 // --- 미니 테스트 러너 ---
 let pass = 0, fail = 0;
@@ -78,6 +79,66 @@ test('pickRandomItems: 개수와 제외 필터 준수', () => {
     assert.ok(picked.every(x => x <= 50), '제외 필터 위반');
     assert.equal(new Set(picked).size, 5, '중복 발생');
 });
+test('pickRandomItems: 제외 항목이 많아도 가능한 개수를 모두 반환', () => {
+    const arr = Array.from({ length: 100 }, (_, i) => i + 1);
+    const picked = utils.pickRandomItems(arr, 5, x => x <= 95);
+    assert.equal(picked.length, 5);
+    assert.deepEqual([...picked].sort((a, b) => a - b), [96, 97, 98, 99, 100]);
+});
+
+group('statsStore 날짜별 통계');
+test('기존 미동기화 통계를 지정한 날짜로 안전하게 이전', () => {
+    localStorage.clear();
+    localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME, '75');
+    localStorage.setItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ, JSON.stringify({
+        MULTIPLE_CHOICE_MEANING: { correct: 2, total: 3 }
+    }));
+    statsStore.migrateLegacyPending('2024-01-15');
+    assert.deepEqual(statsStore.getPendingStudy(), { '2024-01-15': 75 });
+    assert.deepEqual(statsStore.getPendingQuiz(), {
+        '2024-01-15': { MULTIPLE_CHOICE_MEANING: { correct: 2, total: 3 } }
+    });
+    assert.equal(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_TIME), null);
+    assert.equal(localStorage.getItem(state.LOCAL_STORAGE_KEYS.UNSYNCED_QUIZ), null);
+});
+test('동기화 도중 추가된 기록은 차감 후에도 보존', () => {
+    localStorage.clear();
+    statsStore.addStudySeconds('2024-01-15', 10);
+    statsStore.addQuizResult('2024-01-15', 'FILL_IN_THE_BLANK', true);
+    const snapshot = statsStore.snapshot();
+    statsStore.addStudySeconds('2024-01-15', 5);
+    statsStore.addQuizResult('2024-01-15', 'FILL_IN_THE_BLANK', false);
+    statsStore.subtractSnapshot(snapshot);
+    assert.deepEqual(statsStore.getPendingStudy(), { '2024-01-15': 5 });
+    assert.deepEqual(statsStore.getPendingQuiz(), {
+        '2024-01-15': { FILL_IN_THE_BLANK: { correct: 0, total: 1 } }
+    });
+});
+test('서버 통계와 날짜별 미동기화 통계를 합산', () => {
+    localStorage.clear();
+    statsStore.addStudySeconds('2024-01-15', 30);
+    statsStore.addQuizResult('2024-01-15', 'LISTENING_QUIZ', true);
+    assert.deepEqual(
+        statsStore.mergeStudyHistory({ '2024-01-15': 90 }),
+        { '2024-01-15': 120 }
+    );
+    assert.deepEqual(
+        statsStore.mergeQuizHistory({
+            '2024-01-15': { LISTENING_QUIZ: { correct: 1, total: 2 } }
+        }),
+        { '2024-01-15': { LISTENING_QUIZ: { correct: 2, total: 3 } } }
+    );
+});
+
+group('utils.getWordIndexMap');
+test('같은 길이의 새 단어 목록으로 교체하면 인덱스도 갱신', () => {
+    state.wordList = [{ word: 'apple' }];
+    assert.equal(utils.getWordIndexMap().get('apple'), 'apple');
+    state.wordList = [{ word: 'banana' }];
+    const map = utils.getWordIndexMap();
+    assert.equal(map.has('apple'), false);
+    assert.equal(map.get('banana'), 'banana');
+});
 
 group('utils.getWordStatus (리팩토링과 무관하나 핵심 로직)');
 test('네 유형 모두 correct → learned', () => {
@@ -115,6 +176,32 @@ test('favorite=true 단어만, 최신순', () => {
     assert.deepEqual(utils.getFavoriteWords(), ['cherry', 'apple']);
 });
 
+group('utils.getMistakeReviewItems');
+test('단어별로 실제 오답인 퀴즈 유형만 반환', () => {
+    state.wordList = [
+        { word: 'apple' },
+        { word: 'banana' },
+        { word: 'excluded', except: true }
+    ];
+    state.currentProgress = {
+        apple: {
+            MULTIPLE_CHOICE_MEANING: 'incorrect',
+            FILL_IN_THE_BLANK: 'correct'
+        },
+        banana: {
+            FILL_IN_THE_BLANK: 'incorrect',
+            LISTENING_QUIZ: 'incorrect'
+        },
+        excluded: { MULTIPLE_CHOICE_MEANING: 'incorrect' }
+    };
+    resetStorage();
+    assert.deepEqual(utils.getMistakeReviewItems(), [
+        { word: 'apple', quizType: 'MULTIPLE_CHOICE_MEANING' },
+        { word: 'banana', quizType: 'FILL_IN_THE_BLANK' },
+        { word: 'banana', quizType: 'LISTENING_QUIZ' }
+    ]);
+});
+
 // =========================================================
 group('quiz._prepareClozeSentence (예문 파싱 추출 검증)');
 test('표제어 포함 예문 → 정리된 첫 줄 반환', () => {
@@ -150,6 +237,24 @@ test('빈칸 퀴즈: 표제어를 ___BLANK___로 치환', () => {
     assert.equal(q.type, 'FILL_IN_THE_BLANK');
     assert.equal(q.answer, 'a');
     assert.ok(q.question.sentence_with_blank.includes('___BLANK___'));
+});
+test('혼합 퀴즈 유형 선택은 사용자가 고른 유형 안에서만 동작', () => {
+    quizMode.state.mixedQuizTypes = ['MULTIPLE_CHOICE_MEANING', 'LISTENING_QUIZ'];
+    for (let i = 0; i < 20; i++) {
+        assert.ok(quizMode.state.mixedQuizTypes.includes(quizMode._pickMixedQuizType()));
+    }
+    quizMode.state.mixedQuizTypes = [];
+});
+test('혼합 유형 버튼은 누를 때마다 선택 상태가 반전', () => {
+    const attributes = { 'aria-pressed': 'false' };
+    const button = {
+        getAttribute(name) { return attributes[name]; },
+        setAttribute(name, value) { attributes[name] = value; }
+    };
+    quizMode.toggleMixedType(button);
+    assert.equal(attributes['aria-pressed'], 'true');
+    quizMode.toggleMixedType(button);
+    assert.equal(attributes['aria-pressed'], 'false');
 });
 
 group('quiz._collectQuizCandidates (후보 선별 추출 검증)');
