@@ -265,6 +265,12 @@ test('영한 퀴즈: 첫 줄 뜻이 같은 단어는 오답 후보에서 제외'
     assert.equal(q.choices.filter(choice => choice === '같은 뜻').length, 1);
     assert.equal(new Set(q.choices).size, 4);
 });
+test('영한 퀴즈: 첫 줄 끝 쉼표·세미콜론·콜론만 제거하고 중간 기호는 유지', () => {
+    assert.equal(quizMode._getFirstMeaningLine('크고, 아름답다,  \n둘째 뜻'), '크고, 아름답다');
+    assert.equal(quizMode._getFirstMeaningLine('<b>첫째 뜻，</b><br>둘째 뜻'), '첫째 뜻');
+    assert.equal(quizMode._getFirstMeaningLine('원인: 결과;  \n둘째 뜻'), '원인: 결과');
+    assert.equal(quizMode._getFirstMeaningLine('<i>첫째 뜻；：</i><br>둘째 뜻'), '첫째 뜻');
+});
 test('빈칸 퀴즈: 표제어를 ___BLANK___로 치환', () => {
     const q = quizMode.createBlankQuiz(sampleWords[0], sampleWords);
     assert.equal(q.type, 'FILL_IN_THE_BLANK');
