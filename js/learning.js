@@ -14,6 +14,7 @@ export const learningMode = {
         touchStartX: 0,
         touchStartY: 0,
         isEditing: false,
+        isSavingEdit: false,
         editingSide: null,
         editSnapshot: null,
     },
@@ -431,6 +432,11 @@ export const learningMode = {
     },
 
     async saveAndExitEditMode() {
+        // 저장 중 중복 클릭으로 동일 변경이 여러 번 전송되는 것을 막는다.
+        if (this.state.isSavingEdit) return;
+        this.state.isSavingEdit = true;
+
+        try {
         const wordData = this.state.currentWordList[this.state.currentIndex];
         const side = this.state.editingSide;
 
@@ -545,6 +551,9 @@ export const learningMode = {
             this.displayWord(this.state.currentIndex, true);
         } else {
             this.navigateBackToBack(0);
+        }
+        } finally {
+            this.state.isSavingEdit = false;
         }
     },
 

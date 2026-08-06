@@ -10,6 +10,159 @@ let cachedVoice = null;
 let cachedVoiceSet = null;
 let loadWordListPromise = null;   // 진행 중인 단어목록 fetch (중복 요청 방지)
 
+const timingNow = () => (
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now()
+);
+
+const roundedMs = value => (
+    Number.isFinite(Number(value)) ? Math.round(Number(value) * 10) / 10 : null
+);
+
+const SAVE_CONFIRMATION_TIMEOUT_MS = 30000;
+
+function createSaveRequestId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `save_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function toFirebaseKey(word) {
+    return String(word || '').replace(/[.#$[\]/]/g, '_');
+}
+
+// Apps Script의 HTTP 응답이 늦더라도, 서버가 마지막으로 기록한 Firebase
+// 완료 마커를 직접 감지하면 시트 flush + Firebase 반영이 모두 끝난 것이다.
+function createFirebaseSaveConfirmation(word, requestId) {
+    let unsubscribe = null;
+    let settled = false;
+
+    const promise = new Promise((resolve, reject) => {
+        try {
+            if (!database) throw new Error('Firebase 데이터베이스가 준비되지 않았습니다.');
+
+            const { ref, onValue } = window.firebaseSDK || {};
+            if (typeof ref !== 'function' || typeof onValue !== 'function') {
+                throw new Error('Firebase 완료 감시 기능을 불러오지 못했습니다.');
+            }
+
+            const markerRef = ref(
+                database,
+                `/vocabulary/${toFirebaseKey(word)}/_sync`
+            );
+
+            const finish = (handler, value) => {
+                if (settled) return;
+                settled = true;
+                if (unsubscribe) unsubscribe();
+                handler(value);
+            };
+
+            unsubscribe = onValue(
+                markerRef,
+                snapshot => {
+                    const marker = snapshot.val();
+                    if (!marker || marker.requestId !== requestId) return;
+                    finish(resolve, {
+                        source: 'firebase',
+                        completedAt: marker.completedAt || null,
+                    });
+                },
+                error => finish(reject, error)
+            );
+        } catch (error) {
+            settled = true;
+            reject(error);
+        }
+    });
+
+    return {
+        promise,
+        cancel() {
+            if (settled) return;
+            settled = true;
+            if (unsubscribe) unsubscribe();
+        },
+    };
+}
+
+// Firebase 완료 마커 또는 Apps Script 성공 응답 중 먼저 확인되는 성공을 사용한다.
+// 명시적인 서버 실패는 즉시 전달하고, 전송 오류는 다른 확인 경로를 기다린다.
+function waitForSaveConfirmation(scriptPromise, firebasePromise, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let failedPaths = 0;
+        let lastError = null;
+
+        const finish = (handler, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            handler(value);
+        };
+
+        const onFailure = error => {
+            if (settled) return;
+            lastError = error;
+
+            if (error?.code === 'SCRIPT_REJECTED') {
+                finish(reject, error);
+                return;
+            }
+
+            failedPaths += 1;
+            if (failedPaths >= 2) finish(reject, lastError);
+        };
+
+        const timeoutId = setTimeout(() => {
+            const error = new Error(
+                '원격 저장 완료를 30초 안에 확인하지 못했습니다. 새로고침하여 저장 여부를 확인해주세요.'
+            );
+            error.code = 'SAVE_CONFIRMATION_TIMEOUT';
+            finish(reject, error);
+        }, timeoutMs);
+
+        Promise.resolve(scriptPromise).then(value => finish(resolve, value), onFailure);
+        Promise.resolve(firebasePromise).then(value => finish(resolve, value), onFailure);
+    });
+}
+
+function logUpdateWordTimingDiagnostics(data, localUpdateMs) {
+    const server = data?.debugTimings || {};
+    const client = data?.clientTimings || {};
+    const rows = [
+        ['브라우저: 인증 토큰 + 요청 URL 준비', client.buildUrlMs],
+        ['브라우저: Apps Script 왕복(fetch)', client.fetchMs],
+        ['브라우저: 응답 JSON 해석', client.responseJsonMs],
+        ['브라우저: 원격 요청 전체', client.totalMs],
+        ['서버: 사용자 인증', server.authMs],
+        ['서버: 스크립트 락 대기', server.lockWaitMs],
+        ['서버: 시트/헤더 조회', server.sheetContextMs],
+        ['서버: 단어 행 검색', server.findRowMs],
+        ['서버: 시트 쓰기 호출', server.sheetWriteCallsMs],
+        ['서버: 시트 실제 반영(flush)', server.sheetFlushMs],
+        ['서버: Firebase PATCH', server.firebasePatchMs],
+        ['서버: Firebase 기존 단어 GET', server.firebaseGetMs],
+        ['서버: Firebase 단어명 이전(원자적 PATCH)', server.firebaseRenamePatchMs],
+        ['서버: Firebase 새 단어 PUT', server.firebasePutMs],
+        ['서버: Firebase 기존 단어 DELETE', server.firebaseDeleteMs],
+        ['서버: update 핸들러 전체', server.updateHandlerMs],
+        ['서버: 인증부터 응답 직전까지', server.serverBeforeResponseMs],
+        ['브라우저: 로컬 목록/캐시 갱신', localUpdateMs],
+    ]
+        .filter(([, value]) => Number.isFinite(Number(value)))
+        .map(([구간, value]) => ({ 구간, '시간(ms)': roundedMs(value) }));
+
+    console.group(`⏱️ 단어 저장 구간별 시간 (${new Date().toLocaleTimeString()})`);
+    if (rows.length > 0) {
+        console.table(rows);
+    } else {
+        console.warn('서버 debugTimings가 없습니다. 계측용 Code.gs가 배포되었는지 확인하세요.');
+    }
+    console.log('원본 계측값:', { server, client, localUpdateMs: roundedMs(localUpdateMs) });
+    console.groupEnd();
+}
+
 async function getAuthToken() {
     if (!auth?.currentUser) {
         throw new Error('로그인이 필요합니다.');
@@ -31,15 +184,33 @@ async function buildScriptUrl(action, params = {}) {
 async function callScript(action, params = {}, { successLog, failWarn } = {}) {
     if (!config.SCRIPT_URL) throw new Error('서버 주소가 설정되지 않았습니다.');
 
-    const response = await fetch(await buildScriptUrl(action, params));
+    const totalStartedAt = timingNow();
+    const buildUrlStartedAt = timingNow();
+    const requestUrl = await buildScriptUrl(action, params);
+    const buildUrlFinishedAt = timingNow();
+
+    const fetchStartedAt = timingNow();
+    const response = await fetch(requestUrl);
+    const fetchFinishedAt = timingNow();
     if (!response.ok) {
         throw new Error(`서버 통신 실패 (${response.status})`);
     }
 
+    const responseJsonStartedAt = timingNow();
     const data = await response.json();
+    const responseJsonFinishedAt = timingNow();
+    data.clientTimings = {
+        buildUrlMs: buildUrlFinishedAt - buildUrlStartedAt,
+        fetchMs: fetchFinishedAt - fetchStartedAt,
+        responseJsonMs: responseJsonFinishedAt - responseJsonStartedAt,
+        totalMs: responseJsonFinishedAt - totalStartedAt,
+    };
     if (!data.success) {
         if (failWarn) console.warn(failWarn, data.message);
-        throw new Error(data.message || '서버 요청 실패');
+        const error = new Error(data.message || '서버 요청 실패');
+        error.code = 'SCRIPT_REJECTED';
+        error.serverData = data;
+        throw error;
     }
 
     if (successLog) console.log(successLog);
@@ -507,21 +678,44 @@ export const api = {
     },
 
     async updateWordDetails(originalWord, updateData) {
+        const requestId = createSaveRequestId();
+        const targetWord = updateData.word || originalWord;
         const params = {
             original_word: originalWord,
             word: updateData.word,
             pos: updateData.pos,
             meaning: updateData.meaning,
             explanation: updateData.explanation,
+            request_id: requestId,
         };
         if (updateData.sample !== undefined || updateData.manual_sample !== undefined) {
-            params.manual_sample = updateData.manual_sample || updateData.sample;
+            params.manual_sample = updateData.manual_sample !== undefined
+                ? updateData.manual_sample
+                : updateData.sample;
         }
-        await callScript('update_word_data', params, {
-            successLog: "✅ 시트 수정 성공",
-            failWarn: "시트 수정 실패:",
-        });
 
+        // 완료 감시는 요청 전부터 시작해 매우 빠른 Firebase 이벤트도 놓치지 않는다.
+        const firebaseConfirmation = createFirebaseSaveConfirmation(targetWord, requestId);
+        const confirmationStartedAt = timingNow();
+        const scriptPromise = callScript('update_word_data', params, {
+            successLog: "✅ 시트·Firebase 수정 성공",
+            failWarn: "원격 수정 실패:",
+        }).then(data => ({ source: 'apps-script', data }));
+
+        let confirmation;
+        try {
+            confirmation = await waitForSaveConfirmation(
+                scriptPromise,
+                firebaseConfirmation.promise,
+                SAVE_CONFIRMATION_TIMEOUT_MS
+            );
+        } finally {
+            firebaseConfirmation.cancel();
+        }
+
+        const confirmedInMs = timingNow() - confirmationStartedAt;
+
+        const localUpdateStartedAt = timingNow();
         const updateLocalList = (list) => {
             const targetIndex = list.findIndex(w => w.word === originalWord);
             if (targetIndex !== -1) {
@@ -542,6 +736,26 @@ export const api = {
         updateWordListCache(words => updateLocalList(words), "캐시 업데이트 오류:");
         if (updateData.word && updateData.word !== originalWord) {
             utils.invalidateWordIndexMap();
+        }
+        const localUpdateMs = timingNow() - localUpdateStartedAt;
+
+        if (confirmation.source === 'apps-script') {
+            logUpdateWordTimingDiagnostics(confirmation.data, localUpdateMs);
+        } else {
+            console.log(
+                `✅ 시트·Firebase 저장 완료 ` +
+                `(Firebase 신호 ${roundedMs(confirmedInMs)}ms)`
+            );
+
+            // 늦게 도착하는 Apps Script 응답은 진단용으로만 처리한다.
+            // Firebase 마커가 확인됐다면 양쪽 저장은 이미 완료된 상태다.
+            scriptPromise.then(
+                result => logUpdateWordTimingDiagnostics(result.data, localUpdateMs),
+                error => console.warn(
+                    'Firebase에서 저장 완료를 확인했지만 Apps Script 응답 전달은 실패했습니다.',
+                    error
+                )
+            );
         }
     },
 
