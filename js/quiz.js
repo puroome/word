@@ -766,7 +766,8 @@ showSessionResultModal(isFinal = false) {
     // 학습 카드의 전체 뜻은 보존하고, 영한 퀴즈 보기에서만 첫 줄의 일반 텍스트를 사용한다.
     _getFirstMeaningLine(meaning) {
         const plainText = utils.richHtmlToPlainText(meaning).replace(/\u00a0/g, ' ');
-        return (plainText.split(/\r\n?|\n/, 1)[0] || '').trim();
+        const firstLine = (plainText.split(/\r\n?|\n/, 1)[0] || '').trim();
+        return firstLine.replace(/[,;:，；：]+\s*$/, '').trimEnd();
     },
     // 예문 첫 줄을 정리(이모지/강조 제거)하고 표제어 포함 여부를 확인.
     // 미포함이면 null, 포함이면 {firstLine, placeholderRegex} 반환.
