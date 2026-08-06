@@ -96,10 +96,9 @@ document.addEventListener('keydown', (e) => {
                 if (type === 'MULTIPLE_CHOICE_MEANING') {
                     api.speak(quizData.question.word, 'word');
                 } else if (type === 'FILL_IN_THE_BLANK') {
-                    const sentence = quizData.question.sentence_with_blank.replace('___BLANK___', '; blank ;');
-                    api.speak(sentence, 'sample');
+                    this._playBlankCloze(quizData.question.sentence_with_blank);
                 } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
-                    api.speak(quizData.question.definition, 'sample');
+                    this._playDefinition(quizData.question.definition);
                 } else if (type === 'LISTENING_QUIZ') {
                     this._playListeningCloze(quizData.question.sentence, quizData.question.word);
                 }
@@ -381,20 +380,30 @@ promptForRangeValue(targetButton) {
         };
     },
 
-    _buildDistractors(correctWordData, allWordsData, valueKey, allowFallbacks = false) {
-        const correctValue = correctWordData[valueKey];
+    _buildDistractors(correctWordData, allWordsData, valueKey, allowFallbacks = false, valueSelector = null) {
+        const readValue = valueSelector || ((wordData) => wordData[valueKey]);
+        const correctValue = readValue(correctWordData);
+        if (correctValue === undefined || correctValue === null || String(correctValue).trim() === '') return null;
+
         const wrongAnswers = new Set();
+        const isInvalidDistractor = (wordData) => {
+            const value = readValue(wordData);
+            return value === undefined
+                || value === null
+                || String(value).trim() === ''
+                || value === correctValue;
+        };
 
         const samePosDistractors = utils.pickRandomItems(allWordsData, 10,
-            (w) => w.pos !== correctWordData.pos || w[valueKey] === correctValue
+            (w) => w.pos !== correctWordData.pos || isInvalidDistractor(w)
         );
-        samePosDistractors.forEach(w => wrongAnswers.add(w[valueKey]));
+        samePosDistractors.forEach(w => wrongAnswers.add(readValue(w)));
 
         if (wrongAnswers.size < 3) {
             const randomDistractors = utils.pickRandomItems(allWordsData, 10,
-                (w) => w[valueKey] === correctValue || wrongAnswers.has(w[valueKey])
+                (w) => isInvalidDistractor(w) || wrongAnswers.has(readValue(w))
             );
-            randomDistractors.forEach(w => wrongAnswers.add(w[valueKey]));
+            randomDistractors.forEach(w => wrongAnswers.add(readValue(w)));
         }
 
         if (wrongAnswers.size < 3) {
@@ -504,10 +513,18 @@ promptForRangeValue(targetButton) {
         const { type, question, choices } = quizData;
         const questionDisplay = this.elements.questionDisplay;
         questionDisplay.innerHTML = '';
+        questionDisplay.onclick = null;
+        questionDisplay.removeAttribute('role');
+        questionDisplay.removeAttribute('tabindex');
+        questionDisplay.removeAttribute('aria-label');
         questionDisplay.className = 'bg-green-100 p-4 rounded-lg mb-4 flex min-h-[100px]';
 
         if (type === 'FILL_IN_THE_BLANK') {
-            questionDisplay.classList.add('items-start', 'text-left');
+            questionDisplay.classList.add('items-start', 'text-left', 'cursor-pointer');
+            questionDisplay.setAttribute('role', 'button');
+            questionDisplay.setAttribute('tabindex', '0');
+            questionDisplay.setAttribute('aria-label', '빈칸 문장 듣기');
+            questionDisplay.onclick = () => this._playBlankCloze(question.sentence_with_blank);
             const p = document.createElement('p');
             p.className = 'text-xl sm:text-2xl text-gray-800 leading-relaxed';
             const parts = question.sentence_with_blank.split('___BLANK___');
@@ -539,13 +556,17 @@ promptForRangeValue(targetButton) {
             h1.textContent = question.word;
             h1.onclick = () => { api.speak(question.word, 'word'); };
             questionDisplay.appendChild(h1);
-            } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
-        questionDisplay.classList.add('items-start', 'text-left');
-        const p = document.createElement('p');
-        p.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed';
-        p.textContent = question.definition;
-        questionDisplay.appendChild(p);
-} else if (type === 'LISTENING_QUIZ') {
+        } else if (type === 'MULTIPLE_CHOICE_DEFINITION') {
+            questionDisplay.classList.add('items-start', 'text-left', 'cursor-pointer');
+            questionDisplay.setAttribute('role', 'button');
+            questionDisplay.setAttribute('tabindex', '0');
+            questionDisplay.setAttribute('aria-label', '영영풀이 듣기');
+            questionDisplay.onclick = () => this._playDefinition(question.definition);
+            const p = document.createElement('p');
+            p.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed';
+            p.textContent = question.definition;
+            questionDisplay.appendChild(p);
+        } else if (type === 'LISTENING_QUIZ') {
         questionDisplay.classList.add('items-center', 'text-left', 'flex-row', 'gap-3');
         const replayBtn = document.createElement('button');
         replayBtn.id = 'listening-replay-btn';
@@ -727,10 +748,25 @@ showSessionResultModal(isFinal = false) {
         return this._makeQuizFromCandidates(quizType, candidates, allWords, { exhaustive: false });
     },
     createMeaningQuiz(correctWordData, allWordsData) {
-        const wrongAnswers = this._buildDistractors(correctWordData, allWordsData, 'meaning', true);
+        const getFirstMeaningLine = (wordData) => this._getFirstMeaningLine(wordData.meaning);
+        const correctMeaning = getFirstMeaningLine(correctWordData);
+        if (!correctMeaning) return null;
+
+        const wrongAnswers = this._buildDistractors(
+            correctWordData,
+            allWordsData,
+            'meaning',
+            true,
+            getFirstMeaningLine
+        );
         if (!wrongAnswers) return null;
-        const choices = utils.shuffleArray([correctWordData.meaning, ...Array.from(wrongAnswers).slice(0, 3)]);
-        return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctWordData.meaning };
+        const choices = utils.shuffleArray([correctMeaning, ...Array.from(wrongAnswers).slice(0, 3)]);
+        return { type: 'MULTIPLE_CHOICE_MEANING', question: { word: correctWordData.word }, choices, answer: correctMeaning };
+    },
+    // 학습 카드의 전체 뜻은 보존하고, 영한 퀴즈 보기에서만 첫 줄의 일반 텍스트를 사용한다.
+    _getFirstMeaningLine(meaning) {
+        const plainText = utils.richHtmlToPlainText(meaning).replace(/\u00a0/g, ' ');
+        return (plainText.split(/\r\n?|\n/, 1)[0] || '').trim();
     },
     // 예문 첫 줄을 정리(이모지/강조 제거)하고 표제어 포함 여부를 확인.
     // 미포함이면 null, 포함이면 {firstLine, placeholderRegex} 반환.
@@ -778,6 +814,15 @@ showSessionResultModal(isFinal = false) {
             choices,
             answer: correctWordData.word
         };
+    },
+
+    _playBlankCloze(sentenceWithBlank) {
+        const modified = sentenceWithBlank.replace('___BLANK___', '; blank ;');
+        return api.speak(modified, 'sample');
+    },
+
+    _playDefinition(definition) {
+        return api.speak(definition, 'sample');
     },
 
     _playListeningCloze(sentence, word) {

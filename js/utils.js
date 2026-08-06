@@ -75,10 +75,22 @@ export const utils = {
     },
 
     richHtmlToPlainText(value) {
-        const html = this.sanitizeRichHtml(value).replace(/<br\s*\/?>/gi, '\n');
+        const lineAwareHtml = String(value ?? '')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/(?:div|p)>/gi, '\n');
+
         if (typeof document === 'undefined') {
-            return html.replace(/<[^>]+>/g, '');
+            return lineAwareHtml
+                .replace(/<[^>]+>/g, '')
+                .replace(/&nbsp;/gi, ' ')
+                .replace(/&lt;/gi, '<')
+                .replace(/&gt;/gi, '>')
+                .replace(/&quot;/gi, '"')
+                .replace(/&#39;/gi, "'")
+                .replace(/&amp;/gi, '&');
         }
+
+        const html = this.sanitizeRichHtml(lineAwareHtml);
         const temp = document.createElement('div');
         temp.innerHTML = html;
         return temp.textContent || '';
