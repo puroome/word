@@ -54,9 +54,19 @@ function requireAuthorizedUser(e) {
 }
 
 function doGet(e) {
+  const requestStartedAt = Date.now();
+  let authMs = 0;
+
   try {
     const action = e.parameter.action;
-    requireAuthorizedUser(e);
+
+    const authStartedAt = Date.now();
+    try {
+      requireAuthorizedUser(e);
+    } finally {
+      authMs = Date.now() - authStartedAt;
+    }
+
     let result;
 
     switch (action) {
@@ -73,10 +83,24 @@ function doGet(e) {
         throw new Error(`지원하지 않는 action: "${action}"`);
     }
 
+    if (action === 'update_word_data' && result && typeof result === 'object') {
+      result.debugTimings = result.debugTimings || {};
+      result.debugTimings.authMs = authMs;
+      result.debugTimings.serverBeforeResponseMs = Date.now() - requestStartedAt;
+    }
+
     return jsonResponse(result);
   } catch (err) {
     console.error('[doGet] 오류:', err.message);
-    return jsonResponse({ success: false, message: err.message });
+
+    const failure = { success: false, message: err.message };
+    if (e && e.parameter && e.parameter.action === 'update_word_data') {
+      failure.debugTimings = {
+        authMs,
+        serverBeforeResponseMs: Date.now() - requestStartedAt,
+      };
+    }
+    return jsonResponse(failure);
   }
 }
 
@@ -102,17 +126,22 @@ function buildHeaderMap(headerRow) {
 }
 
 // 스크립트 락을 잡고 fn 실행 후 항상 해제. 락 획득 실패 시 표준 오류 throw.
-function withScriptLock(fn) {
+function withScriptLock(fn, timings) {
   const lock = LockService.getScriptLock();
+  const lockStartedAt = Date.now();
   try {
     lock.waitLock(10000);
+    if (timings) timings.lockWaitMs = Date.now() - lockStartedAt;
   } catch (_) {
+    if (timings) timings.lockWaitMs = Date.now() - lockStartedAt;
     throw new Error('서버가 혼잡합니다. 잠시 후 다시 시도해주세요.');
   }
   try {
     return fn();
   } finally {
+    const releaseStartedAt = Date.now();
     lock.releaseLock();
+    if (timings) timings.lockReleaseMs = Date.now() - releaseStartedAt;
   }
 }
 
@@ -300,13 +329,25 @@ function handleSaveAiSample(e) {
 }
 
 function handleUpdateWordData(e) {
-  return withScriptLock(() => {
+  const timings = {};
+  const handlerStartedAt = Date.now();
+
+  const result = withScriptLock(() => {
     const originalWord = e.parameter.original_word;
     if (!originalWord) throw new Error('original_word 파라미터가 필요합니다.');
 
-    const { sheet, colMap } = getSheetContext();
+    const requestId = String(e.parameter.request_id || '').trim();
+    if (requestId && !/^[A-Za-z0-9_-]{1,100}$/.test(requestId)) {
+      throw new Error('저장 요청 ID 형식이 올바르지 않습니다.');
+    }
 
+    let startedAt = Date.now();
+    const { sheet, colMap } = getSheetContext();
+    timings.sheetContextMs = Date.now() - startedAt;
+
+    startedAt = Date.now();
     const rowIdx = findRowByWord(sheet, colMap['word'], originalWord);
+    timings.findRowMs = Date.now() - startedAt;
     if (rowIdx === -1) throw new Error(`시트에서 단어 '${originalWord}'를 찾을 수 없습니다.`);
 
     const fieldMap = {
@@ -318,6 +359,7 @@ function handleUpdateWordData(e) {
     };
 
     const firebaseUpdates = {};
+    startedAt = Date.now();
     for (const [paramKey, colKey] of Object.entries(fieldMap)) {
       const value = e.parameter[paramKey];
       if (value === undefined || colMap[colKey] === undefined) continue;
@@ -329,20 +371,59 @@ function handleUpdateWordData(e) {
       }
       firebaseUpdates[paramKey === 'manual_sample' ? 'sample' : paramKey] = value;
     }
+    timings.sheetWriteCallsMs = Date.now() - startedAt;
+
+    // Firebase 완료 마커보다 먼저 시트 변경이 확정되도록 강제로 반영한다.
+    startedAt = Date.now();
+    SpreadsheetApp.flush();
+    timings.sheetFlushMs = Date.now() - startedAt;
 
     if (Object.keys(firebaseUpdates).length > 0) {
       const newWord = e.parameter.word;
       if (newWord && newWord !== originalWord) {
+        const originalKey = toFirebaseKey(originalWord);
+        const newKey = toFirebaseKey(newWord);
+
+        startedAt = Date.now();
         const existing = callFirebaseRtdb(`vocabulary/${toFirebaseKey(originalWord)}`, 'GET') || {};
-        callFirebaseRtdb(`vocabulary/${toFirebaseKey(newWord)}`, 'PUT', { ...existing, ...firebaseUpdates });
-        deleteWordFromFirebase(originalWord);
+        timings.firebaseGetMs = Date.now() - startedAt;
+
+        const movedWord = { ...existing, ...firebaseUpdates };
+        if (requestId) {
+          movedWord._sync = { requestId, completedAt: Date.now() };
+        }
+
+        startedAt = Date.now();
+        if (newKey === originalKey) {
+          // 서로 다른 표제어가 같은 Firebase 안전 키로 변환되는 경우 삭제하지 않는다.
+          callFirebaseRtdb(`vocabulary/${originalKey}`, 'PUT', movedWord);
+        } else {
+          // 새 키 생성과 이전 키 삭제를 하나의 Firebase 원자적 PATCH로 처리한다.
+          callFirebaseRtdb('vocabulary', 'PATCH', {
+            [newKey]: movedWord,
+            [originalKey]: null,
+          });
+        }
+        timings.firebaseRenamePatchMs = Date.now() - startedAt;
       } else {
+        if (requestId) {
+          firebaseUpdates._sync = { requestId, completedAt: Date.now() };
+        }
+        startedAt = Date.now();
         patchWordInFirebase(originalWord, firebaseUpdates);
+        timings.firebasePatchMs = Date.now() - startedAt;
       }
     }
 
-    return { success: true, message: '단어 수정 및 동기화 완료' };
-  });
+    return {
+      success: true,
+      message: '단어 수정 및 동기화 완료',
+      debugTimings: timings,
+    };
+  }, timings);
+
+  timings.updateHandlerMs = Date.now() - handlerStartedAt;
+  return result;
 }
 
 function handleCreateWord(e) {

@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node logic.test.mjs"
+    "test": "node logic.test.mjs && node save-sync.test.mjs && node codegs-sync.test.mjs"
   }
 }
