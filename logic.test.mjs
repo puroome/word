@@ -12,6 +12,7 @@ globalThis.localStorage = {
 };
 
 import { state } from './js/config.js';
+import { api } from './js/api.js';
 import { utils } from './js/utils.js';
 import { quizMode } from './js/quiz.js';
 import { statsStore } from './js/stats-store.js';
@@ -64,6 +65,12 @@ test('특수문자를 리터럴로 이스케이프', () => {
 
 test('HTML 특수문자를 안전하게 이스케이프', () => {
     assert.equal(utils.escapeHtml(`<tag>"'&`), '&lt;tag&gt;&quot;&#39;&amp;');
+});
+test('리치 HTML을 줄바꿈이 보존된 일반 텍스트로 변환', () => {
+    assert.equal(
+        utils.richHtmlToPlainText('<b>1. 첫 뜻</b><br><span style="color:red">2. 둘째 뜻</span>'),
+        '1. 첫 뜻\n2. 둘째 뜻'
+    );
 });
 
 group('utils.shuffleArray / pickRandomItems');
@@ -232,11 +239,55 @@ test('영한 퀴즈: 보기 4개, 정답=뜻 포함', () => {
     assert.equal(q.choices.length, 4);
     assert.ok(q.choices.includes('ma'));
 });
+test('영한 퀴즈: 정답과 오답 모두 meaning 첫 줄만 사용', () => {
+    const words = [
+        { word: 'a', pos: 'n', meaning: '<b>1. 정답</b>\n2. 정답의 둘째 뜻' },
+        { word: 'b', pos: 'n', meaning: '1. 오답 B<br>2. B의 둘째 뜻' },
+        { word: 'c', pos: 'n', meaning: '1. 오답 C\n2. C의 둘째 뜻' },
+        { word: 'd', pos: 'n', meaning: '1. 오답 D</div><div>2. D의 둘째 뜻' },
+    ];
+    const q = quizMode.createMeaningQuiz(words[0], words);
+    assert.equal(q.answer, '1. 정답');
+    assert.equal(q.choices.length, 4);
+    assert.deepEqual(new Set(q.choices), new Set(['1. 정답', '1. 오답 B', '1. 오답 C', '1. 오답 D']));
+    assert.ok(q.choices.every(choice => !choice.includes('\n') && !choice.includes('<')));
+});
+test('영한 퀴즈: 첫 줄 뜻이 같은 단어는 오답 후보에서 제외', () => {
+    const words = [
+        { word: 'a', pos: 'n', meaning: '같은 뜻\n정답의 둘째 뜻' },
+        { word: 'b', pos: 'n', meaning: '같은 뜻\n오답의 둘째 뜻' },
+        { word: 'c', pos: 'n', meaning: '뜻 C' },
+        { word: 'd', pos: 'n', meaning: '뜻 D' },
+        { word: 'e', pos: 'n', meaning: '뜻 E' },
+    ];
+    const q = quizMode.createMeaningQuiz(words[0], words);
+    assert.equal(q.choices.length, 4);
+    assert.equal(q.choices.filter(choice => choice === '같은 뜻').length, 1);
+    assert.equal(new Set(q.choices).size, 4);
+});
 test('빈칸 퀴즈: 표제어를 ___BLANK___로 치환', () => {
     const q = quizMode.createBlankQuiz(sampleWords[0], sampleWords);
     assert.equal(q.type, 'FILL_IN_THE_BLANK');
     assert.equal(q.answer, 'a');
     assert.ok(q.question.sentence_with_blank.includes('___BLANK___'));
+});
+test('빈칸·영영 TTS는 듣기용 sample 속도로 문제 내용을 전달', () => {
+    const originalSpeak = api.speak;
+    const calls = [];
+    api.speak = (text, contentType) => {
+        calls.push([text, contentType]);
+        return Promise.resolve();
+    };
+    try {
+        quizMode._playBlankCloze('I ate an ___BLANK___ today.');
+        quizMode._playDefinition('a round fruit with red or green skin');
+    } finally {
+        api.speak = originalSpeak;
+    }
+    assert.deepEqual(calls, [
+        ['I ate an ; blank ; today.', 'sample'],
+        ['a round fruit with red or green skin', 'sample'],
+    ]);
 });
 test('혼합 퀴즈 유형 선택은 사용자가 고른 유형 안에서만 동작', () => {
     quizMode.state.mixedQuizTypes = ['MULTIPLE_CHOICE_MEANING', 'LISTENING_QUIZ'];
